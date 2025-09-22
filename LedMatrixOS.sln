@@ -1,0 +1,46 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LedMatrixOS.Apps", "src\LedMatrixOS.Apps\LedMatrixOS.Apps.csproj", "{045A4479-3E03-411D-9C88-C51E15265FA3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LedMatrixOS.Core", "src\LedMatrixOS.Core\LedMatrixOS.Core.csproj", "{97F5F785-71F8-47EA-BBB1-210866289EC7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LedMatrixOS.Hardware.RpiLedMatrix", "src\LedMatrixOS.Hardware.RpiLedMatrix\LedMatrixOS.Hardware.RpiLedMatrix.csproj", "{3B0A0A8C-20A5-480E-BDEC-97F6658D7674}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LedMatrixOS.Hardware.Simulator", "src\LedMatrixOS.Hardware.Simulator\LedMatrixOS.Hardware.Simulator.csproj", "{92A46CCE-59FD-47F1-97CD-3F0964DEE152}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LedMatrixOS", "src\LedMatrixOS\LedMatrixOS.csproj", "{7858C8F7-E5C5-4E8B-A389-D9449BDA8B7B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{045A4479-3E03-411D-9C88-C51E15265FA3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{045A4479-3E03-411D-9C88-C51E15265FA3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{045A4479-3E03-411D-9C88-C51E15265FA3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{045A4479-3E03-411D-9C88-C51E15265FA3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{97F5F785-71F8-47EA-BBB1-210866289EC7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{97F5F785-71F8-47EA-BBB1-210866289EC7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{97F5F785-71F8-47EA-BBB1-210866289EC7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{97F5F785-71F8-47EA-BBB1-210866289EC7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3B0A0A8C-20A5-480E-BDEC-97F6658D7674}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3B0A0A8C-20A5-480E-BDEC-97F6658D7674}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3B0A0A8C-20A5-480E-BDEC-97F6658D7674}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3B0A0A8C-20A5-480E-BDEC-97F6658D7674}.Release|Any CPU.Build.0 = Release|Any CPU
+		{92A46CCE-59FD-47F1-97CD-3F0964DEE152}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{92A46CCE-59FD-47F1-97CD-3F0964DEE152}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{92A46CCE-59FD-47F1-97CD-3F0964DEE152}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{92A46CCE-59FD-47F1-97CD-3F0964DEE152}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7858C8F7-E5C5-4E8B-A389-D9449BDA8B7B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7858C8F7-E5C5-4E8B-A389-D9449BDA8B7B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7858C8F7-E5C5-4E8B-A389-D9449BDA8B7B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7858C8F7-E5C5-4E8B-A389-D9449BDA8B7B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

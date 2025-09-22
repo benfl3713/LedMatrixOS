@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\LedMatrixOS.Core\LedMatrixOS.Core.csproj" />
+    <ProjectReference Include="..\LedMatrixOS.Apps\LedMatrixOS.Apps.csproj" />
+    <ProjectReference Include="..\LedMatrixOS.Hardware.Simulator\LedMatrixOS.Hardware.Simulator.csproj" />
+    <ProjectReference Include="..\LedMatrixOS.Hardware.RpiLedMatrix\LedMatrixOS.Hardware.RpiLedMatrix.csproj" />
+  </ItemGroup>
+</Project>
+
+

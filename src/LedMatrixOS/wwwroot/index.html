@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LedMatrixOS Simulator Preview</title>
+    <style>
+        body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
+        .row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+        img { image-rendering: pixelated; border: 1px solid #ccc; }
+        label { min-width: 120px; display: inline-block; }
+        input[type=range] { width: 200px; }
+        button { padding: 6px 12px; }
+    </style>
+    <script>
+        let timer;
+        async function refreshImage() {
+            const img = document.getElementById('preview');
+            const url = '/preview?_=' + Date.now();
+            img.src = url;
+        }
+        function start() {
+            if (timer) clearInterval(timer);
+            timer = setInterval(refreshImage, 100);
+        }
+        async function setBrightness(v) {
+            await fetch('/api/settings/brightness/' + v, { method: 'POST' });
+        }
+        async function setFps(v) {
+            document.getElementById('fpsLabel').textContent = v + ' FPS';
+            await fetch('/api/settings/fps/' + v, { method: 'POST' });
+        }
+        async function switchApp() {
+            const id = document.getElementById('appId').value;
+            await fetch('/api/apps/' + id, { method: 'POST' });
+        }
+        window.addEventListener('load', () => { start(); });
+    </script>
+}</head>
+<body>
+    <h1>LedMatrixOS Simulator</h1>
+    <div class="row">
+        <label>Brightness</label>
+        <input type="range" min="0" max="100" value="100" oninput="setBrightness(this.value)" />
+    </div>
+    <div class="row">
+        <label id="fpsLabel">60 FPS</label>
+        <input type="range" min="1" max="120" value="60" oninput="setFps(this.value)" />
+    </div>
+    <div class="row">
+        <label>Activate App</label>
+        <input id="appId" placeholder="clock" />
+        <button onclick="switchApp()">Activate</button>
+    </div>
+    <div class="row">
+        <img id="preview" width="1024" height="256" />
+    </div>
+</body>
+</html>
+
+
