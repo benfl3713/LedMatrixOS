@@ -1,0 +1,6 @@
+# CODEOWNERS file for LedMatrixOS
+# This file defines code owners who will be automatically requested for review on all pull requests.
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global rule: benfl3713 must review all changes
+* @benfl3713
