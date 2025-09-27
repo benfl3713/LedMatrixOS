@@ -67,24 +67,41 @@ engine.Start();
 app.Lifetime.ApplicationStopping.Register(engine.Stop);
 
 // API endpoints
-//app.MapGet("/api/apps", () => appManager.Apps.Select(a => new { a.Id, a.Name }));
-app.MapPost("/api/apps/{id}", async (string id, CancellationToken ct) =>
+app.MapGet("/api/apps", (AppManager appManager) => 
 {
-    var ok = await appManager.ActivateAsync(id, ct);
-    return ok ? Results.Ok() : Results.NotFound();
+    var apps = appManager.Apps.Select(appType =>
+    {
+        var instance = (IMatrixApp?)Activator.CreateInstance(appType);
+        return new { Id = instance?.Id, Name = instance?.Name };
+    }).ToList();
+    return Results.Ok(new { apps, activeApp = appManager.ActiveApp?.Id });
 });
 
-app.MapGet("/api/settings", (IMatrixDevice device) => new { device.Width, device.Height, device.Brightness });
+app.MapPost("/api/apps/{id}", async (string id, AppManager appManager, CancellationToken ct) =>
+{
+    var ok = await appManager.ActivateAsync(id, ct);
+    return ok ? Results.Ok(new { activeApp = id }) : Results.NotFound();
+});
+
+app.MapGet("/api/settings", (IMatrixDevice device, RenderEngine eng) => 
+    Results.Ok(new { 
+        device.Width, 
+        device.Height, 
+        device.Brightness, 
+        fps = eng.TargetFps,
+        isRunning = eng.IsRunning 
+    }));
+
 app.MapPost("/api/settings/brightness/{value}", (byte value, IMatrixDevice device) =>
 {
     device.Brightness = value;
-    return Results.Ok(new { device.Brightness });
+    return Results.Ok(new { brightness = device.Brightness });
 });
 
 app.MapPost("/api/settings/fps/{value}", (int value, RenderEngine eng) =>
 {
     eng.TargetFps = value;
-    return Results.Ok(new { eng.TargetFps });
+    return Results.Ok(new { fps = eng.TargetFps });
 });
 
 // Simulator preview
