@@ -11,6 +11,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Configuration
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
+    .AddEnvironmentVariables();
+
 // Settings
 var config = builder.Configuration.Get<AppConfig>();
 int width = 254;
@@ -58,12 +62,12 @@ app.UseCors();
 // Start render loop
 var engine = app.Services.GetRequiredService<RenderEngine>();
 var appManager = app.Services.GetRequiredService<AppManager>();
-await appManager.ActivateAsync("clock", CancellationToken.None);
+await appManager.ActivateAsync("animated-clock", CancellationToken.None);
 engine.Start();
 app.Lifetime.ApplicationStopping.Register(engine.Stop);
 
 // API endpoints
-app.MapGet("/api/apps", () => appManager.Apps.Select(a => new { a.Id, a.Name }));
+//app.MapGet("/api/apps", () => appManager.Apps.Select(a => new { a.Id, a.Name }));
 app.MapPost("/api/apps/{id}", async (string id, CancellationToken ct) =>
 {
     var ok = await appManager.ActivateAsync(id, ct);

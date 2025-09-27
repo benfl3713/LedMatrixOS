@@ -93,10 +93,10 @@ public sealed class AppManager
 {
     private readonly int _height;
     private readonly int _width;
-    private readonly Dictionary<string, IMatrixApp> _appsById = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Type> _appsById = new(StringComparer.OrdinalIgnoreCase);
     private IMatrixApp? _activeApp;
 
-    public IEnumerable<IMatrixApp> Apps => _appsById.Values;
+    public IEnumerable<Type> Apps => _appsById.Values;
     public IMatrixApp? ActiveApp => _activeApp;
 
     public AppManager(int height, int width)
@@ -105,12 +105,18 @@ public sealed class AppManager
         _width = width;
     }
 
-    public void Register(IMatrixApp app)
+    public void Register(Type app)
     {
-        _appsById[app.Id] = app;
+        // validate if app implements IMatrixApp
+        if (!typeof(IMatrixApp).IsAssignableFrom(app)) throw new ArgumentException("Type must implement IMatrixApp", nameof(app));
+        
+        var instance = (IMatrixApp?)Activator.CreateInstance(app);
+        if (instance == null) throw new InvalidOperationException("Failed to create instance of app");
+        
+        var id = instance.Id;
+        
+        _appsById[id] = app;
     }
-
-    public bool TryGet(string id, out IMatrixApp app) => _appsById.TryGetValue(id, out app!);
 
     public async Task<bool> ActivateAsync(string id, CancellationToken cancellationToken)
     {
@@ -122,8 +128,9 @@ public sealed class AppManager
             catch { /* swallow app errors on deactivate */ }
         }
 
-        _activeApp = next;
-        await next.OnActivatedAsync((_height, _width), cancellationToken).ConfigureAwait(false);
+        var nextApp = (IMatrixApp?)Activator.CreateInstance(next);
+        await nextApp.OnActivatedAsync((_height, _width), cancellationToken).ConfigureAwait(false);
+        _activeApp = nextApp;
         return true;
     }
 }

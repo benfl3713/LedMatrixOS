@@ -30,7 +30,7 @@ public sealed class ClockApp : MatrixAppBase
             // }
             // else
             {
-                _font = SystemFonts.CreateFont("Nimbus Roman", 48);
+                _font = SystemFonts.CreateFont("Nimbus Sans", 48);
             }
         }
         catch

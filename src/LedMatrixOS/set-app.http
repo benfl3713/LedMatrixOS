@@ -1,0 +1,2 @@
+### GET request to example server
+POST http://radarlights:5005/api/apps/animated-clock
