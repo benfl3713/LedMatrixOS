@@ -34,7 +34,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
-  final LedMatrixApi _api = LedMatrixApi(baseUrl: 'http://localhost:5005');
+  final LedMatrixApi _api = LedMatrixApi(baseUrl: 'http://radarlights:5005');
   
   List<MatrixApp> _apps = [];
   String? _activeAppId;
