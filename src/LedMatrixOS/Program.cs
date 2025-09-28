@@ -72,7 +72,8 @@ app.MapGet("/api/apps", (AppManager appManager) =>
     var apps = appManager.Apps.Select(appType =>
     {
         var instance = (IMatrixApp?)Activator.CreateInstance(appType);
-        return new { Id = instance?.Id, Name = instance?.Name };
+        var hasSettings = instance is IConfigurableApp;
+        return new { Id = instance?.Id, Name = instance?.Name, HasSettings = hasSettings };
     }).ToList();
     return Results.Ok(new { apps, activeApp = appManager.ActiveApp?.Id });
 });
@@ -81,6 +82,43 @@ app.MapPost("/api/apps/{id}", async (string id, AppManager appManager, Cancellat
 {
     var ok = await appManager.ActivateAsync(id, ct);
     return ok ? Results.Ok(new { activeApp = id }) : Results.NotFound();
+});
+
+app.MapGet("/api/apps/{id}/settings", (string id, AppManager appManager) =>
+{
+    var activeApp = appManager.ActiveApp;
+    if (activeApp?.Id != id)
+    {
+        return Results.BadRequest("App is not currently active");
+    }
+    
+    if (activeApp is IConfigurableApp configurableApp)
+    {
+        var settings = configurableApp.GetSettings();
+        return Results.Ok(new { appId = id, settings });
+    }
+    
+    return Results.Ok(new { appId = id, settings = Array.Empty<object>() });
+});
+
+app.MapPost("/api/apps/{id}/settings", async (string id, Dictionary<string, object> settingsUpdate, AppManager appManager) =>
+{
+    var activeApp = appManager.ActiveApp;
+    if (activeApp?.Id != id)
+    {
+        return Results.BadRequest("App is not currently active");
+    }
+    
+    if (activeApp is IConfigurableApp configurableApp)
+    {
+        foreach (var setting in settingsUpdate)
+        {
+            configurableApp.UpdateSetting(setting.Key, setting.Value);
+        }
+        return Results.Ok(new { message = "Settings updated successfully" });
+    }
+    
+    return Results.BadRequest("App does not support configuration");
 });
 
 app.MapGet("/api/settings", (IMatrixDevice device, RenderEngine eng) => 

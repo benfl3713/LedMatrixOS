@@ -29,6 +29,31 @@ class LedMatrixApi {
     return response.statusCode == 200;
   }
   
+  Future<Map<String, dynamic>?> getAppSettings(String appId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/apps/$appId/settings'),
+      headers: {'Content-Type': 'application/json'},
+    );
+    
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else if (response.statusCode == 400) {
+      return null; // App not active
+    } else {
+      throw Exception('Failed to load app settings: ${response.statusCode}');
+    }
+  }
+  
+  Future<bool> updateAppSettings(String appId, Map<String, dynamic> settings) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/apps/$appId/settings'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(settings),
+    );
+    
+    return response.statusCode == 200;
+  }
+  
   Future<Map<String, dynamic>> getSettings() async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/settings'),
@@ -68,13 +93,15 @@ class LedMatrixApi {
 class MatrixApp {
   final String id;
   final String name;
+  final bool hasSettings;
   
-  MatrixApp({required this.id, required this.name});
+  MatrixApp({required this.id, required this.name, required this.hasSettings});
   
   factory MatrixApp.fromJson(Map<String, dynamic> json) {
     return MatrixApp(
       id: json['id'] ?? '',
       name: json['name'] ?? '',
+      hasSettings: json['hasSettings'] ?? false,
     );
   }
 }
@@ -101,6 +128,73 @@ class MatrixSettings {
       brightness: json['brightness'] ?? 0,
       fps: json['fps'] ?? 30,
       isRunning: json['isRunning'] ?? false,
+    );
+  }
+}
+
+enum AppSettingType {
+  boolean,
+  integer,
+  string,
+  color,
+  select
+}
+
+class AppSetting {
+  final String key;
+  final String name;
+  final String description;
+  final AppSettingType type;
+  final dynamic defaultValue;
+  final dynamic currentValue;
+  final dynamic minValue;
+  final dynamic maxValue;
+  final List<String>? options;
+  
+  AppSetting({
+    required this.key,
+    required this.name,
+    required this.description,
+    required this.type,
+    required this.defaultValue,
+    required this.currentValue,
+    this.minValue,
+    this.maxValue,
+    this.options,
+  });
+  
+  factory AppSetting.fromJson(Map<String, dynamic> json) {
+    AppSettingType type;
+    switch (json['type'] ?? 0) {
+      case 0:
+        type = AppSettingType.boolean;
+        break;
+      case 1:
+        type = AppSettingType.integer;
+        break;
+      case 2:
+        type = AppSettingType.string;
+        break;
+      case 3:
+        type = AppSettingType.color;
+        break;
+      case 4:
+        type = AppSettingType.select;
+        break;
+      default:
+        type = AppSettingType.string;
+    }
+    
+    return AppSetting(
+      key: json['key'] ?? '',
+      name: json['name'] ?? '',
+      description: json['description'] ?? '',
+      type: type,
+      defaultValue: json['defaultValue'],
+      currentValue: json['currentValue'],
+      minValue: json['minValue'],
+      maxValue: json['maxValue'],
+      options: json['options'] != null ? List<String>.from(json['options']) : null,
     );
   }
 }
