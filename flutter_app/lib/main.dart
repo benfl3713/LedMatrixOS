@@ -138,27 +138,10 @@ class _HomePageState extends State<HomePage> {
           _activeAppId = appId;
           _appSettings = [];
         });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Activated ${_apps.firstWhere((a) => a.id == appId).name}'),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
         _loadAppSettings(appId);
-      } else {
-        throw Exception('Failed to activate app');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      // Silent error handling
     }
   }
   
@@ -187,14 +170,7 @@ class _HomePageState extends State<HomePage> {
         });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating setting: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      // Silent error handling
     }
   }
   
@@ -213,14 +189,7 @@ class _HomePageState extends State<HomePage> {
         });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error setting brightness: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      // Silent error handling
     }
   }
   
@@ -239,14 +208,7 @@ class _HomePageState extends State<HomePage> {
         });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error setting FPS: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      // Silent error handling
     }
   }
 
