@@ -51,6 +51,11 @@ class _HomePageState extends State<HomePage> {
   Timer? _previewTimer;
   String _previewImageKey = '';
   
+  // Debounce timers for API calls
+  Timer? _brightnessDebounce;
+  Timer? _fpsDebounce;
+  final Map<String, Timer?> _settingDebounce = {};
+  
   @override
   void initState() {
     super.initState();
@@ -61,6 +66,11 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _previewTimer?.cancel();
+    _brightnessDebounce?.cancel();
+    _fpsDebounce?.cancel();
+    for (var timer in _settingDebounce.values) {
+      timer?.cancel();
+    }
     super.dispose();
   }
   
@@ -148,68 +158,86 @@ class _HomePageState extends State<HomePage> {
   Future<void> _updateAppSetting(String key, dynamic value) async {
     if (_activeAppId == null) return;
     
-    try {
-      final success = await _api.updateAppSettings(_activeAppId!, {key: value});
-      if (success) {
-        setState(() {
-          final settingIndex = _appSettings.indexWhere((s) => s.key == key);
-          if (settingIndex >= 0) {
-            final setting = _appSettings[settingIndex];
-            _appSettings[settingIndex] = AppSetting(
-              key: setting.key,
-              name: setting.name,
-              description: setting.description,
-              type: setting.type,
-              defaultValue: setting.defaultValue,
-              currentValue: value,
-              minValue: setting.minValue,
-              maxValue: setting.maxValue,
-              options: setting.options,
-            );
-          }
-        });
+    // Update UI immediately for responsiveness
+    setState(() {
+      final settingIndex = _appSettings.indexWhere((s) => s.key == key);
+      if (settingIndex >= 0) {
+        final setting = _appSettings[settingIndex];
+        _appSettings[settingIndex] = AppSetting(
+          key: setting.key,
+          name: setting.name,
+          description: setting.description,
+          type: setting.type,
+          defaultValue: setting.defaultValue,
+          currentValue: value,
+          minValue: setting.minValue,
+          maxValue: setting.maxValue,
+          options: setting.options,
+        );
       }
-    } catch (e) {
-      // Silent error handling
-    }
+    });
+    
+    // Cancel existing debounce timer for this setting
+    _settingDebounce[key]?.cancel();
+    
+    // Set new debounce timer
+    _settingDebounce[key] = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        await _api.updateAppSettings(_activeAppId!, {key: value});
+      } catch (e) {
+        // Silent error handling
+      }
+    });
   }
   
   Future<void> _setBrightness(double brightness) async {
-    try {
-      final success = await _api.setBrightness(brightness.round());
-      if (success) {
-        setState(() {
-          _settings = MatrixSettings(
-            width: _settings!.width,
-            height: _settings!.height,
-            brightness: brightness.round(),
-            fps: _settings!.fps,
-            isRunning: _settings!.isRunning,
-          );
-        });
+    // Update UI immediately for responsiveness
+    setState(() {
+      _settings = MatrixSettings(
+        width: _settings!.width,
+        height: _settings!.height,
+        brightness: brightness.round(),
+        fps: _settings!.fps,
+        isRunning: _settings!.isRunning,
+      );
+    });
+    
+    // Cancel existing debounce timer
+    _brightnessDebounce?.cancel();
+    
+    // Set new debounce timer
+    _brightnessDebounce = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        await _api.setBrightness(brightness.round());
+      } catch (e) {
+        // Silent error handling
       }
-    } catch (e) {
-      // Silent error handling
-    }
+    });
   }
   
   Future<void> _setFps(double fps) async {
-    try {
-      final success = await _api.setFps(fps.round());
-      if (success) {
-        setState(() {
-          _settings = MatrixSettings(
-            width: _settings!.width,
-            height: _settings!.height,
-            brightness: _settings!.brightness,
-            fps: fps.round(),
-            isRunning: _settings!.isRunning,
-          );
-        });
+    // Update UI immediately for responsiveness
+    setState(() {
+      _settings = MatrixSettings(
+        width: _settings!.width,
+        height: _settings!.height,
+        brightness: _settings!.brightness,
+        fps: fps.round(),
+        isRunning: _settings!.isRunning,
+      );
+    });
+    
+    // Cancel existing debounce timer
+    _fpsDebounce?.cancel();
+    
+    // Set new debounce timer
+    _fpsDebounce = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        await _api.setFps(fps.round());
+      } catch (e) {
+        // Silent error handling
       }
-    } catch (e) {
-      // Silent error handling
-    }
+    });
   }
 
   Widget _buildAppCard(MatrixApp app, bool isActive) {
