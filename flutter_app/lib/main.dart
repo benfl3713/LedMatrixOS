@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:tofu_expressive/tofu_expressive.dart';
 import 'dart:async';
 import 'api_service.dart';
 import 'widgets/app_settings_bottom_sheet.dart';
@@ -8,7 +10,12 @@ import 'widgets/display_settings_widget.dart';
 import 'utils/app_icon_helper.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => ThemeController(),
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -16,22 +23,18 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeController = Provider.of<ThemeController>(context);
+
     return MaterialApp(
       title: 'LED Matrix',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.orange,
-          brightness: Brightness.light,
-        ),
+      debugShowCheckedModeBanner: false,
+      theme: TofuTheme.light(
+        seedColor: themeController.seedColor,
       ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.orange,
-          brightness: Brightness.dark,
-        ),
+      darkTheme: TofuTheme.dark(
+        seedColor: themeController.seedColor,
       ),
+      themeMode: themeController.themeMode,
       home: const HomePage(),
     );
   }
@@ -217,7 +220,6 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-
   void _showAppSettingsBottomSheet(MatrixApp app) {
     showModalBottomSheet(
       context: context,
@@ -233,8 +235,6 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -319,4 +319,3 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
-
