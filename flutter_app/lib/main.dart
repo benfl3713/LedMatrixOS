@@ -9,11 +9,16 @@ import 'widgets/live_preview_widget.dart';
 import 'widgets/responsive_app_grid.dart';
 import 'widgets/display_settings_widget.dart';
 import 'utils/app_icon_helper.dart';
+import 'controllers/api_settings_controller.dart';
+import 'pages/settings_page.dart';
 
 void main() {
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeController(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeController()),
+        ChangeNotifierProvider(create: (_) => ApiSettingsController()),
+      ],
       child: const MyApp(),
     ),
   );
@@ -27,7 +32,7 @@ class MyApp extends StatelessWidget {
     final themeController = Provider.of<ThemeController>(context);
 
     return DynamicColorBuilder(
-      builder: (contextlightDynamic, darkDynamic) {
+      builder: (lightDynamic, darkDynamic) {
         return MaterialApp(
           title: 'LED Matrix',
           debugShowCheckedModeBanner: false,
@@ -53,7 +58,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final LedMatrixApi _api = LedMatrixApi(baseUrl: 'http://localhost:5005');
+  late LedMatrixApi _api;
 
   List<MatrixApp> _apps = [];
   String? _activeAppId;
@@ -71,8 +76,23 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _initializeApi();
     _loadData();
     _startPreviewTimer();
+  }
+
+  void _initializeApi() {
+    final apiController = Provider.of<ApiSettingsController>(context, listen: false);
+    _api = LedMatrixApi(baseUrl: apiController.apiUrl);
+    
+    // Listen to API URL changes
+    apiController.addListener(_onApiUrlChanged);
+  }
+
+  void _onApiUrlChanged() {
+    final apiController = Provider.of<ApiSettingsController>(context, listen: false);
+    _api = LedMatrixApi(baseUrl: apiController.apiUrl);
+    _loadData(); // Reload data with new API URL
   }
 
   @override
@@ -82,6 +102,9 @@ class _HomePageState extends State<HomePage> {
     for (var timer in _settingDebounce.values) {
       timer?.cancel();
     }
+    // Remove API URL change listener
+    final apiController = Provider.of<ApiSettingsController>(context, listen: false);
+    apiController.removeListener(_onApiUrlChanged);
     super.dispose();
   }
 
@@ -107,8 +130,8 @@ class _HomePageState extends State<HomePage> {
         _api.getSettings(),
       ]);
 
-      final appsData = futures[0] as Map<String, dynamic>;
-      final settingsData = futures[1] as Map<String, dynamic>;
+      final appsData = futures[0];
+      final settingsData = futures[1];
 
       setState(() {
         _apps = (appsData['apps'] as List)
@@ -254,6 +277,17 @@ class _HomePageState extends State<HomePage> {
           },
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SettingsPage(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,

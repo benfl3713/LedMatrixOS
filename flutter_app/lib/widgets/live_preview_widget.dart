@@ -26,29 +26,37 @@ class LivePreviewWidget extends StatelessWidget {
             ),
           ),
           SizedBox(
-            height: 200,
-            child: Image.network(
-              '${api.getPreviewUrl()}&key=$previewImageKey',
-              gaplessPlayback: true,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.none,
-              errorBuilder: (context, error, stackTrace) {
-                return const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.image_not_supported, size: 48),
-                      SizedBox(height: 8),
-                      Text('Preview not available'),
-                      Text('(Simulator mode only)'),
-                    ],
-                  ),
-                );
-              },
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return const Center(child: CircularProgressIndicator());
-              },
+            width: MediaQuery.of(context).size.width,
+            child: Container(
+              constraints: const BoxConstraints(
+                maxHeight: 200,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  '${api.getPreviewUrl()}&key=$previewImageKey',
+                  gaplessPlayback: true,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.none,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.image_not_supported, size: 48),
+                          SizedBox(height: 8),
+                          Text('Preview not available'),
+                          Text('(Simulator mode only)'),
+                        ],
+                      ),
+                    );
+                  },
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return const Center(child: CircularProgressIndicator());
+                  },
+                ),
+              ),
             ),
           ),
         ],

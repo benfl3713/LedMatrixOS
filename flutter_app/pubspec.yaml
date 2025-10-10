@@ -15,6 +15,7 @@ dependencies:
   tofu_expressive: ^0.0.3
   provider: ^6.1.5+1
   dynamic_color: ^1.8.1
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:
