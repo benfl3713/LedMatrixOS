@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:tofu_expressive/tofu_expressive.dart';
 import 'dart:async';
 import 'api_service.dart';
@@ -25,17 +26,21 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeController = Provider.of<ThemeController>(context);
 
-    return MaterialApp(
-      title: 'LED Matrix',
-      debugShowCheckedModeBanner: false,
-      theme: TofuTheme.light(
-        seedColor: themeController.seedColor,
-      ),
-      darkTheme: TofuTheme.dark(
-        seedColor: themeController.seedColor,
-      ),
-      themeMode: themeController.themeMode,
-      home: const HomePage(),
+    return DynamicColorBuilder(
+      builder: (contextlightDynamic, darkDynamic) {
+        return MaterialApp(
+          title: 'LED Matrix',
+          debugShowCheckedModeBanner: false,
+          theme: TofuTheme.light(
+            seedColor: themeController.seedColor,
+          ),
+          darkTheme: TofuTheme.dark(
+            seedColor: themeController.seedColor,
+          ),
+          themeMode: themeController.themeMode,
+          home: const HomePage(),
+        );
+      }
     );
   }
 }
