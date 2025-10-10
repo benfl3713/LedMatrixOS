@@ -76,15 +76,6 @@ class LedMatrixApi {
     return response.statusCode == 200;
   }
   
-  Future<bool> setFps(int fps) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/settings/fps/$fps'),
-      headers: {'Content-Type': 'application/json'},
-    );
-    
-    return response.statusCode == 200;
-  }
-  
   String getPreviewUrl() {
     return '$baseUrl/preview?_=${DateTime.now().millisecondsSinceEpoch}';
   }
@@ -110,14 +101,12 @@ class MatrixSettings {
   final int width;
   final int height;
   final int brightness;
-  final int fps;
   final bool isRunning;
   
   MatrixSettings({
     required this.width,
     required this.height,
     required this.brightness,
-    required this.fps,
     required this.isRunning,
   });
   
@@ -126,7 +115,6 @@ class MatrixSettings {
       width: json['width'] ?? 0,
       height: json['height'] ?? 0,
       brightness: json['brightness'] ?? 0,
-      fps: json['fps'] ?? 30,
       isRunning: json['isRunning'] ?? false,
     );
   }

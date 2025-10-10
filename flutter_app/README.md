@@ -7,7 +7,6 @@ A Flutter mobile app to control the LED Matrix display through the REST API.
 - **App Control**: Switch between different display apps (clock, matrix rain, bouncing balls, etc.)
 - **Live Preview**: Real-time preview of the LED Matrix display (simulator mode only)
 - **Brightness Control**: Adjust display brightness from 0-100%
-- **FPS Control**: Set frames per second from 1-120 FPS
 - **Real-time Updates**: Auto-refreshing preview and status
 
 ## Available Apps
@@ -94,9 +93,8 @@ The Flutter app communicates with these REST endpoints:
 
 - `GET /api/apps` - Get list of available apps and current active app
 - `POST /api/apps/{id}` - Activate a specific app
-- `GET /api/settings` - Get display settings (resolution, brightness, FPS)
+- `GET /api/settings` - Get display settings (resolution, brightness)
 - `POST /api/settings/brightness/{value}` - Set brightness (0-100)
-- `POST /api/settings/fps/{value}` - Set FPS (1-120)
 - `GET /preview` - Get preview image (simulator mode only)
 
 ## Network Configuration

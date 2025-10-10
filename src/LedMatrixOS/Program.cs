@@ -19,7 +19,7 @@ builder.Configuration
 var config = builder.Configuration.Get<AppConfig>();
 int width = 254;
 int height = 64;
-bool useSimulator = builder.Configuration.GetValue("Matrix:UseSimulator", false);
+bool useSimulator = builder.Configuration.GetValue("Matrix:UseSimulator", true);
 
 builder.Services.AddCors(options =>
 {
