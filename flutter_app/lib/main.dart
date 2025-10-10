@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'api_service.dart';
+import 'widgets/app_settings_bottom_sheet.dart';
+import 'widgets/live_preview_widget.dart';
+import 'widgets/responsive_app_grid.dart';
+import 'widgets/display_settings_widget.dart';
+import 'utils/app_icon_helper.dart';
 
 void main() {
   runApp(const MyApp());
@@ -212,69 +217,6 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Widget _buildAppCard(MatrixApp app, bool isActive) {
-    return Card(
-      clipBehavior: Clip.hardEdge,
-      child: InkWell(
-        onTap: () {
-          if (isActive && app.hasSettings) {
-            _showAppSettingsBottomSheet(app);
-          } else {
-            _activateApp(app.id);
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                _getAppIcon(app.id),
-                size: 48,
-                color: isActive
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                app.name,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: isActive
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (app.hasSettings || isActive) ...[
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (app.hasSettings)
-                      Icon(
-                        Icons.settings,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    if (isActive) ...[
-                      if (app.hasSettings) const SizedBox(width: 8),
-                      Icon(
-                        Icons.check_circle,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   void _showAppSettingsBottomSheet(MatrixApp app) {
     showModalBottomSheet(
@@ -283,114 +225,16 @@ class _HomePageState extends State<HomePage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (context) => _AppSettingsBottomSheet(
+      builder: (context) => AppSettingsBottomSheet(
         app: app,
         appSettings: _appSettings,
         onUpdateSetting: _updateAppSetting,
-        getAppIcon: _getAppIcon,
+        getAppIcon: AppIconHelper.getAppIcon,
       ),
     );
   }
 
-  IconData _getAppIcon(String appId) {
-    switch (appId) {
-      case 'clock':
-      case 'animated-clock':
-        return Icons.schedule;
-      case 'solid_color':
-        return Icons.palette;
-      case 'rainbow-spiral':
-        return Icons.gradient;
-      case 'bouncing-balls':
-        return Icons.sports_basketball;
-      case 'matrix-rain':
-        return Icons.code;
-      case 'geometric-patterns':
-        return Icons.category;
-      case 'dvd-logo':
-        return Icons.movie;
-      case 'weather':
-        return Icons.wb_sunny;
-      case 'spotify':
-        return Icons.music_note;
-      default:
-        return Icons.apps;
-    }
-  }
 
-  Widget _buildSettingInput(AppSetting setting) {
-    switch (setting.type) {
-      case AppSettingType.boolean:
-        return SwitchListTile(
-          title: Text(
-            setting.currentValue == true ||
-                    setting.currentValue.toString().toLowerCase() == 'true'
-                ? 'Enabled'
-                : 'Disabled',
-          ),
-          contentPadding: EdgeInsets.zero,
-          value: setting.currentValue == true ||
-              setting.currentValue.toString().toLowerCase() == 'true',
-          onChanged: (value) => _updateAppSetting(setting.key, value),
-        );
-
-      case AppSettingType.integer:
-        final currentValue = (setting.currentValue is int)
-            ? setting.currentValue as int
-            : int.tryParse(setting.currentValue.toString()) ?? 0;
-        final minValue =
-            (setting.minValue is int) ? setting.minValue as int : 0;
-        final maxValue =
-            (setting.maxValue is int) ? setting.maxValue as int : 100;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Value: $currentValue',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            Slider(
-              value: currentValue.toDouble(),
-              min: minValue.toDouble(),
-              max: maxValue.toDouble(),
-              divisions: maxValue - minValue,
-              label: currentValue.toString(),
-              onChanged: (value) =>
-                  _updateAppSetting(setting.key, value.round()),
-            ),
-          ],
-        );
-
-      case AppSettingType.select:
-        return DropdownButtonFormField<String>(
-          value: setting.currentValue.toString(),
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-          items: (setting.options ?? []).map((option) {
-            return DropdownMenuItem(
-              value: option,
-              child: Text(option),
-            );
-          }).toList(),
-          onChanged: (value) {
-            if (value != null) _updateAppSetting(setting.key, value);
-          },
-        );
-
-      default:
-        return TextFormField(
-          initialValue: setting.currentValue.toString(),
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            contentPadding: EdgeInsets.all(12),
-          ),
-          onChanged: (value) => _updateAppSetting(setting.key, value),
-        );
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -436,48 +280,9 @@ class _HomePageState extends State<HomePage> {
                   padding: const EdgeInsets.all(16),
                   children: [
                     // Preview Card
-                    Card(
-                      clipBehavior: Clip.hardEdge,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(
-                              'Live Preview',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                          ),
-                          SizedBox(
-                            height: 200,
-                            child: Image.network(
-                              '${_api.getPreviewUrl()}&key=$_previewImageKey',
-                              gaplessPlayback: true,
-                              fit: BoxFit.contain,
-                              filterQuality: FilterQuality.none,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.image_not_supported, size: 48),
-                                      SizedBox(height: 8),
-                                      Text('Preview not available'),
-                                      Text('(Simulator mode only)'),
-                                    ],
-                                  ),
-                                );
-                              },
-                              loadingBuilder:
-                                  (context, child, loadingProgress) {
-                                if (loadingProgress == null) return child;
-                                return const Center(
-                                    child: CircularProgressIndicator());
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
+                    LivePreviewWidget(
+                      api: _api,
+                      previewImageKey: _previewImageKey,
                     ),
 
                     const SizedBox(height: 16),
@@ -488,42 +293,11 @@ class _HomePageState extends State<HomePage> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 8),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        // Calculate number of columns based on screen width
-                        final screenWidth = constraints.maxWidth;
-                        int crossAxisCount;
-
-                        if (screenWidth > 1200) {
-                          crossAxisCount = 6; // Large desktop
-                        } else if (screenWidth > 900) {
-                          crossAxisCount = 5; // Desktop
-                        } else if (screenWidth > 700) {
-                          crossAxisCount = 4; // Tablet landscape
-                        } else if (screenWidth > 500) {
-                          crossAxisCount = 3; // Tablet portrait
-                        } else {
-                          crossAxisCount = 2; // Mobile
-                        }
-
-                        return GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: crossAxisCount,
-                            childAspectRatio: 1.1,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                          ),
-                          itemCount: _apps.length,
-                          itemBuilder: (context, index) {
-                            final app = _apps[index];
-                            final isActive = app.id == _activeAppId;
-                            return _buildAppCard(app, isActive);
-                          },
-                        );
-                      },
+                    ResponsiveAppGrid(
+                      apps: _apps,
+                      activeAppId: _activeAppId,
+                      onActivateApp: _activateApp,
+                      onShowSettings: _showAppSettingsBottomSheet,
                     ),
 
                     const SizedBox(height: 16),
@@ -535,47 +309,9 @@ class _HomePageState extends State<HomePage> {
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 8),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Resolution: ${_settings!.width} x ${_settings!.height}',
-                                    style:
-                                        Theme.of(context).textTheme.bodyLarge,
-                                  ),
-                                  Chip(
-                                    label: Text(_settings!.isRunning
-                                        ? 'Running'
-                                        : 'Stopped'),
-                                    avatar: Icon(
-                                      _settings!.isRunning
-                                          ? Icons.play_circle
-                                          : Icons.stop_circle,
-                                      size: 16,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const Divider(height: 32),
-                              Text('Brightness: ${_settings!.brightness}%'),
-                              Slider(
-                                value: _settings!.brightness.toDouble(),
-                                min: 0,
-                                max: 100,
-                                divisions: 100,
-                                label: '${_settings!.brightness}%',
-                                onChanged: _setBrightness,
-                              ),
-                            ],
-                          ),
-                        ),
+                      DisplaySettingsWidget(
+                        settings: _settings!,
+                        onBrightnessChanged: _setBrightness,
                       ),
                     ],
                   ],
@@ -584,283 +320,3 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class _AppSettingsBottomSheet extends StatefulWidget {
-  final MatrixApp app;
-  final List<AppSetting> appSettings;
-  final Function(String key, dynamic value) onUpdateSetting;
-  final IconData Function(String appId) getAppIcon;
-
-  const _AppSettingsBottomSheet({
-    required this.app,
-    required this.appSettings,
-    required this.onUpdateSetting,
-    required this.getAppIcon,
-  });
-
-  @override
-  State<_AppSettingsBottomSheet> createState() =>
-      _AppSettingsBottomSheetState();
-}
-
-class _AppSettingsBottomSheetState extends State<_AppSettingsBottomSheet> {
-  late List<AppSetting> _localSettings;
-
-  @override
-  void initState() {
-    super.initState();
-    _localSettings = List.from(widget.appSettings);
-  }
-
-  @override
-  void didUpdateWidget(_AppSettingsBottomSheet oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.appSettings != oldWidget.appSettings) {
-      setState(() {
-        _localSettings = List.from(widget.appSettings);
-      });
-    }
-  }
-
-  void _updateLocalSetting(String key, dynamic value) {
-    setState(() {
-      final settingIndex = _localSettings.indexWhere((s) => s.key == key);
-      if (settingIndex >= 0) {
-        final setting = _localSettings[settingIndex];
-        _localSettings[settingIndex] = AppSetting(
-          key: setting.key,
-          name: setting.name,
-          description: setting.description,
-          type: setting.type,
-          defaultValue: setting.defaultValue,
-          currentValue: value,
-          minValue: setting.minValue,
-          maxValue: setting.maxValue,
-          options: setting.options,
-        );
-      }
-    });
-
-    // Also update the parent
-    widget.onUpdateSetting(key, value);
-  }
-
-  Widget _buildSettingWidget(AppSetting setting) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (setting.type == AppSettingType.boolean) ...[
-            // Inline layout for boolean settings
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        setting.name,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      if (setting.description.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          setting.description,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Switch(
-                  value: setting.currentValue == true ||
-                      setting.currentValue.toString().toLowerCase() == 'true',
-                  onChanged: (value) => _updateLocalSetting(setting.key, value),
-                ),
-              ],
-            ),
-          ] else ...[
-            // Regular layout for other setting types
-            Text(
-              setting.name,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            if (setting.description.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                setting.description,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-            const SizedBox(height: 8),
-            _buildSettingInput(setting),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingInput(AppSetting setting) {
-    switch (setting.type) {
-      case AppSettingType.integer:
-        final currentValue = (setting.currentValue is int)
-            ? setting.currentValue as int
-            : int.tryParse(setting.currentValue.toString()) ?? 0;
-        final minValue =
-            (setting.minValue is int) ? setting.minValue as int : 0;
-        final maxValue =
-            (setting.maxValue is int) ? setting.maxValue as int : 100;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Value: $currentValue',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            Slider(
-              value: currentValue.toDouble(),
-              min: minValue.toDouble(),
-              max: maxValue.toDouble(),
-              divisions: maxValue - minValue,
-              label: currentValue.toString(),
-              onChanged: (value) =>
-                  _updateLocalSetting(setting.key, value.round()),
-            ),
-          ],
-        );
-
-      case AppSettingType.select:
-        return DropdownButtonFormField<String>(
-          value: setting.currentValue.toString(),
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-          items: (setting.options ?? []).map((option) {
-            return DropdownMenuItem(
-              value: option,
-              child: Text(option),
-            );
-          }).toList(),
-          onChanged: (value) {
-            if (value != null) _updateLocalSetting(setting.key, value);
-          },
-        );
-
-      default:
-        return TextFormField(
-          initialValue: setting.currentValue.toString(),
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            contentPadding: EdgeInsets.all(12),
-          ),
-          onChanged: (value) => _updateLocalSetting(setting.key, value),
-        );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.3,
-      maxChildSize: 0.9,
-      expand: false,
-      builder: (context, scrollController) => Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Handle bar
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurfaceVariant
-                      .withOpacity(0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Header
-            Row(
-              children: [
-                Icon(
-                  widget.getAppIcon(widget.app.id),
-                  size: 32,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.app.name,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      Text(
-                        'App Settings',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // Settings content
-            Expanded(
-              child: _localSettings.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.settings_outlined,
-                            size: 64,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant
-                                .withOpacity(0.5),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No settings available',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView(
-                      controller: scrollController,
-                      children: _localSettings
-                          .map((setting) => _buildSettingWidget(setting))
-                          .toList(),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
