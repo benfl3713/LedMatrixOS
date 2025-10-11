@@ -19,7 +19,7 @@ builder.Configuration
 var config = builder.Configuration.Get<AppConfig>();
 int width = 254;
 int height = 64;
-bool useSimulator = builder.Configuration.GetValue("Matrix:UseSimulator", false);
+bool useSimulator = builder.Configuration.GetValue("Matrix:UseSimulator", true);
 
 builder.Services.AddCors(options =>
 {
@@ -67,24 +67,79 @@ engine.Start();
 app.Lifetime.ApplicationStopping.Register(engine.Stop);
 
 // API endpoints
-//app.MapGet("/api/apps", () => appManager.Apps.Select(a => new { a.Id, a.Name }));
-app.MapPost("/api/apps/{id}", async (string id, CancellationToken ct) =>
+app.MapGet("/api/apps", (AppManager appManager) => 
 {
-    var ok = await appManager.ActivateAsync(id, ct);
-    return ok ? Results.Ok() : Results.NotFound();
+    var apps = appManager.Apps.Select(appType =>
+    {
+        var instance = (IMatrixApp?)Activator.CreateInstance(appType);
+        var hasSettings = instance is IConfigurableApp;
+        return new { Id = instance?.Id, Name = instance?.Name, HasSettings = hasSettings };
+    }).ToList();
+    return Results.Ok(new { apps, activeApp = appManager.ActiveApp?.Id });
 });
 
-app.MapGet("/api/settings", (IMatrixDevice device) => new { device.Width, device.Height, device.Brightness });
+app.MapPost("/api/apps/{id}", async (string id, AppManager appManager, CancellationToken ct) =>
+{
+    var ok = await appManager.ActivateAsync(id, ct);
+    return ok ? Results.Ok(new { activeApp = id }) : Results.NotFound();
+});
+
+app.MapGet("/api/apps/{id}/settings", (string id, AppManager appManager) =>
+{
+    var activeApp = appManager.ActiveApp;
+    if (activeApp?.Id != id)
+    {
+        return Results.BadRequest("App is not currently active");
+    }
+    
+    if (activeApp is IConfigurableApp configurableApp)
+    {
+        var settings = configurableApp.GetSettings();
+        return Results.Ok(new { appId = id, settings });
+    }
+    
+    return Results.Ok(new { appId = id, settings = Array.Empty<object>() });
+});
+
+app.MapPost("/api/apps/{id}/settings", async (string id, Dictionary<string, object> settingsUpdate, AppManager appManager) =>
+{
+    var activeApp = appManager.ActiveApp;
+    if (activeApp?.Id != id)
+    {
+        return Results.BadRequest("App is not currently active");
+    }
+    
+    if (activeApp is IConfigurableApp configurableApp)
+    {
+        foreach (var setting in settingsUpdate)
+        {
+            configurableApp.UpdateSetting(setting.Key, setting.Value);
+        }
+        return Results.Ok(new { message = "Settings updated successfully" });
+    }
+    
+    return Results.BadRequest("App does not support configuration");
+});
+
+app.MapGet("/api/settings", (IMatrixDevice device, RenderEngine eng) => 
+    Results.Ok(new { 
+        device.Width, 
+        device.Height, 
+        device.Brightness, 
+        fps = eng.TargetFps,
+        isRunning = eng.IsRunning 
+    }));
+
 app.MapPost("/api/settings/brightness/{value}", (byte value, IMatrixDevice device) =>
 {
     device.Brightness = value;
-    return Results.Ok(new { device.Brightness });
+    return Results.Ok(new { brightness = device.Brightness });
 });
 
 app.MapPost("/api/settings/fps/{value}", (int value, RenderEngine eng) =>
 {
     eng.TargetFps = value;
-    return Results.Ok(new { eng.TargetFps });
+    return Results.Ok(new { fps = eng.TargetFps });
 });
 
 // Simulator preview

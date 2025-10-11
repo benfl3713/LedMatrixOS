@@ -89,6 +89,23 @@ public interface IMatrixApp
     void Render(FrameBuffer frame, CancellationToken cancellationToken);
 }
 
+public interface IConfigurableApp : IMatrixApp
+{
+    IEnumerable<AppSetting> GetSettings();
+    void UpdateSetting(string key, object value);
+}
+
+public record AppSetting(string Key, string Name, string Description, AppSettingType Type, object DefaultValue, object CurrentValue, object? MinValue = null, object? MaxValue = null, string[]? Options = null);
+
+public enum AppSettingType
+{
+    Boolean,
+    Integer,
+    String,
+    Color,
+    Select
+}
+
 public sealed class AppManager
 {
     private readonly int _height;

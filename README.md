@@ -247,6 +247,7 @@ public static IEnumerable<Type> GetAll()
     yield return typeof(MyCustomApp);
     // ... other apps
 }
+>>>>>>> main
 ```
 
 ## Configuration

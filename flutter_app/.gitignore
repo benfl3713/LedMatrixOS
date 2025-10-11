@@ -1,0 +1,43 @@
+# Flutter/Dart build artifacts
+build/
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+pubspec.lock
+
+# Android
+.gradle/
+local.properties
+*.keystore
+*.jks
+
+# iOS
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcuserstate
+.xcworkspace/
+ios/Pods/
+ios/Runner/GeneratedPluginRegistrant.*
+
+# Web
+web/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Generated files
+*.g.dart
+*.freezed.dart
+*.gr.dart
+
+# Coverage
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
