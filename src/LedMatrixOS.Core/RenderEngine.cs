@@ -2,6 +2,12 @@ using System.Diagnostics;
 
 namespace LedMatrixOS.Core;
 
+public enum TransitionDirection
+{
+    Horizontal,
+    Vertical
+}
+
 public sealed class RenderEngine : IDisposable
 {
     private readonly IMatrixDevice _device;
@@ -16,7 +22,9 @@ public sealed class RenderEngine : IDisposable
     private bool _isTransitioning;
     private FrameBuffer? _oldFrame;
     private int _transitionOffset;
-    private const int TransitionSpeed = 10; // pixels per frame
+    private const int TransitionSpeed = 3; // pixels per frame
+    
+    public TransitionDirection TransitionDirection { get; set; } = TransitionDirection.Vertical;
 
     public RenderEngine(IMatrixDevice device, AppManager apps)
     {
@@ -109,6 +117,7 @@ public sealed class RenderEngine : IDisposable
             }
 
             // sleep to maintain target FPS
+            targetFrameTime = TimeSpan.FromSeconds(1.0 / (_isTransitioning ? 60 : TargetFps));
             var frameTime = sw.Elapsed - now;
             var sleep = targetFrameTime - frameTime;
             if (sleep > TimeSpan.Zero)
@@ -125,6 +134,38 @@ public sealed class RenderEngine : IDisposable
         
         var compositeFrame = new FrameBuffer(_device.Width, _device.Height);
         
+        if (TransitionDirection == TransitionDirection.Horizontal)
+        {
+            ApplyHorizontalTransition(compositeFrame);
+        }
+        else
+        {
+            ApplyVerticalTransition(compositeFrame);
+        }
+        
+        // Copy composite back to main frame
+        for (int y = 0; y < _device.Height; y++)
+        {
+            for (int x = 0; x < _device.Width; x++)
+            {
+                _frame.SetPixel(x, y, compositeFrame.GetPixel(x, y));
+            }
+        }
+        
+        // Update transition progress
+        _transitionOffset += TransitionSpeed;
+        
+        // Check if transition is complete
+        int maxOffset = TransitionDirection == TransitionDirection.Horizontal ? _device.Width : _device.Height;
+        if (_transitionOffset >= maxOffset)
+        {
+            _isTransitioning = false;
+            _oldFrame = null;
+        }
+    }
+    
+    private void ApplyHorizontalTransition(FrameBuffer compositeFrame)
+    {
         // Calculate positions
         int oldFrameX = -_transitionOffset;
         int newFrameX = _device.Width - _transitionOffset;
@@ -137,7 +178,7 @@ public sealed class RenderEngine : IDisposable
                 int oldX = x - oldFrameX;
                 if (oldX >= 0 && oldX < _device.Width)
                 {
-                    compositeFrame.SetPixel(x, y, _oldFrame.GetPixel(oldX, y));
+                    compositeFrame.SetPixel(x, y, _oldFrame!.GetPixel(oldX, y));
                 }
             }
         }
@@ -154,24 +195,38 @@ public sealed class RenderEngine : IDisposable
                 }
             }
         }
+    }
+    
+    private void ApplyVerticalTransition(FrameBuffer compositeFrame)
+    {
+        // Calculate positions
+        int oldFrameY = -_transitionOffset;
+        int newFrameY = _device.Height - _transitionOffset;
         
-        // Copy composite back to main frame
+        // Draw old frame (moving up)
         for (int y = 0; y < _device.Height; y++)
         {
             for (int x = 0; x < _device.Width; x++)
             {
-                _frame.SetPixel(x, y, compositeFrame.GetPixel(x, y));
+                int oldY = y - oldFrameY;
+                if (oldY >= 0 && oldY < _device.Height)
+                {
+                    compositeFrame.SetPixel(x, y, _oldFrame!.GetPixel(x, oldY));
+                }
             }
         }
         
-        // Update transition progress
-        _transitionOffset += TransitionSpeed;
-        
-        // Check if transition is complete
-        if (_transitionOffset >= _device.Width)
+        // Draw new frame (moving in from bottom)
+        for (int y = 0; y < _device.Height; y++)
         {
-            _isTransitioning = false;
-            _oldFrame = null;
+            for (int x = 0; x < _device.Width; x++)
+            {
+                int newY = y - newFrameY;
+                if (newY >= 0 && newY < _device.Height)
+                {
+                    compositeFrame.SetPixel(x, y, _frame.GetPixel(x, newY));
+                }
+            }
         }
     }
 

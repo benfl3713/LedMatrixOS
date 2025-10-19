@@ -8,6 +8,7 @@ public sealed class AppManager
     private readonly int _height;
     private readonly int _width;
     private readonly Dictionary<string, Type> _appsById = new(StringComparer.OrdinalIgnoreCase);
+    private readonly AppSettingsStorage? _settingsStorage;
     private IMatrixApp? _activeApp;
 
     public IEnumerable<Type> Apps => _appsById.Values;
@@ -15,11 +16,12 @@ public sealed class AppManager
 
     public event EventHandler<IMatrixApp>? AppActivated;
 
-    public AppManager(IConfiguration configuration, int height, int width)
+    public AppManager(IConfiguration configuration, int height, int width, AppSettingsStorage? settingsStorage = null)
     {
         _configuration = configuration;
         _height = height;
         _width = width;
+        _settingsStorage = settingsStorage;
     }
 
     public void Register(Type app)
@@ -39,8 +41,15 @@ public sealed class AppManager
     {
         if (!_appsById.TryGetValue(id, out var next)) return false;
 
+        // Save current app settings before switching
+        if (_activeApp is IConfigurableApp currentConfigurable && _settingsStorage != null)
+        {
+            SaveCurrentAppSettings(currentConfigurable);
+        }
+
         // Create the new app instance first
         var nextApp = (IMatrixApp?)Activator.CreateInstance(next);
+        if (nextApp == null) return false;
         
         // Raise the AppActivated event BEFORE switching, so RenderEngine can capture the old frame
         AppActivated?.Invoke(this, nextApp);
@@ -52,8 +61,49 @@ public sealed class AppManager
         }
 
         await nextApp.OnActivatedAsync((_height, _width), _configuration, cancellationToken).ConfigureAwait(false);
+        
+        // Restore settings for the new app
+        if (nextApp is IConfigurableApp nextConfigurable && _settingsStorage != null)
+        {
+            RestoreAppSettings(nextConfigurable);
+        }
+        
         _activeApp = nextApp;
 
         return true;
+    }
+
+    public void UpdateCurrentAppSetting(string key, object value)
+    {
+        if (_activeApp is IConfigurableApp configurableApp && _settingsStorage != null)
+        {
+            configurableApp.UpdateSetting(key, value);
+            _settingsStorage.UpdateAppSetting(_activeApp.Id, key, value);
+        }
+    }
+
+    private void SaveCurrentAppSettings(IConfigurableApp app)
+    {
+        var settings = app.GetSettings().ToDictionary(s => s.Key, s => s.CurrentValue);
+        _settingsStorage!.SaveAppSettings(app.Id, settings);
+    }
+
+    private void RestoreAppSettings(IConfigurableApp app)
+    {
+        var savedSettings = _settingsStorage!.GetAppSettings(app.Id);
+        if (savedSettings != null)
+        {
+            foreach (var (key, value) in savedSettings)
+            {
+                try
+                {
+                    app.UpdateSetting(key, value);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Warning: Failed to restore setting '{key}' for app '{app.Id}': {ex.Message}");
+                }
+            }
+        }
     }
 }

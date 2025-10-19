@@ -33,7 +33,13 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod());
 });
 
-builder.Services.AddSingleton<AppManager>(_ => new AppManager(builder.Configuration, height, width));
+builder.Services.AddSingleton<AppSettingsStorage>(_ => 
+    new AppSettingsStorage(Path.Combine(AppContext.BaseDirectory, "app-settings.json")));
+builder.Services.AddSingleton<AppManager>(sp => 
+{
+    var settingsStorage = sp.GetRequiredService<AppSettingsStorage>();
+    return new AppManager(builder.Configuration, height, width, settingsStorage);
+});
 builder.Services.AddSingleton<AudioDataService>();
 builder.Services.AddSingleton<IMatrixDevice>(sp =>
 {
@@ -125,11 +131,11 @@ app.MapPost("/api/apps/{id}/settings", async (string id, Dictionary<string, obje
         return Results.BadRequest("App is not currently active");
     }
     
-    if (activeApp is IConfigurableApp configurableApp)
+    if (activeApp is IConfigurableApp)
     {
         foreach (var setting in settingsUpdate)
         {
-            configurableApp.UpdateSetting(setting.Key, setting.Value);
+            appManager.UpdateCurrentAppSetting(setting.Key, setting.Value);
         }
         return Results.Ok(new { message = "Settings updated successfully" });
     }
