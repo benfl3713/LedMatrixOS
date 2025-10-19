@@ -39,20 +39,21 @@ public sealed class AppManager
     {
         if (!_appsById.TryGetValue(id, out var next)) return false;
 
+        // Create the new app instance first
+        var nextApp = (IMatrixApp?)Activator.CreateInstance(next);
+        
+        // Raise the AppActivated event BEFORE switching, so RenderEngine can capture the old frame
+        AppActivated?.Invoke(this, nextApp);
+
         if (_activeApp != null)
         {
             try { await _activeApp.OnDeactivatedAsync(cancellationToken).ConfigureAwait(false); }
             catch { /* swallow app errors on deactivate */ }
         }
 
-        var nextApp = (IMatrixApp?)Activator.CreateInstance(next);
         await nextApp.OnActivatedAsync((_height, _width), _configuration, cancellationToken).ConfigureAwait(false);
         _activeApp = nextApp;
-
-        // Raise the AppActivated event
-        AppActivated?.Invoke(this, nextApp);
 
         return true;
     }
 }
-

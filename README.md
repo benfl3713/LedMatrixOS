@@ -2,6 +2,9 @@
 
 A flexible and extensible LED matrix display system built with .NET 9, designed to run on Raspberry Pi with RGB LED matrices or in a simulated environment for development and testing.
 
+> Example Spotify app on a 256x64 RGB LED matrix <br/>
+>![LedMatrixOS Demo](docs/preview.png)
+
 ## Features
 
 - 🎨 **Rich Visual Effects** - Multiple built-in apps with stunning animations and effects

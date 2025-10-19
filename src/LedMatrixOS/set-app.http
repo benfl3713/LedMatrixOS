@@ -1,2 +1,2 @@
 ### GET request to example server
-POST http://radarlights:5005/api/apps/spotify
+POST http://localhost:5005/api/apps/clock
