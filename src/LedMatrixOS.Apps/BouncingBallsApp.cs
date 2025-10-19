@@ -1,4 +1,5 @@
 using LedMatrixOS.Core;
+using Microsoft.Extensions.Configuration;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
@@ -26,7 +27,7 @@ public sealed class BouncingBallsApp : MatrixAppBase
         public Color Color { get; set; }
     }
 
-    public override Task OnActivatedAsync((int height, int width) dimensions, CancellationToken cancellationToken)
+    public override Task OnActivatedAsync((int height, int width) dimensions, IConfiguration configuration, CancellationToken cancellationToken)
     {
         _frameDimensions = dimensions;
         // Create 5 random balls
@@ -43,7 +44,7 @@ public sealed class BouncingBallsApp : MatrixAppBase
             });
         }
 
-        return base.OnActivatedAsync(dimensions, cancellationToken);
+        return base.OnActivatedAsync(dimensions, configuration, cancellationToken);
     }
 
     public override void Update(TimeSpan deltaTime, CancellationToken cancellationToken)

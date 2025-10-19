@@ -6,6 +6,7 @@ public class SolidColorApp : MatrixAppBase, IConfigurableApp
 {
     public override string Id => "solid_color";
     public override string Name => "Solid Color";
+	public override int FrameRate => 1;
     
     private byte _red = 20;
     private byte _green = 255;

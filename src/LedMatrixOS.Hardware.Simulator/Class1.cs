@@ -1,5 +1,6 @@
 ﻿using LedMatrixOS.Core;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -19,6 +20,22 @@ public sealed class SimulatedMatrixDevice : IMatrixDevice
         get => _brightness;
         set => _brightness = (byte)Math.Clamp(value, (byte)0b00000000, (byte)0b11111111);
     }
+
+    public bool IsEnabled
+    {
+        get;
+        set
+        {
+            field = value;
+            if (!value)
+            {
+                lock (_sync)
+                {
+                    _canvas.Mutate(ctx => ctx.Clear(Color.Black));
+                }
+            }
+        }
+    } = true;
 
     public SimulatedMatrixDevice(int width, int height)
     {

@@ -5,6 +5,7 @@ namespace LedMatrixOS.Hardware.RpiLedMatrix;
 public class RpiLedMatrixDevice : IMatrixDevice
 {
     private readonly ILedMatrix _matrix;
+    private bool _isEnabled = true;
 
     public RpiLedMatrixDevice(ILedMatrix matrix)
     {
@@ -13,7 +14,30 @@ public class RpiLedMatrixDevice : IMatrixDevice
     
     public int Width => _matrix.ColLength;
     public int Height => _matrix.RowLength;
-    public byte Brightness { get; set; }
+
+    public byte Brightness
+    {
+        get => _matrix.Brightness;
+        set => _matrix.Brightness = value;
+    }
+
+    public bool IsEnabled
+    {
+        get => _isEnabled;
+        set
+        {
+            _isEnabled = value;
+            if (!value)
+            {
+                Task.Run(async () =>
+                {
+                    await Task.Delay(200);
+                    _matrix.Reset();
+                });
+            }
+        }
+    }
+
     public void Present(FrameBuffer buffer)
     {
         _matrix.Clear();

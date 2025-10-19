@@ -1,4 +1,5 @@
 using LedMatrixOS.Core;
+using Microsoft.Extensions.Configuration;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
@@ -35,7 +36,7 @@ public sealed class DvdLogoApp : MatrixAppBase
         ImageSharpExtensions.FromHsv(300, 1.0f, 1.0f)    // Magenta
     };
 
-    public override Task OnActivatedAsync((int height, int width) dimensions, CancellationToken cancellationToken)
+    public override Task OnActivatedAsync((int height, int width) dimensions, IConfiguration configuration, CancellationToken cancellationToken)
     {
 		_dimensions = dimensions;
         try
@@ -58,7 +59,7 @@ public sealed class DvdLogoApp : MatrixAppBase
         // Start with random color
         _currentColor = _dvdColors[_random.Next(_dvdColors.Length)];
 
-        return base.OnActivatedAsync(dimensions, cancellationToken);
+        return base.OnActivatedAsync(dimensions, configuration, cancellationToken);
     }
 
     public override void Update(TimeSpan deltaTime, CancellationToken cancellationToken)

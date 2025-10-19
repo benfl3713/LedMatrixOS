@@ -3,6 +3,7 @@ using System.Threading;
 using LedMatrixOS;
 using LedMatrixOS.Core;
 using LedMatrixOS.Apps;
+using LedMatrixOS.Graphics.Text;
 using LedMatrixOS.Hardware.Simulator;
 using LedMatrixOS.Hardware.RpiLedMatrix;
 using Microsoft.AspNetCore.Builder;
@@ -13,6 +14,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
+    .AddJsonFile("appsettings.local.json", optional: false)
     .AddEnvironmentVariables();
 
 // Settings
@@ -20,6 +22,8 @@ var config = builder.Configuration.Get<AppConfig>();
 int width = 254;
 int height = 64;
 bool useSimulator = builder.Configuration.GetValue("Matrix:UseSimulator", true);
+
+Fonts.Load();
 
 builder.Services.AddCors(options =>
 {
@@ -29,7 +33,8 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod());
 });
 
-builder.Services.AddSingleton<AppManager>(_ => new AppManager(height, width));
+builder.Services.AddSingleton<AppManager>(_ => new AppManager(builder.Configuration, height, width));
+builder.Services.AddSingleton<AudioDataService>();
 builder.Services.AddSingleton<IMatrixDevice>(sp =>
 {
     if (useSimulator)
@@ -62,6 +67,17 @@ app.UseCors();
 // Start render loop
 var engine = app.Services.GetRequiredService<RenderEngine>();
 var appManager = app.Services.GetRequiredService<AppManager>();
+var audioService = app.Services.GetRequiredService<AudioDataService>();
+
+// Set up audio service for equalizer app when it's activated
+appManager.AppActivated += (sender, appInstance) =>
+{
+    if (appInstance is EqualizerApp equalizerApp)
+    {
+        equalizerApp.SetAudioService(audioService);
+    }
+};
+
 await appManager.ActivateAsync("animated-clock", CancellationToken.None);
 engine.Start();
 app.Lifetime.ApplicationStopping.Register(engine.Stop);
@@ -127,7 +143,8 @@ app.MapGet("/api/settings", (IMatrixDevice device, RenderEngine eng) =>
         device.Height, 
         device.Brightness, 
         fps = eng.TargetFps,
-        isRunning = eng.IsRunning 
+        isRunning = eng.IsRunning,
+        isEnabled = device.IsEnabled
     }));
 
 app.MapPost("/api/settings/brightness/{value}", (byte value, IMatrixDevice device) =>
@@ -136,10 +153,10 @@ app.MapPost("/api/settings/brightness/{value}", (byte value, IMatrixDevice devic
     return Results.Ok(new { brightness = device.Brightness });
 });
 
-app.MapPost("/api/settings/fps/{value}", (int value, RenderEngine eng) =>
+app.MapPost("/api/settings/power/{enabled}", (bool enabled, IMatrixDevice device) =>
 {
-    eng.TargetFps = value;
-    return Results.Ok(new { fps = eng.TargetFps });
+    device.IsEnabled = enabled;
+    return Results.Ok(new { isEnabled = device.IsEnabled });
 });
 
 // Simulator preview
@@ -153,6 +170,48 @@ app.MapGet("/preview", (IMatrixDevice device) =>
     return Results.BadRequest("Preview only available in simulator mode");
 });
 
+// Audio streaming endpoint for equalizer visualization
+app.MapPost("/api/audio/stream", async (HttpRequest request, AudioDataService audioService) =>
+{
+    try
+    {
+        using var reader = new StreamReader(request.Body);
+        var json = await reader.ReadToEndAsync();
+        
+        // Log the incoming data for debugging
+        Console.WriteLine($"Received audio data: {json.Substring(0, Math.Min(200, json.Length))}...");
+        
+        var audioData = System.Text.Json.JsonSerializer.Deserialize<AudioStreamData>(json, new System.Text.Json.JsonSerializerOptions 
+        { 
+            PropertyNameCaseInsensitive = true 
+        });
+        
+        if (audioData?.Samples != null && audioData.Samples.Length > 0)
+        {
+            Console.WriteLine($"Processing {audioData.Samples.Length} samples. First few: {string.Join(", ", audioData.Samples.Take(5))}");
+            audioService.AddAudioSamples(audioData.Samples);
+            return Results.Ok(new { message = "Audio data received", sampleCount = audioData.Samples.Length });
+        }
+        
+        Console.WriteLine("Invalid audio data - samples null or empty");
+        return Results.BadRequest("Invalid audio data");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error processing audio: {ex.Message}\n{ex.StackTrace}");
+        return Results.BadRequest($"Error processing audio: {ex.Message}");
+    }
+});
+
+app.MapGet("/api/audio/status", (AudioDataService audioService) =>
+{
+    return Results.Ok(new 
+    { 
+        hasRecentData = audioService.HasRecentData(),
+        bandCount = AudioDataService.FrequencyBandCount
+    });
+});
+
 app.Run();
 
-
+public record AudioStreamData(float[] Samples, int SampleRate = 44100);

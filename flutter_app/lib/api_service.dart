@@ -76,6 +76,15 @@ class LedMatrixApi {
     return response.statusCode == 200;
   }
   
+  Future<bool> setPower(bool enabled) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/settings/power/$enabled'),
+      headers: {'Content-Type': 'application/json'},
+    );
+    
+    return response.statusCode == 200;
+  }
+  
   String getPreviewUrl() {
     return '$baseUrl/preview?_=${DateTime.now().millisecondsSinceEpoch}';
   }
@@ -102,12 +111,14 @@ class MatrixSettings {
   final int height;
   final int brightness;
   final bool isRunning;
+  final bool isEnabled;
   
   MatrixSettings({
     required this.width,
     required this.height,
     required this.brightness,
     required this.isRunning,
+    required this.isEnabled,
   });
   
   factory MatrixSettings.fromJson(Map<String, dynamic> json) {
@@ -116,6 +127,7 @@ class MatrixSettings {
       height: json['height'] ?? 0,
       brightness: json['brightness'] ?? 0,
       isRunning: json['isRunning'] ?? false,
+      isEnabled: json['isEnabled'] ?? true,
     );
   }
 }

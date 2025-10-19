@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using Microsoft.Extensions.Configuration;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -15,6 +16,8 @@ public readonly record struct Pixel(byte R, byte G, byte B)
     {
         r = R; g = G; b = B;
     }
+    
+    public static Pixel operator /(Pixel pixel, int divisor) => new Pixel((byte)(pixel.R / divisor), (byte)(pixel.G / divisor), (byte)(pixel.B / divisor));
 }
 
 public sealed class FrameBuffer
@@ -48,9 +51,10 @@ public sealed class FrameBuffer
         return _pixels[Index(x, y)];
     }
 
-    public void Clear(Pixel pixel)
+    public void Clear(Pixel? pixel = null)
     {
-        for (int i = 0; i < _pixels.Length; i++) _pixels[i] = pixel;
+        pixel ??= new Pixel(0, 0, 0);
+        for (int i = 0; i < _pixels.Length; i++) _pixels[i] = pixel.Value;
     }
 
     public ReadOnlySpan<Pixel> GetPixelsSpan() => _pixels;
@@ -75,6 +79,7 @@ public interface IMatrixDevice
     int Width { get; }
     int Height { get; }
     byte Brightness { get; set; }
+    bool IsEnabled { get; set; }
 
     void Present(FrameBuffer buffer);
 }
@@ -83,7 +88,8 @@ public interface IMatrixApp
 {
     string Id { get; }
     string Name { get; }
-    Task OnActivatedAsync((int height, int width) valueTuple, CancellationToken cancellationToken);
+    int FrameRate { get; }
+    Task OnActivatedAsync((int height, int width) valueTuple, IConfiguration configuration, CancellationToken cancellationToken);
     Task OnDeactivatedAsync(CancellationToken cancellationToken);
     void Update(TimeSpan deltaTime, CancellationToken cancellationToken);
     void Render(FrameBuffer frame, CancellationToken cancellationToken);
@@ -108,6 +114,7 @@ public enum AppSettingType
 
 public sealed class AppManager
 {
+    private readonly IConfiguration _configuration;
     private readonly int _height;
     private readonly int _width;
     private readonly Dictionary<string, Type> _appsById = new(StringComparer.OrdinalIgnoreCase);
@@ -115,9 +122,12 @@ public sealed class AppManager
 
     public IEnumerable<Type> Apps => _appsById.Values;
     public IMatrixApp? ActiveApp => _activeApp;
+    
+    public event EventHandler<IMatrixApp>? AppActivated;
 
-    public AppManager(int height, int width)
+    public AppManager(IConfiguration configuration, int height, int width)
     {
+        _configuration = configuration;
         _height = height;
         _width = width;
     }
@@ -146,8 +156,12 @@ public sealed class AppManager
         }
 
         var nextApp = (IMatrixApp?)Activator.CreateInstance(next);
-        await nextApp.OnActivatedAsync((_height, _width), cancellationToken).ConfigureAwait(false);
+        await nextApp.OnActivatedAsync((_height, _width), _configuration, cancellationToken).ConfigureAwait(false);
         _activeApp = nextApp;
+        
+        // Raise the AppActivated event
+        AppActivated?.Invoke(this, nextApp);
+        
         return true;
     }
 }
@@ -160,7 +174,7 @@ public sealed class RenderEngine
     private readonly object _stateLock = new();
     private CancellationTokenSource? _cts;
 
-    private int _targetFps = 30;
+    private int _targetFps = 60;
 
     public RenderEngine(IMatrixDevice device, AppManager apps)
     {
@@ -171,8 +185,7 @@ public sealed class RenderEngine
 
     public int TargetFps
     {
-        get => _targetFps;
-        set => _targetFps = Math.Clamp(value, 1, 240);
+        get => _apps.ActiveApp?.FrameRate ?? _targetFps;
     }
 
     public bool IsRunning => _cts != null;
@@ -194,7 +207,7 @@ public sealed class RenderEngine
     private async Task RunLoopAsync(CancellationToken cancellationToken)
     {
         var sw = new Stopwatch();
-        var targetFrameTime = TimeSpan.FromSeconds(1.0 / _targetFps);
+        var targetFrameTime = TimeSpan.FromSeconds(1.0 / TargetFps);
         sw.Start();
         var last = sw.Elapsed;
 
@@ -204,24 +217,28 @@ public sealed class RenderEngine
             var delta = now - last;
             last = now;
 
-            var app = _apps.ActiveApp;
-            if (app != null)
+            // Only render if the device is enabled
+            if (_device.IsEnabled)
             {
-                try
+                var app = _apps.ActiveApp;
+                if (app != null)
                 {
-                    app.Update(delta, cancellationToken);
-                    _frame.Clear(Pixel.Black);
-                    app.Render(_frame, cancellationToken);
-                    _device.Present(_frame);
-                }
-                catch
-                {
-                    // Ignore individual frame errors to keep loop running
+                    try
+                    {
+                        app.Update(delta, cancellationToken);
+                        _frame.Clear(Pixel.Black);
+                        app.Render(_frame, cancellationToken);
+                        _device.Present(_frame);
+                    }
+                    catch
+                    {
+                        // Ignore individual frame errors to keep loop running
+                    }
                 }
             }
 
             // sleep to maintain target FPS
-            targetFrameTime = TimeSpan.FromSeconds(1.0 / _targetFps);
+            targetFrameTime = TimeSpan.FromSeconds(1.0 / TargetFps);
             var frameTime = sw.Elapsed - now;
             var sleep = targetFrameTime - frameTime;
             if (sleep > TimeSpan.Zero)
@@ -240,8 +257,9 @@ public abstract class MatrixAppBase : IMatrixApp
 
     public abstract string Id { get; }
     public abstract string Name { get; }
+    public virtual int FrameRate { get; } = 60;
 
-    public virtual Task OnActivatedAsync((int height, int width) valueTuple, CancellationToken cancellationToken)
+    public virtual Task OnActivatedAsync((int height, int width) valueTuple, IConfiguration configuration, CancellationToken cancellationToken)
     {
         _lifecycleCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         return Task.CompletedTask;
@@ -252,14 +270,20 @@ public abstract class MatrixAppBase : IMatrixApp
         var cts = _lifecycleCts;
         if (cts != null)
         {
-            cts.Cancel();
+            await cts.CancelAsync();
             _lifecycleCts = null;
         }
 
         while (_backgroundTasks.TryTake(out var task))
         {
-            try { await Task.WhenAny(task, Task.Delay(50, cancellationToken)).ConfigureAwait(false); }
-            catch { }
+            try
+            {
+                await Task.WhenAny(task, Task.Delay(50, cancellationToken)).ConfigureAwait(false);
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine(ex);
+            }
         }
     }
 

@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="BdfFontParser" Version="0.3.0" />
+        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
+        <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.7" />
+        <PackageReference Include="SixLabors.Fonts" Version="2.1.3" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\LedMatrixOS.Core\LedMatrixOS.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Text\Fonts\" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Content Include="Text\Fonts\*.bdf">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+    </ItemGroup>
+
+</Project>

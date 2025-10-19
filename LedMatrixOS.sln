@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LedMatrixOS.Hardware.Simula
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LedMatrixOS", "src\LedMatrixOS\LedMatrixOS.csproj", "{7858C8F7-E5C5-4E8B-A389-D9449BDA8B7B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LedMatrixOS.Graphics", "src\LedMatrixOS.Graphics\LedMatrixOS.Graphics.csproj", "{3E3DEFF3-F799-4319-B413-0BC1B1012EFA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -42,5 +44,9 @@ Global
 		{7858C8F7-E5C5-4E8B-A389-D9449BDA8B7B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7858C8F7-E5C5-4E8B-A389-D9449BDA8B7B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7858C8F7-E5C5-4E8B-A389-D9449BDA8B7B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3E3DEFF3-F799-4319-B413-0BC1B1012EFA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3E3DEFF3-F799-4319-B413-0BC1B1012EFA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3E3DEFF3-F799-4319-B413-0BC1B1012EFA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3E3DEFF3-F799-4319-B413-0BC1B1012EFA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

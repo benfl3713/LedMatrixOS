@@ -1,4 +1,5 @@
 using LedMatrixOS.Core;
+using Microsoft.Extensions.Configuration;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
@@ -28,7 +29,7 @@ public sealed class MatrixRainApp : MatrixAppBase
         public float Brightness { get; set; }
     }
 
-    public override Task OnActivatedAsync((int height, int width) dimensions, CancellationToken cancellationToken)
+    public override Task OnActivatedAsync((int height, int width) dimensions, IConfiguration configuration, CancellationToken cancellationToken)
     {
         _frameDimensions = dimensions;
         try
@@ -57,7 +58,7 @@ public sealed class MatrixRainApp : MatrixAppBase
             }
         }
 
-        return base.OnActivatedAsync(dimensions, cancellationToken);
+        return base.OnActivatedAsync(dimensions, configuration, cancellationToken);
     }
 
     public override void Update(TimeSpan deltaTime, CancellationToken cancellationToken)

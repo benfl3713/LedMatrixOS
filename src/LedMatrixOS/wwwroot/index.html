@@ -26,10 +26,6 @@
         async function setBrightness(v) {
             await fetch('/api/settings/brightness/' + v, { method: 'POST' });
         }
-        async function setFps(v) {
-            document.getElementById('fpsLabel').textContent = v + ' FPS';
-            await fetch('/api/settings/fps/' + v, { method: 'POST' });
-        }
         async function switchApp() {
             const id = document.getElementById('appId').value;
             await fetch('/api/apps/' + id, { method: 'POST' });
@@ -42,10 +38,6 @@
     <div class="row">
         <label>Brightness</label>
         <input type="range" min="0" max="100" value="100" oninput="setBrightness(this.value)" />
-    </div>
-    <div class="row">
-        <label id="fpsLabel">60 FPS</label>
-        <input type="range" min="1" max="120" value="60" oninput="setFps(this.value)" />
     </div>
     <div class="row">
         <label>Activate App</label>

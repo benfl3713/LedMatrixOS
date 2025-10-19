@@ -8,6 +8,7 @@ import 'widgets/app_settings_bottom_sheet.dart';
 import 'widgets/live_preview_widget.dart';
 import 'widgets/responsive_app_grid.dart';
 import 'widgets/display_settings_widget.dart';
+import 'widgets/audio_stream_widget.dart';
 import 'utils/app_icon_helper.dart';
 import 'controllers/api_settings_controller.dart';
 import 'pages/settings_page.dart';
@@ -232,6 +233,7 @@ class _HomePageState extends State<HomePage> {
         height: _settings!.height,
         brightness: brightness.round(),
         isRunning: _settings!.isRunning,
+        isEnabled: _settings!.isEnabled,
       );
     });
 
@@ -246,6 +248,34 @@ class _HomePageState extends State<HomePage> {
         // Silent error handling
       }
     });
+  }
+
+  Future<void> _setPower(bool enabled) async {
+    // Update UI immediately for responsiveness
+    setState(() {
+      _settings = MatrixSettings(
+        width: _settings!.width,
+        height: _settings!.height,
+        brightness: _settings!.brightness,
+        isRunning: _settings!.isRunning,
+        isEnabled: enabled,
+      );
+    });
+
+    try {
+      await _api.setPower(enabled);
+    } catch (e) {
+      // Silent error handling, revert UI state on error
+      setState(() {
+        _settings = MatrixSettings(
+          width: _settings!.width,
+          height: _settings!.height,
+          brightness: _settings!.brightness,
+          isRunning: _settings!.isRunning,
+          isEnabled: !enabled,
+        );
+      });
+    }
   }
 
   void _showAppSettingsBottomSheet(MatrixApp app) {
@@ -270,13 +300,18 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('Led Matrix'),
         scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () {
-            // TODO: Implement menu
-          },
-        ),
         actions: [
+          if (_settings != null)
+            IconButton(
+              icon: Icon(
+                _settings!.isEnabled ? Icons.power_settings_new : Icons.power_off,
+                color: _settings!.isEnabled 
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              onPressed: () => _setPower(!_settings!.isEnabled),
+              tooltip: _settings!.isEnabled ? 'Turn Off Display' : 'Turn On Display',
+            ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
@@ -324,6 +359,12 @@ class _HomePageState extends State<HomePage> {
                       previewImageKey: _previewImageKey,
                     ),
 
+
+                    // Audio Streaming Widget (only show for equalizer app)
+                    if (_activeAppId == 'equalizer') ...[
+                      const AudioStreamWidget(),
+                      const SizedBox(height: 16),
+                    ],
                     const SizedBox(height: 16),
 
                     // Apps Section

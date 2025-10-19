@@ -1,4 +1,5 @@
 ﻿using LedMatrixOS.Core;
+using Microsoft.Extensions.Configuration;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
@@ -62,7 +63,7 @@ public sealed class ClockApp : MatrixAppBase, IConfigurableApp
         };
     }
 
-    public override Task OnActivatedAsync((int height, int width) dimensions, CancellationToken cancellationToken)
+    public override Task OnActivatedAsync((int height, int width) dimensions, IConfiguration configuration, CancellationToken cancellationToken)
     {
         // Load a default system font for rendering
         try
@@ -97,7 +98,7 @@ public sealed class ClockApp : MatrixAppBase, IConfigurableApp
         {
             await Task.Delay(100, ct).ConfigureAwait(false);
         });
-        return base.OnActivatedAsync(dimensions, cancellationToken);
+        return base.OnActivatedAsync(dimensions, configuration, cancellationToken);
     }
 
     public override void Update(TimeSpan deltaTime, CancellationToken cancellationToken)

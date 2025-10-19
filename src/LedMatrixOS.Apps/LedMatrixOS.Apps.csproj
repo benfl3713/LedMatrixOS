@@ -8,10 +8,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LedMatrixOS.Core\LedMatrixOS.Core.csproj" />
+    <ProjectReference Include="..\LedMatrixOS.Graphics\LedMatrixOS.Graphics.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Services\" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.10" />
+    <PackageReference Include="SpotifyAPI.Web" Version="7.2.1" />
   </ItemGroup>
 
 </Project>

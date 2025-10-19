@@ -6,6 +6,7 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.Fonts;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 
 namespace LedMatrixOS.Apps;
 
@@ -36,7 +37,7 @@ public sealed class WeatherApp : MatrixAppBase
         public DateTime LastUpdated { get; set; }
     }
 
-    public override Task OnActivatedAsync((int height, int width) dimensions, CancellationToken cancellationToken)
+    public override Task OnActivatedAsync((int height, int width) dimensions, IConfiguration configuration, CancellationToken cancellationToken)
     {
         try
         {
@@ -52,7 +53,7 @@ public sealed class WeatherApp : MatrixAppBase
         // Start background data loading
         StartBackgroundDataLoading();
 
-        return base.OnActivatedAsync(dimensions, cancellationToken);
+        return base.OnActivatedAsync(dimensions, configuration, cancellationToken);
     }
 
     public override Task OnDeactivatedAsync(CancellationToken cancellationToken)

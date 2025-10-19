@@ -4,6 +4,7 @@ public interface ILedMatrix
 {
     int RowLength { get; }
     int ColLength { get; }
+    byte Brightness { get; set; }
     void SetPixel(int x, int y, Color color);
     void DrawLine(int x0, int y0, int x1, int y1, Color color);
     void DrawCircle(int x0, int y0, int radius, Color color);
@@ -37,6 +38,12 @@ public class LedMatrix : ILedMatrix, IDisposable
 
     public int RowLength => Canvas.Height;
     public int ColLength => Canvas.Width;
+    public byte Brightness
+    {
+        get => Matrix.Brightness;
+        set => Matrix.Brightness = value;
+    }
+
     public int Width { get; }
     public int Height { get; }
 
