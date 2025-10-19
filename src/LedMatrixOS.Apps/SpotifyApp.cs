@@ -16,7 +16,8 @@ public sealed class SpotifyApp : MatrixAppBase
 {
     public override string Id => "spotify";
     public override string Name => "Spotify";
-    
+    public override int FrameRate { get; } = 10;
+
     // Mock scrolling text - you'll want to replace this with your actual ScrollOverflowText
     private ScrollOverflowTextForFrameBuffer? _songNameText;
     private ScrollOverflowTextForFrameBuffer? _artistNameText;

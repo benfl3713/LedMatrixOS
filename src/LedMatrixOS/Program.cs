@@ -14,14 +14,14 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
-    .AddJsonFile("appsettings.local.json", optional: false)
+    .AddJsonFile("appsettings.local.json", optional: true)
     .AddEnvironmentVariables();
 
 // Settings
 var config = builder.Configuration.Get<AppConfig>();
 int width = 254;
 int height = 64;
-bool useSimulator = builder.Configuration.GetValue("Matrix:UseSimulator", true);
+bool useSimulator = builder.Configuration.GetValue("Matrix:UseSimulator", false);
 
 Fonts.Load();
 
