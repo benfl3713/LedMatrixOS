@@ -1,0 +1,12 @@
+{
+  "domain": "ledmatrix_controller",
+  "name": "LED Matrix Controller",
+  "codeowners": ["@ledmatrix"],
+  "config_flow": true,
+  "documentation": "https://github.com/ledmatrix/LedMatrixOS",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "requirements": ["aiohttp>=3.8.0"],
+  "version": "1.0.0"
+}
+

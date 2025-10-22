@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "LED Matrix Controller",
+        "description": "Configure your LED Matrix device",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the LED Matrix device. Please check the host and port."
+    },
+    "abort": {
+      "already_configured": "This LED Matrix device is already configured"
+    }
+  }
+}
+
