@@ -1,0 +1,6 @@
+POST http://localhost:5005/api/notifications/message
+Content-Type: application/json
+
+{
+    "message": "This is a test notification sent via HTTP"
+}
