@@ -1,14 +1,11 @@
-using System.Linq;
-using System.Threading;
+using System.Text.Json;
 using LedMatrixOS;
-using LedMatrixOS.Core;
 using LedMatrixOS.Apps;
+using LedMatrixOS.Core;
+using LedMatrixOS.Endpoints;
 using LedMatrixOS.Graphics.Text;
-using LedMatrixOS.Hardware.Simulator;
 using LedMatrixOS.Hardware.RpiLedMatrix;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+using LedMatrixOS.Hardware.Simulator;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,7 +16,7 @@ builder.Configuration
 
 // Settings
 var config = builder.Configuration.Get<AppConfig>();
-int width = 254;
+int width = 256;
 int height = 64;
 bool useSimulator = builder.Configuration.GetValue("Matrix:UseSimulator", false);
 
@@ -41,6 +38,7 @@ builder.Services.AddSingleton<AppManager>(sp =>
     return new AppManager(builder.Configuration, height, width, settingsStorage);
 });
 builder.Services.AddSingleton<AudioDataService>();
+builder.Services.AddSingleton<InterruptService>();
 builder.Services.AddSingleton<IMatrixDevice>(sp =>
 {
     if (useSimulator)
@@ -59,8 +57,9 @@ builder.Services.AddSingleton<RenderEngine>(sp =>
 {
     var device = sp.GetRequiredService<IMatrixDevice>();
     var apps = sp.GetRequiredService<AppManager>();
+    var interruptService = sp.GetRequiredService<InterruptService>();
     foreach (var app in BuiltInApps.GetAll()) apps.Register(app);
-    return new RenderEngine(device, apps);
+    return new RenderEngine(device, apps, interruptService);
 });
 
 var app = builder.Build();
@@ -187,7 +186,7 @@ app.MapPost("/api/audio/stream", async (HttpRequest request, AudioDataService au
         // Log the incoming data for debugging
         Console.WriteLine($"Received audio data: {json.Substring(0, Math.Min(200, json.Length))}...");
         
-        var audioData = System.Text.Json.JsonSerializer.Deserialize<AudioStreamData>(json, new System.Text.Json.JsonSerializerOptions 
+        var audioData = JsonSerializer.Deserialize<AudioStreamData>(json, new JsonSerializerOptions
         { 
             PropertyNameCaseInsensitive = true 
         });
@@ -217,6 +216,8 @@ app.MapGet("/api/audio/status", (AudioDataService audioService) =>
         bandCount = AudioDataService.FrequencyBandCount
     });
 });
+
+app.MapNotificationEndpoints();
 
 app.Run();
 

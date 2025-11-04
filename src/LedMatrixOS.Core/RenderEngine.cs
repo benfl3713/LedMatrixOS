@@ -12,6 +12,7 @@ public sealed class RenderEngine : IDisposable
 {
     private readonly IMatrixDevice _device;
     private readonly AppManager _apps;
+    private readonly InterruptService _interruptService;
     private readonly FrameBuffer _frame;
     private readonly object _stateLock = new();
     private CancellationTokenSource? _cts;
@@ -26,10 +27,11 @@ public sealed class RenderEngine : IDisposable
     
     public TransitionDirection TransitionDirection { get; set; } = TransitionDirection.Vertical;
 
-    public RenderEngine(IMatrixDevice device, AppManager apps)
+    public RenderEngine(IMatrixDevice device, AppManager apps, InterruptService interruptService)
     {
         _device = device;
         _apps = apps;
+        _interruptService = interruptService;
         _frame = new FrameBuffer(device.Width, device.Height);
         
         // Subscribe to app activation events
@@ -92,6 +94,24 @@ public sealed class RenderEngine : IDisposable
             // Only render if the device is enabled
             if (_device.IsEnabled)
             {
+                if (_interruptService.HasInterrupt())
+                {
+                    _frame.Clear(Pixel.Black);
+                    var fps = _interruptService.RunInterrupt(_frame);
+                    _device.Present(_frame);
+
+                    var interruptTimeSpan= TimeSpan.FromSeconds(1.0 / fps);
+                    var interruptFrameTime = sw.Elapsed - now;
+                    var interruptSleep = interruptTimeSpan - interruptFrameTime;
+                    if (interruptSleep > TimeSpan.Zero)
+                    {
+                        try { await Task.Delay(interruptSleep, cancellationToken).ConfigureAwait(false); }
+                        catch (TaskCanceledException) { }
+                    }
+
+                    continue;
+                }
+
                 var app = _apps.ActiveApp;
                 if (app != null)
                 {

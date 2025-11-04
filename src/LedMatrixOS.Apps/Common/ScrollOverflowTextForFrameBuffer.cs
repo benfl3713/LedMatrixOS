@@ -12,6 +12,8 @@ public class ScrollOverflowTextForFrameBuffer
     private readonly int _maxWidth;
     private readonly BdfFont _font;
     private readonly Pixel _color;
+    public EventHandler OnResetPosition;
+    public bool? TextFits { get; private set; }
 
     public ScrollOverflowTextForFrameBuffer(int x, int y, int maxWidth, BdfFont font, Pixel? color = null)
     {
@@ -28,6 +30,7 @@ public class ScrollOverflowTextForFrameBuffer
 
     public void Draw(FrameBuffer frame, string text)
     {
+        TextFits ??= text.Length <= _maxWidth;
         if (text.Length <= _maxWidth || _initialPause.ElapsedMilliseconds < 4000)
         {
             string toShow = text;
@@ -79,6 +82,7 @@ public class ScrollOverflowTextForFrameBuffer
             _currentOffset = 0; // Reset offset after a pause
             _initialPause.Restart();
             _endPause.Reset();
+            OnResetPosition?.Invoke(this, EventArgs.Empty);
         }
     }
 }
