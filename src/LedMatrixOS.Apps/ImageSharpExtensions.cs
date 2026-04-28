@@ -75,3 +75,4 @@ public static class ImageSharpExtensions
         return Color.FromRgba(color.R, color.G, color.B, alphaB);
     }
 }
+

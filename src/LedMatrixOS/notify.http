@@ -1,6 +1,11 @@
-POST http://localhost:5005/api/notifications/message
+POST http://radarlights:5005/api/notifications/message
 Content-Type: application/json
 
 {
-    "message": "This is a test notification sent via HTTP"
+    "message": "Hello... This is a test notification from LedMatrixOS!",
+    "color": {
+        "R": 150,
+        "G": 0,
+        "B": 255
+    }
 }
