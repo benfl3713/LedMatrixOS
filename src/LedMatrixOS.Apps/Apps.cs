@@ -23,5 +23,7 @@ public static class BuiltInApps
         yield return typeof(ScrollingTextApp);
         yield return typeof(EqualizerApp);
         yield return typeof(FireApp);
+        yield return typeof(TubeStatusApp);
+        yield return typeof(TubeLineApp);
     }
 }
