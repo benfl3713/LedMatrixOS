@@ -83,7 +83,7 @@ appManager.AppActivated += (sender, appInstance) =>
     }
 };
 
-await appManager.ActivateAsync("animated-clock", CancellationToken.None);
+await appManager.ActivateAsync("tube-departures", CancellationToken.None);
 engine.Start();
 app.Lifetime.ApplicationStopping.Register(engine.Stop);
 
