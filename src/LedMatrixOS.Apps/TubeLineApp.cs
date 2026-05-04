@@ -30,6 +30,7 @@ public class TubeLineApp : MatrixAppBase
     private Dictionary<string, int> _stopIndexByName = new(StringComparer.OrdinalIgnoreCase);
     private TimeSpan _lastUpdateTime = TimeSpan.Zero;
     private Font? _infoFont;
+    private Font? _labelFont;
 
     // TfL-inspired palette
     private static readonly Color TflBlue = Color.FromRgb(0, 25, 168);
@@ -47,7 +48,7 @@ public class TubeLineApp : MatrixAppBase
         ["hammersmith-city"] = Color.FromRgb(244, 169, 190),
         ["jubilee"] = Color.FromRgb(161, 165, 167),
         ["metropolitan"] = Color.FromRgb(155, 0, 88),
-        ["northern"] = Color.FromRgb(35, 31, 32),
+        ["northern"] = Color.FromRgb(100, 100, 100),
         ["piccadilly"] = Color.FromRgb(0, 15, 159),
         ["victoria"] = Color.FromRgb(0, 152, 216),
         ["waterloo-city"] = Color.FromRgb(147, 206, 186)
@@ -143,11 +144,13 @@ public class TubeLineApp : MatrixAppBase
     {
         try
         {
-            _infoFont = SystemFonts.CreateFont("Nimbus Sans", dimensions.height >= 64 ? 10 : 8, FontStyle.Bold);
+            _infoFont = SystemFonts.CreateFont("Nimbus Sans", dimensions.height >= 64 ? 9 : 8, FontStyle.Bold);
+            _labelFont = SystemFonts.CreateFont("Nimbus Sans", 7, FontStyle.Regular);
         }
         catch
         {
-            _infoFont = SystemFonts.CreateFont("Arial", dimensions.height >= 64 ? 10 : 8, FontStyle.Bold);
+            _infoFont = SystemFonts.CreateFont("Arial", dimensions.height >= 64 ? 9 : 8, FontStyle.Bold);
+            _labelFont = SystemFonts.CreateFont("Arial", 7, FontStyle.Regular);
         }
 
         // Read TFL API key and selected line from configuration
@@ -634,156 +637,190 @@ public class TubeLineApp : MatrixAppBase
     private void DrawTubeLine(IImageProcessingContext ctx, int width, int height)
     {
         var lineColor = GetLineColor(_selectedLineId);
-        var topHud = height >= 64 ? 8 : 6;
-        var bottomHud = height >= 64 ? 8 : 6;
-        var leftPadding = 5;
-        var rightPadding = 5;
+        var stops = _lineStops;
+        int numStops = stops.Length;
 
-        var rows = height >= 64 ? 4 : (height >= 40 ? 3 : 2);
-        var snake = BuildSnakePath(width, height, topHud, bottomHud, leftPadding, rightPadding, rows);
+        // ── Geometry ──────────────────────────────────────────────────────────
+        // The track sits slightly below the vertical mid-point so there is a
+        // bit more room above for tick+label pairs that go upward.
+        const int leftPad   = 8;
+        const int rightPad  = 8;
+        const int lineThick = 5;
+        int lineY    = height >= 64 ? 33 : height / 2;
+        int tickLen  = height >= 64 ? 9  : 5;
+        int trackLeft  = leftPad;
+        int trackRight = width - rightPad;
+        int trackWidth = trackRight - trackLeft;
 
-        // Draw wrapped track using thicker segments for visibility.
-        foreach (var segment in snake.Segments)
+        // ── Track ─────────────────────────────────────────────────────────────
+        ctx.Fill(lineColor, new RectangleF(trackLeft, lineY - lineThick / 2f, trackWidth, lineThick));
+
+        // Square end-caps (terminus bumpers)
+        ctx.Fill(Color.White, new RectangleF(trackLeft  - 1.5f, lineY - lineThick / 2f - 1, lineThick + 3, lineThick + 2));
+        ctx.Fill(Color.White, new RectangleF(trackRight - lineThick / 2f - 1, lineY - lineThick / 2f - 1, lineThick + 3, lineThick + 2));
+        // Coloured inner of end-caps
+        ctx.Fill(lineColor, new RectangleF(trackLeft  - 0.5f, lineY - lineThick / 2f, lineThick + 1, lineThick));
+        ctx.Fill(lineColor, new RectangleF(trackRight - lineThick / 2f, lineY - lineThick / 2f, lineThick + 1, lineThick));
+
+        if (numStops < 2)
         {
-            DrawTrackSegment(ctx, segment, 3, lineColor);
+            DrawHud(ctx, width, height);
+            return;
         }
 
-        // Draw station markers along the wrapped path.
-        int numStops = Math.Min(_lineStops.Length, 30); // Keep readable marker density
-        if (numStops > 1)
+        // ── Station x-positions ───────────────────────────────────────────────
+        float[] xs = new float[numStops];
+        for (int i = 0; i < numStops; i++)
+            xs[i] = trackLeft + (float)(i / (double)(numStops - 1) * trackWidth);
+
+        // Target ~30 px between labelled stations; always label the termini.
+        double stationSpacing = trackWidth / (double)(numStops - 1);
+        int labelInterval = Math.Max(1, (int)Math.Ceiling(30.0 / stationSpacing));
+
+        // ── Pass 1 – tick marks ───────────────────────────────────────────────
+        for (int i = 0; i < numStops; i++)
+        {
+            float x       = xs[i];
+            bool terminus = i == 0 || i == numStops - 1;
+            if (terminus) continue; // end-caps already drawn above
+
+            bool doLabel   = i % labelInterval == 0;
+            bool above     = doLabel && ((i / labelInterval) % 2 == 0);
+            float tickTop  = above
+                ? lineY - lineThick / 2f - tickLen
+                : lineY + lineThick / 2f;
+
+            ctx.Fill(Color.White, new RectangleF(x - 0.75f, tickTop, 1.5f, tickLen));
+        }
+
+        // ── Pass 2 – station name labels ─────────────────────────────────────
+        if (_labelFont != null)
         {
             for (int i = 0; i < numStops; i++)
             {
-                var stopPercent = i / (float)(numStops - 1);
-                var point = GetPointOnSnake(snake, stopPercent);
-                var stationCircle = new RectangleF(point.X - 2.5f, point.Y - 2.5f, 5, 5);
-                ctx.Fill(TflLight, stationCircle);
-                ctx.Draw(TflBlue, 1, stationCircle);
+                bool terminus = i == 0 || i == numStops - 1;
+                bool doLabel  = terminus || i % labelInterval == 0;
+                if (!doLabel) continue;
+
+                float x    = xs[i];
+                // Termini: first label goes above, last goes below; gives the
+                // classic tube-diagram asymmetric look.
+                bool above = terminus
+                    ? i == 0
+                    : (i / labelInterval) % 2 == 0;
+
+                float labelY = above
+                    ? lineY - lineThick / 2f - tickLen - 2
+                    : lineY + lineThick / 2f + tickLen + 2;
+
+                var name = ShortenStationName(stops[i].Name);
+                ctx.DrawText(new RichTextOptions(_labelFont)
+                {
+                    Origin              = new PointF(x, labelY),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment   = above ? VerticalAlignment.Bottom : VerticalAlignment.Top
+                }, name, TflLight);
             }
         }
 
-        // Draw trains along the same wrapped path.
+        // ── Pass 3 – trains ───────────────────────────────────────────────────
         foreach (var train in _trainPositions)
         {
-            var point = GetPointOnSnake(snake, (float)(train.DisplayPositionPercent / 100.0));
+            float x          = trackLeft + (float)(train.DisplayPositionPercent / 100.0) * trackWidth;
+            var   trainColor = GetTrainColor(train.Direction);
+            float trainH     = lineThick + 8;
+            const float trainW = 4f;
 
-            // Slightly bigger marker so movement is easier to see on low-res displays.
-            var trainMarker = new RectangleF(point.X - 1.0f, point.Y - 4.0f, 2.0f, 8.0f);
-            ctx.Fill(GetTrainColor(train.Direction), trainMarker);
+            // Bright coloured bar centred on the track
+            ctx.Fill(trainColor, new RectangleF(x - trainW / 2f, lineY - trainH / 2f, trainW, trainH));
+            // Thin white highlight in the centre for visibility on coloured lines
+            ctx.Fill(Color.White, new RectangleF(x - 0.5f, lineY - trainH / 2f, 1f, trainH));
         }
 
         DrawHud(ctx, width, height);
     }
 
-    private sealed class SnakePath
+    // ── Station name abbreviation ─────────────────────────────────────────────
+
+    private static string ShortenStationName(string rawName)
     {
-        public List<SnakeSegment> Segments { get; } = new();
-        public float TotalLength { get; set; }
+        // Strip "Underground Station" etc. and upper-case (NormalizeStationName does this)
+        var name = NormalizeStationName(rawName);
+
+        // Well-known long names
+        name = name
+            .Replace("KING'S CROSS ST. PANCRAS", "KING'S X")
+            .Replace("TOTTENHAM COURT ROAD",      "TOT CT RD")
+            .Replace("OXFORD CIRCUS",              "OXF CIRC")
+            .Replace("WESTMINSTER",                "WESTMNSTR")
+            .Replace("LONDON BRIDGE",              "LDN BRDG")
+            .Replace("CANARY WHARF",               "CNRY WRF")
+            .Replace("NORTH GREENWICH",            "N GRNWCH")
+            .Replace("CANADA WATER",               "CAN WTR")
+            .Replace("WEST HAMPSTEAD",             "W HMPSTD")
+            .Replace("FINCHLEY ROAD",              "FNCHLY RD")
+            .Replace("SWISS COTTAGE",              "SWISS CT")
+            .Replace("ST. JOHN'S WOOD",            "ST JOHNS")
+            .Replace("GREEN PARK",                 "GRN PK")
+            .Replace("BAKER STREET",               "BAKER ST")
+            .Replace("BOND STREET",                "BOND ST")
+            .Replace("WEMBLEY PARK",               "WMBLY PK")
+            .Replace("CANNING TOWN",               "CANNNG T")
+            .Replace("WILLESDEN GREEN",            "WLSDN GN")
+            .Replace("HAMMERSMITH",                "HMRSTH")
+            .Replace("SHEPHERD'S BUSH",            "SHEP BSH");
+
+        // Generic word abbreviations (longer patterns first to avoid partial matches)
+        name = name
+            .Replace(" JUNCTION", " JCT")
+            .Replace(" GARDENS",  " GDNS")
+            .Replace(" BRIDGE",   " BRDG")
+            .Replace(" STREET",   " ST")
+            .Replace(" ROAD",     " RD")
+            .Replace(" WHARF",    " WRF")
+            .Replace(" SQUARE",   " SQ")
+            .Replace(" PARK",     " PK")
+            .Replace("NORTH ",    "N ")
+            .Replace("SOUTH ",    "S ")
+            .Replace("EAST ",     "E ")
+            .Replace("WEST ",     "W ")
+            .Replace(" NORTH",    " N")
+            .Replace(" SOUTH",    " S")
+            .Replace(" EAST",     " E")
+            .Replace(" WEST",     " W");
+
+        name = name.Trim();
+        return name.Length > 9 ? name[..9].TrimEnd() : name;
     }
 
-    private readonly record struct SnakeSegment(float X1, float Y1, float X2, float Y2, float Length);
-
-    private static SnakePath BuildSnakePath(int width, int height, int topHud, int bottomHud, int leftPadding, int rightPadding, int rows)
-    {
-        var path = new SnakePath();
-
-        float xLeft = leftPadding;
-        float xRight = Math.Max(xLeft + 4, width - rightPadding);
-        float yTop = topHud;
-        float yBottom = Math.Max(yTop + 1, height - bottomHud);
-        float rowSpacing = rows > 1 ? (yBottom - yTop) / (rows - 1) : 0;
-
-        float total = 0;
-        for (int row = 0; row < rows; row++)
-        {
-            float y = yTop + row * rowSpacing;
-            bool leftToRight = row % 2 == 0;
-            float x1 = leftToRight ? xLeft : xRight;
-            float x2 = leftToRight ? xRight : xLeft;
-            float hLength = Math.Abs(x2 - x1);
-            path.Segments.Add(new SnakeSegment(x1, y, x2, y, hLength));
-            total += hLength;
-
-            if (row < rows - 1)
-            {
-                float nextY = yTop + (row + 1) * rowSpacing;
-                float vx = x2;
-                float vLength = Math.Abs(nextY - y);
-                path.Segments.Add(new SnakeSegment(vx, y, vx, nextY, vLength));
-                total += vLength;
-            }
-        }
-
-        path.TotalLength = Math.Max(1, total);
-        return path;
-    }
-
-    private static PointF GetPointOnSnake(SnakePath path, float progress)
-    {
-        progress = Math.Clamp(progress, 0f, 1f);
-        float targetDistance = path.TotalLength * progress;
-        float traveled = 0;
-
-        foreach (var segment in path.Segments)
-        {
-            if (targetDistance <= traveled + segment.Length)
-            {
-                float segProgress = segment.Length <= 0 ? 0 : (targetDistance - traveled) / segment.Length;
-                float x = segment.X1 + (segment.X2 - segment.X1) * segProgress;
-                float y = segment.Y1 + (segment.Y2 - segment.Y1) * segProgress;
-                return new PointF(x, y);
-            }
-
-            traveled += segment.Length;
-        }
-
-        var last = path.Segments[^1];
-        return new PointF(last.X2, last.Y2);
-    }
-
-    private static void DrawTrackSegment(IImageProcessingContext ctx, SnakeSegment segment, float thickness, Color color)
-    {
-        if (Math.Abs(segment.Y1 - segment.Y2) < 0.001f)
-        {
-            // Horizontal
-            float x = Math.Min(segment.X1, segment.X2);
-            float w = Math.Abs(segment.X2 - segment.X1);
-            ctx.Fill(color, new RectangleF(x, segment.Y1 - thickness / 2f, w, thickness));
-        }
-        else
-        {
-            // Vertical connector
-            float y = Math.Min(segment.Y1, segment.Y2);
-            float h = Math.Abs(segment.Y2 - segment.Y1);
-            ctx.Fill(color, new RectangleF(segment.X1 - thickness / 2f, y, thickness, h));
-        }
-    }
+    // ── HUD (line name + train count) ─────────────────────────────────────────
 
     private void DrawHud(IImageProcessingContext ctx, int width, int height)
     {
-        if (_infoFont == null)
+        if (_infoFont == null) return;
+
+        var lineColor = GetLineColor(_selectedLineId);
+        var lineName  = _selectedLineId.Replace("-", " ").ToUpperInvariant() + " LINE";
+        var trainText = $"{_trainPositions.Length} trains";
+
+        // Bottom strip — keeps the label area free for station names
+        float hudY = height - 10f;
+
+        // Coloured line-name label (left)
+        ctx.DrawText(new RichTextOptions(_infoFont)
         {
-            return;
-        }
+            Origin              = new PointF(3, hudY),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment   = VerticalAlignment.Top
+        }, lineName, lineColor);
 
-        var lineText = _selectedLineId.ToUpperInvariant();
-        var countText = $"{_trainPositions.Length} trains";
-        var age = _lastSuccessfulUpdateUtc == DateTime.MinValue
-            ? "--"
-            : ((int)Math.Max(0, (DateTime.UtcNow - _lastSuccessfulUpdateUtc).TotalSeconds)).ToString();
-
-        var primaryDirection = _trainPositions
-            .Where(t => !string.IsNullOrWhiteSpace(t.Direction))
-            .GroupBy(t => t.Direction, StringComparer.OrdinalIgnoreCase)
-            .OrderByDescending(g => g.Count())
-            .Select(g => g.Key)
-            .FirstOrDefault() ?? "inbound";
-
-        ctx.DrawText(new RichTextOptions(_infoFont) { Origin = new PointF(2, 1) }, lineText, GetLineColor(_selectedLineId));
-        ctx.DrawText(new RichTextOptions(_infoFont) { Origin = new PointF(Math.Max(2, width - 90), 1) }, countText, TflBlue);
-
-        // var bottomText = $"{primaryDirection}  {age}s";
-        // ctx.DrawText(new RichTextOptions(_infoFont) { Origin = new PointF(2, Math.Max(1, height - 11)) }, bottomText, TflHudMuted);
+        // Train count (right), muted
+        ctx.DrawText(new RichTextOptions(_infoFont)
+        {
+            Origin              = new PointF(width - 3, hudY),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment   = VerticalAlignment.Top
+        }, trainText, TflHudMuted);
     }
 
     private static Color GetLineColor(string? lineId)
