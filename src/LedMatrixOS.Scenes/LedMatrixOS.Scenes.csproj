@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LedMatrixOS.Core\LedMatrixOS.Core.csproj" />
+    <ProjectReference Include="..\LedMatrixOS.Engine\LedMatrixOS.Engine.csproj" />
+  </ItemGroup>
+
+</Project>

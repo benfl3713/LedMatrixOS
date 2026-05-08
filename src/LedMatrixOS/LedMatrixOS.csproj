@@ -7,6 +7,8 @@
     <ProjectReference Include="..\LedMatrixOS.Apps\LedMatrixOS.Apps.csproj" />
     <ProjectReference Include="..\LedMatrixOS.Hardware.Simulator\LedMatrixOS.Hardware.Simulator.csproj" />
     <ProjectReference Include="..\LedMatrixOS.Hardware.RpiLedMatrix\LedMatrixOS.Hardware.RpiLedMatrix.csproj" />
+    <ProjectReference Include="..\LedMatrixOS.Engine\LedMatrixOS.Engine.csproj" />
+    <ProjectReference Include="..\LedMatrixOS.Scenes\LedMatrixOS.Scenes.csproj" />
   </ItemGroup>
 </Project>
 

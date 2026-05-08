@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      MonoGame.Framework.DesktopGL bundles SDL2, OpenGL, and all required native libs.
+      On headless Pi targets set SDL_VIDEODRIVER=offscreen before calling game.Run().
+    -->
+    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.1.303" />
+    <!-- BDF bitmap font parsing – used by MatrixFont/MatrixFonts for pixel-accurate text rendering -->
+    <PackageReference Include="BdfFontParser" Version="0.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LedMatrixOS.Core\LedMatrixOS.Core.csproj" />
+  </ItemGroup>
+
+</Project>
