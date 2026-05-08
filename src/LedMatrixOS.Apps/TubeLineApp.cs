@@ -30,6 +30,9 @@ public class TubeLineApp : MatrixAppBase, IConfigurableApp
     private Dictionary<string, int> _stopIndexById = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, int> _stopIndexByName = new(StringComparer.OrdinalIgnoreCase);
     private TimeSpan _lastUpdateTime = TimeSpan.Zero;
+    private volatile string _branchMode = "Auto";
+    private volatile string _branchRoute = "auto";
+    private volatile string[] _branchRouteOptions = new[] { "auto" };
 
     // TfL-inspired palette (used for ImageSharp geometry only)
     private static readonly Color TflBlue = Color.FromRgb(0, 25, 168);
@@ -170,6 +173,8 @@ public class TubeLineApp : MatrixAppBase, IConfigurableApp
         public double Longitude { get; set; }
     }
 
+    private sealed record RouteVariant(string Label, string[] StopIds, bool IsRegular);
+
     public IEnumerable<AppSetting> GetSettings()
     {
         return
@@ -181,7 +186,23 @@ public class TubeLineApp : MatrixAppBase, IConfigurableApp
                 AppSettingType.Select,
                 "jubilee",
                 _selectedLineId,
-                Options: SupportedLineIds)
+                Options: SupportedLineIds),
+            new AppSetting(
+                "branchMode",
+                "Branch Mode",
+                "Auto picks the best branch path, Pinned keeps a specific branch route.",
+                AppSettingType.Select,
+                "Auto",
+                _branchMode,
+                Options: new[] { "Auto", "Pinned" }),
+            new AppSetting(
+                "branchRoute",
+                "Branch Route",
+                "Route path to use when Branch Mode is Pinned.",
+                AppSettingType.Select,
+                "auto",
+                _branchRoute,
+                Options: _branchRouteOptions)
         ];
     }
 
@@ -189,6 +210,30 @@ public class TubeLineApp : MatrixAppBase, IConfigurableApp
     {
         if (!string.Equals(key, "lineId", StringComparison.OrdinalIgnoreCase))
         {
+            if (string.Equals(key, "branchMode", StringComparison.OrdinalIgnoreCase))
+            {
+                var normalizedMode = NormalizeBranchMode(value?.ToString());
+                if (!string.Equals(normalizedMode, _branchMode, StringComparison.OrdinalIgnoreCase))
+                {
+                    _branchMode = normalizedMode;
+                    ResetLineDataState();
+                }
+            }
+            else if (string.Equals(key, "branchRoute", StringComparison.OrdinalIgnoreCase))
+            {
+                var route = value?.ToString() ?? "auto";
+                if (!_branchRouteOptions.Contains(route, StringComparer.OrdinalIgnoreCase))
+                {
+                    route = "auto";
+                }
+
+                if (!string.Equals(route, _branchRoute, StringComparison.OrdinalIgnoreCase))
+                {
+                    _branchRoute = route;
+                    ResetLineDataState();
+                }
+            }
+
             return;
         }
 
@@ -199,6 +244,8 @@ public class TubeLineApp : MatrixAppBase, IConfigurableApp
         }
 
         _selectedLineId = normalized;
+        _branchRoute = "auto";
+        _branchRouteOptions = new[] { "auto" };
         ResetLineDataState();
     }
 
@@ -273,7 +320,18 @@ public class TubeLineApp : MatrixAppBase, IConfigurableApp
             var routeData = await FetchRouteDataAsync(httpClient, cancellationToken);
             if (routeData != null)
             {
-                _lineStops = BuildOrderedStops(routeData);
+                var routeVariants = BuildRouteVariants(routeData);
+                _branchRouteOptions = new[] { "auto" }
+                    .Concat(routeVariants.Select(v => v.Label).Distinct(StringComparer.OrdinalIgnoreCase))
+                    .ToArray();
+
+                if (!_branchRouteOptions.Contains(_branchRoute, StringComparer.OrdinalIgnoreCase))
+                {
+                    _branchRoute = "auto";
+                }
+
+                var selectedVariant = SelectRouteVariant(routeVariants);
+                _lineStops = BuildOrderedStops(routeData, selectedVariant?.StopIds);
 
                 var stopIndexById = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 var stopIndexByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -348,6 +406,65 @@ public class TubeLineApp : MatrixAppBase, IConfigurableApp
         return null;
     }
 
+    private static RouteVariant[] BuildRouteVariants(LineRouteData routeData)
+    {
+        var variants = new List<RouteVariant>();
+
+        if (routeData.OrderedLineRoutes != null)
+        {
+            foreach (var route in routeData.OrderedLineRoutes)
+            {
+                if (route.NaptanIds is not { Length: > 1 })
+                {
+                    continue;
+                }
+
+                var ids = route.NaptanIds.Where(id => !string.IsNullOrWhiteSpace(id)).ToArray();
+                if (ids.Length < 2)
+                {
+                    continue;
+                }
+
+                var label = string.IsNullOrWhiteSpace(route.Name)
+                    ? $"{ids[0]} -> {ids[^1]}"
+                    : route.Name;
+
+                variants.Add(new RouteVariant(
+                    Label: label,
+                    StopIds: ids,
+                    IsRegular: string.Equals(route.ServiceType, "Regular", StringComparison.OrdinalIgnoreCase)));
+            }
+        }
+
+        return variants
+            .GroupBy(v => v.Label, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(v => v.StopIds.Length).First())
+            .ToArray();
+    }
+
+    private RouteVariant? SelectRouteVariant(RouteVariant[] variants)
+    {
+        if (variants.Length == 0)
+        {
+            return null;
+        }
+
+        if (string.Equals(_branchMode, "Pinned", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(_branchRoute, "auto", StringComparison.OrdinalIgnoreCase))
+        {
+            var pinned = variants.FirstOrDefault(v => string.Equals(v.Label, _branchRoute, StringComparison.OrdinalIgnoreCase));
+            if (pinned != null)
+            {
+                return pinned;
+            }
+        }
+
+        return variants
+            .OrderByDescending(v => v.IsRegular)
+            .ThenByDescending(v => v.StopIds.Length)
+            .First();
+    }
+
     private static string NormalizeLineId(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
@@ -398,6 +515,16 @@ public class TubeLineApp : MatrixAppBase, IConfigurableApp
             : "jubilee";
     }
 
+    private static string NormalizeBranchMode(string? raw)
+    {
+        if (string.Equals(raw, "Pinned", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Pinned";
+        }
+
+        return "Auto";
+    }
+
     private void ResetLineDataState()
     {
         _lineStops = Array.Empty<StopPoint>();
@@ -410,7 +537,7 @@ public class TubeLineApp : MatrixAppBase, IConfigurableApp
         _lastSuccessfulUpdateUtc = DateTime.MinValue;
     }
 
-    private static StopPoint[] BuildOrderedStops(LineRouteData routeData)
+    private static StopPoint[] BuildOrderedStops(LineRouteData routeData, string[]? preferredOrderedIds = null)
     {
         var stopById = new Dictionary<string, StopPoint>(StringComparer.OrdinalIgnoreCase);
 
@@ -458,6 +585,11 @@ public class TubeLineApp : MatrixAppBase, IConfigurableApp
 
         var orderedIds = new List<string>();
 
+        if (preferredOrderedIds is { Length: > 1 })
+        {
+            orderedIds.AddRange(preferredOrderedIds.Where(id => !string.IsNullOrWhiteSpace(id)));
+        }
+
         // Primary: orderedLineRoutes gives canonical route order.
         var orderedRoute = routeData.OrderedLineRoutes?
             .Where(r => r.NaptanIds is { Length: > 0 })
@@ -465,7 +597,7 @@ public class TubeLineApp : MatrixAppBase, IConfigurableApp
             .ThenByDescending(r => r.NaptanIds!.Length)
             .FirstOrDefault();
 
-        if (orderedRoute?.NaptanIds != null)
+        if (orderedIds.Count == 0 && orderedRoute?.NaptanIds != null)
         {
             orderedIds.AddRange(orderedRoute.NaptanIds.Where(id => !string.IsNullOrWhiteSpace(id)));
         }
