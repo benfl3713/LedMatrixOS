@@ -6,7 +6,8 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using SixLabors.Fonts;
+using BdfFontParser;
+using LedMatrixOS.Graphics.Text;
 
 namespace LedMatrixOS.Apps;
 
@@ -29,14 +30,9 @@ public class TubeLineApp : MatrixAppBase
     private Dictionary<string, int> _stopIndexById = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, int> _stopIndexByName = new(StringComparer.OrdinalIgnoreCase);
     private TimeSpan _lastUpdateTime = TimeSpan.Zero;
-    private Font? _infoFont;
-    private Font? _labelFont;
 
-    // TfL-inspired palette
+    // TfL-inspired palette (used for ImageSharp geometry only)
     private static readonly Color TflBlue = Color.FromRgb(0, 25, 168);
-    private static readonly Color TflRed = Color.FromRgb(220, 36, 31);
-    private static readonly Color TflLight = Color.FromRgb(245, 245, 245);
-    private static readonly Color TflHudMuted = Color.FromRgb(170, 180, 200);
 
     private static readonly Dictionary<string, Color> TubeLineColors = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -141,17 +137,6 @@ public class TubeLineApp : MatrixAppBase
 
     public override Task OnActivatedAsync((int height, int width) dimensions, IConfiguration configuration, CancellationToken cancellationToken)
     {
-        try
-        {
-            _infoFont = SystemFonts.CreateFont("Nimbus Sans", dimensions.height >= 64 ? 9 : 8, FontStyle.Bold);
-            _labelFont = SystemFonts.CreateFont("Nimbus Sans", 7, FontStyle.Regular);
-        }
-        catch
-        {
-            _infoFont = SystemFonts.CreateFont("Arial", dimensions.height >= 64 ? 9 : 8, FontStyle.Bold);
-            _labelFont = SystemFonts.CreateFont("Arial", 7, FontStyle.Regular);
-        }
-
         // Read TFL API key and selected line from configuration
         _appKey = configuration["TFL:AppKey"];
         if (string.IsNullOrEmpty(_appKey))
@@ -598,48 +583,81 @@ public class TubeLineApp : MatrixAppBase
 
     public override void Render(FrameBuffer frame, CancellationToken cancellationToken)
     {
-        using var image = new Image<Rgb24>(frame.Width, frame.Height);
-
-        image.Mutate(ctx =>
+        if (_isLoading)
         {
-            if (_isLoading)
-            {
-                DrawLoading(ctx, frame.Width, frame.Height);
-            }
-            else if (_lineStops.Length > 0)
-            {
-                DrawTubeLine(ctx, frame.Width, frame.Height);
-            }
-            else
-            {
-                DrawError(ctx, frame.Width, frame.Height);
-            }
-        });
+            frame.Clear();
+            DrawCentredText(frame, Fonts.Small, "Loading...", new Pixel(245, 245, 245));
+            return;
+        }
 
+        if (_lineStops.Length == 0)
+        {
+            frame.Clear();
+            DrawCentredText(frame, Fonts.Small, "No data", new Pixel(220, 36, 31));
+            return;
+        }
+
+        // Pass 1 – geometric elements via ImageSharp (track, ticks, trains)
+        using var image = new Image<Rgb24>(frame.Width, frame.Height);
+        var labels = new List<StationLabel>();
+        image.Mutate(ctx => DrawTubeLine(ctx, frame.Width, frame.Height, labels));
         frame.RenderImage(image);
+
+        // Pass 2 – crisp BDF text directly on the framebuffer
+        foreach (var label in labels)
+        {
+            int textW = label.Text.Length * Fonts.QuiteSmall.BoundingBox.X;
+            frame.DrawText(Fonts.QuiteSmall, label.PixelX - textW / 2, label.YParam, new Pixel(245, 245, 245), label.Text);
+        }
+
+        DrawHudOnFrame(frame);
     }
 
-    private void DrawLoading(IImageProcessingContext ctx, int width, int height)
+    // Centre a single line of text vertically and horizontally on the frame.
+    private static void DrawCentredText(FrameBuffer frame, BdfFont font, string text, Pixel color)
     {
-        if (_infoFont == null) return;
-        ctx.DrawText(new RichTextOptions(_infoFont) { Origin = new PointF(4, Math.Max(2, height / 2f - 8)) }, "Loading...", TflLight);
+        int x = Math.Max(0, (frame.Width - text.Length * font.BoundingBox.X) / 2);
+        // y positions the BDF baseline so the glyph block sits mid-frame
+        int y = frame.Height / 2 + font.BoundingBox.Y / 2;
+        frame.DrawText(font, x, y, color, text);
     }
 
-    private void DrawError(IImageProcessingContext ctx, int width, int height)
+    // BDF-font HUD: line name (left, line colour) + train count (right, muted)
+    private void DrawHudOnFrame(FrameBuffer frame)
     {
-        if (_infoFont == null) return;
-        ctx.DrawText(new RichTextOptions(_infoFont) { Origin = new PointF(4, Math.Max(2, height / 2f - 8)) }, "No data", TflRed);
+        var lineColor  = GetLineColorPixel(_selectedLineId);
+        var lineName   = _selectedLineId.Replace("-", " ").ToUpperInvariant() + " LINE";
+        var trainText  = $"{_trainPositions.Length} trains";
+        int charW      = Fonts.QuiteSmall.BoundingBox.X; // 5px per glyph
+        int y          = frame.Height - 1;               // baseline at very bottom
+
+        frame.DrawText(Fonts.QuiteSmall, 3, y, lineColor, lineName);
+
+        int trainW = trainText.Length * charW;
+        frame.DrawText(Fonts.QuiteSmall, frame.Width - trainW - 2, y, new Pixel(170, 180, 200), trainText);
     }
 
-    private void DrawTubeLine(IImageProcessingContext ctx, int width, int height)
+    // Convert the ImageSharp line Color to a Pixel for BDF rendering.
+    private static Pixel GetLineColorPixel(string? lineId)
+    {
+        if (!string.IsNullOrWhiteSpace(lineId) && TubeLineColors.TryGetValue(lineId, out var color))
+        {
+            var rgb = color.ToPixel<Rgb24>();
+            return new Pixel(rgb.R, rgb.G, rgb.B);
+        }
+        return new Pixel(0, 25, 168);
+    }
+
+    // Label data accumulated during the geometry pass and consumed by Pass 2.
+    private readonly record struct StationLabel(int PixelX, int YParam, string Text);
+
+    private void DrawTubeLine(IImageProcessingContext ctx, int width, int height, List<StationLabel> labels)
     {
         var lineColor = GetLineColor(_selectedLineId);
         var stops = _lineStops;
         int numStops = stops.Length;
 
         // ── Geometry ──────────────────────────────────────────────────────────
-        // The track sits slightly below the vertical mid-point so there is a
-        // bit more room above for tick+label pairs that go upward.
         const int leftPad   = 8;
         const int rightPad  = 8;
         const int lineThick = 5;
@@ -655,22 +673,17 @@ public class TubeLineApp : MatrixAppBase
         // Square end-caps (terminus bumpers)
         ctx.Fill(Color.White, new RectangleF(trackLeft  - 1.5f, lineY - lineThick / 2f - 1, lineThick + 3, lineThick + 2));
         ctx.Fill(Color.White, new RectangleF(trackRight - lineThick / 2f - 1, lineY - lineThick / 2f - 1, lineThick + 3, lineThick + 2));
-        // Coloured inner of end-caps
         ctx.Fill(lineColor, new RectangleF(trackLeft  - 0.5f, lineY - lineThick / 2f, lineThick + 1, lineThick));
         ctx.Fill(lineColor, new RectangleF(trackRight - lineThick / 2f, lineY - lineThick / 2f, lineThick + 1, lineThick));
 
         if (numStops < 2)
-        {
-            DrawHud(ctx, width, height);
             return;
-        }
 
         // ── Station x-positions ───────────────────────────────────────────────
         float[] xs = new float[numStops];
         for (int i = 0; i < numStops; i++)
             xs[i] = trackLeft + (float)(i / (double)(numStops - 1) * trackWidth);
 
-        // Target ~30 px between labelled stations; always label the termini.
         double stationSpacing = trackWidth / (double)(numStops - 1);
         int labelInterval = Math.Max(1, (int)Math.Ceiling(30.0 / stationSpacing));
 
@@ -679,48 +692,18 @@ public class TubeLineApp : MatrixAppBase
         {
             float x       = xs[i];
             bool terminus = i == 0 || i == numStops - 1;
-            if (terminus) continue; // end-caps already drawn above
+            if (terminus) continue;
 
-            bool doLabel   = i % labelInterval == 0;
-            bool above     = doLabel && ((i / labelInterval) % 2 == 0);
-            float tickTop  = above
+            bool doLabel  = i % labelInterval == 0;
+            bool above    = doLabel && ((i / labelInterval) % 2 == 0);
+            float tickTop = above
                 ? lineY - lineThick / 2f - tickLen
                 : lineY + lineThick / 2f;
 
             ctx.Fill(Color.White, new RectangleF(x - 0.75f, tickTop, 1.5f, tickLen));
         }
 
-        // ── Pass 2 – station name labels ─────────────────────────────────────
-        if (_labelFont != null)
-        {
-            for (int i = 0; i < numStops; i++)
-            {
-                bool terminus = i == 0 || i == numStops - 1;
-                bool doLabel  = terminus || i % labelInterval == 0;
-                if (!doLabel) continue;
-
-                float x    = xs[i];
-                // Termini: first label goes above, last goes below; gives the
-                // classic tube-diagram asymmetric look.
-                bool above = terminus
-                    ? i == 0
-                    : (i / labelInterval) % 2 == 0;
-
-                float labelY = above
-                    ? lineY - lineThick / 2f - tickLen - 2
-                    : lineY + lineThick / 2f + tickLen + 2;
-
-                var name = ShortenStationName(stops[i].Name);
-                ctx.DrawText(new RichTextOptions(_labelFont)
-                {
-                    Origin              = new PointF(x, labelY),
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment   = above ? VerticalAlignment.Bottom : VerticalAlignment.Top
-                }, name, TflLight);
-            }
-        }
-
-        // ── Pass 3 – trains ───────────────────────────────────────────────────
+        // ── Pass 2 – trains ───────────────────────────────────────────────────
         foreach (var train in _trainPositions)
         {
             float x          = trackLeft + (float)(train.DisplayPositionPercent / 100.0) * trackWidth;
@@ -737,7 +720,32 @@ public class TubeLineApp : MatrixAppBase
             ctx.Fill(Color.White, new RectangleF(pipX, lineY - 1.5f, 1.5f, 3f));
         }
 
-        DrawHud(ctx, width, height);
+        // ── Pass 3 – collect station labels for BDF rendering ─────────────────
+        // QuiteSmall (5x7, offsetY=-1): charY = line + (y - 6).
+        //   • Above labels: BDF y = label bottom  → use ImageSharp labelY directly.
+        //   • Below labels: BDF y = label top + 6 → BoundingBox.Y - 1 = 6.
+        int bdfH = Fonts.QuiteSmall.BoundingBox.Y - 1; // = 6
+
+        for (int i = 0; i < numStops; i++)
+        {
+            bool terminus = i == 0 || i == numStops - 1;
+            bool doLabel  = terminus || i % labelInterval == 0;
+            if (!doLabel) continue;
+
+            float x    = xs[i];
+            bool above = terminus ? i == 0 : (i / labelInterval) % 2 == 0;
+
+            float imagesharpLabelY = above
+                ? lineY - lineThick / 2f - tickLen - 2
+                : lineY + lineThick / 2f + tickLen + 2;
+
+            int bdfY = above
+                ? (int)imagesharpLabelY            // bottom of text = ImageSharp bottom
+                : (int)imagesharpLabelY + bdfH;    // top of text → shift down by font height-1
+
+            var name = ShortenStationName(stops[i].Name);
+            labels.Add(new StationLabel((int)x, bdfY, name));
+        }
     }
 
     // ── Station name abbreviation ─────────────────────────────────────────────
@@ -793,36 +801,6 @@ public class TubeLineApp : MatrixAppBase
         return name.Length > 9 ? name[..9].TrimEnd() : name;
     }
 
-    // ── HUD (line name + train count) ─────────────────────────────────────────
-
-    private void DrawHud(IImageProcessingContext ctx, int width, int height)
-    {
-        if (_infoFont == null) return;
-
-        var lineColor = GetLineColor(_selectedLineId);
-        var lineName  = _selectedLineId.Replace("-", " ").ToUpperInvariant() + " LINE";
-        var trainText = $"{_trainPositions.Length} trains";
-
-        // Bottom strip — keeps the label area free for station names
-        float hudY = height - 10f;
-
-        // Coloured line-name label (left)
-        ctx.DrawText(new RichTextOptions(_infoFont)
-        {
-            Origin              = new PointF(3, hudY),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment   = VerticalAlignment.Top
-        }, lineName, lineColor);
-
-        // Train count (right), muted
-        ctx.DrawText(new RichTextOptions(_infoFont)
-        {
-            Origin              = new PointF(width - 3, hudY),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment   = VerticalAlignment.Top
-        }, trainText, TflHudMuted);
-    }
-
     private static Color GetLineColor(string? lineId)
     {
         if (!string.IsNullOrWhiteSpace(lineId) && TubeLineColors.TryGetValue(lineId, out var color))
@@ -836,8 +814,8 @@ public class TubeLineApp : MatrixAppBase
     private static Color GetTrainColor(string? direction) =>
         direction?.Trim().ToLowerInvariant() switch
         {
-            "inbound"  => Color.FromRgb(0,   190, 255),  // vivid sky-blue
-            "outbound" => Color.FromRgb(255,  80,  20),  // vivid orange-red
-            _          => Color.FromRgb(255, 220,  30),  // amber for unknown direction
+            "inbound"  => Color.FromRgb(0,   190, 255),
+            "outbound" => Color.FromRgb(255,  80,  20),
+            _          => Color.FromRgb(255, 220,  30),
         };
 }
