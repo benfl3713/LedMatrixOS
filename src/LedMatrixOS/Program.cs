@@ -83,7 +83,7 @@ appManager.AppActivated += (sender, appInstance) =>
     }
 };
 
-await appManager.ActivateAsync("tube-departures", CancellationToken.None);
+await appManager.ActivateAsync("tube-line", CancellationToken.None);
 engine.Start();
 app.Lifetime.ApplicationStopping.Register(engine.Stop);
 

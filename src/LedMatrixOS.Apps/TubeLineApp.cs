@@ -728,13 +728,16 @@ public class TubeLineApp : MatrixAppBase
         {
             float x          = trackLeft + (float)(train.DisplayPositionPercent / 100.0) * trackWidth;
             var   trainColor = GetTrainColor(train.Direction);
-            float trainH     = lineThick + 8;
-            const float trainW = 4f;
+            bool  goingRight = !string.Equals(train.Direction, "inbound", StringComparison.OrdinalIgnoreCase);
 
-            // Bright coloured bar centred on the track
-            ctx.Fill(trainColor, new RectangleF(x - trainW / 2f, lineY - trainH / 2f, trainW, trainH));
-            // Thin white highlight in the centre for visibility on coloured lines
-            ctx.Fill(Color.White, new RectangleF(x - 0.5f, lineY - trainH / 2f, 1f, trainH));
+            // Slim vertical bar — narrow enough that the track and ticks show through
+            const float coreW = 2f;
+            const float coreH = 7f;
+            ctx.Fill(trainColor, new RectangleF(x - coreW / 2f, lineY - coreH / 2f, coreW, coreH));
+
+            // Tiny direction pip on the leading edge
+            float pipX = goingRight ? x + coreW / 2f : x - coreW / 2f - 1.5f;
+            ctx.Fill(Color.White, new RectangleF(pipX, lineY - 1.5f, 1.5f, 3f));
         }
 
         DrawHud(ctx, width, height);
@@ -833,18 +836,11 @@ public class TubeLineApp : MatrixAppBase
         return TflBlue;
     }
 
-    private static Color GetTrainColor(string? direction)
-    {
-        if (string.IsNullOrWhiteSpace(direction))
+    private static Color GetTrainColor(string? direction) =>
+        direction?.Trim().ToLowerInvariant() switch
         {
-            return TflLight;
-        }
-
-        return direction.Trim().ToLowerInvariant() switch
-        {
-            "inbound" => TflBlue,
-            "outbound" => TflRed,
-            _ => TflLight
+            "inbound"  => Color.FromRgb(0,   190, 255),  // vivid sky-blue
+            "outbound" => Color.FromRgb(255,  80,  20),  // vivid orange-red
+            _          => Color.FromRgb(255, 220,  30),  // amber for unknown direction
         };
-    }
 }
