@@ -9,7 +9,6 @@ public static class Fonts
     public static BdfFont Small { get; private set; } = null!;
     public static BdfFont QuiteSmall { get; private set; } = null!;
     public static BdfFont ExtraSmall { get; private set; } = null!;
-    public static BdfFont TubeFont { get; private set; } = null!;
 
     public static void Load()
     {
@@ -17,6 +16,5 @@ public static class Fonts
         Small = new BdfFont($"{Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)}/Text/Fonts/6x12.bdf");
         QuiteSmall = new BdfFont($"{Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)}/Text/Fonts/5x7.bdf");
         ExtraSmall = new BdfFont($"{Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)}/Text/Fonts/4x6.bdf");
-        TubeFont = new BdfFont($"{Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)}/Text/Fonts/TubeFont.bdf");
     }
 }

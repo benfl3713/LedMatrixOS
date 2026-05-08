@@ -35,7 +35,6 @@ public class TubeLineApp : MatrixAppBase
     // TfL-inspired palette
     private static readonly Color TflBlue = Color.FromRgb(0, 25, 168);
     private static readonly Color TflRed = Color.FromRgb(220, 36, 31);
-    private static readonly Color TflBg = Color.FromRgb(8, 12, 20);
     private static readonly Color TflLight = Color.FromRgb(245, 245, 245);
     private static readonly Color TflHudMuted = Color.FromRgb(170, 180, 200);
 
@@ -603,8 +602,6 @@ public class TubeLineApp : MatrixAppBase
 
         image.Mutate(ctx =>
         {
-            ctx.Fill(TflBg);
-
             if (_isLoading)
             {
                 DrawLoading(ctx, frame.Width, frame.Height);

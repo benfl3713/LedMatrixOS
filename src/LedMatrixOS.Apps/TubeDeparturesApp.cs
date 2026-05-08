@@ -27,6 +27,12 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
     private volatile bool _isLoading = true;
     private readonly TimeSpan _refreshInterval = TimeSpan.FromSeconds(30);
     private DateTime _lastRefresh = DateTime.MinValue;
+    private volatile StationLineStatus[] _stationLineStatuses = Array.Empty<StationLineStatus>();
+    private volatile string[] _stationLineIds = Array.Empty<string>();
+    private readonly TimeSpan _lineStatusRefreshInterval = TimeSpan.FromMinutes(5);
+    private DateTime _lastLineStatusRefresh = DateTime.MinValue;
+    private volatile string _stationName = "";
+    private bool _stationNameFetched = false;
 
     private class Departure
     {
@@ -50,9 +56,77 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         [JsonPropertyName("lineName")]
         public string LineName { get; set; } = "";
 
+        [JsonPropertyName("lineId")]
+        public string LineId { get; set; } = "";
+
         [JsonPropertyName("towards")]
         public string Towards { get; set; } = "";
     }
+
+    private class TubeLineStatusResponse
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = "";
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = "";
+
+        [JsonPropertyName("lineStatuses")]
+        public TubeLineStatusDetail[]? LineStatuses { get; set; }
+    }
+
+    private class TubeLineStatusDetail
+    {
+        [JsonPropertyName("statusSeverity")]
+        public int StatusSeverity { get; set; }
+
+        [JsonPropertyName("statusSeverityDescription")]
+        public string StatusSeverityDescription { get; set; } = "";
+    }
+
+    private record StationLineStatus(string LineId, string Name, int Severity, string Description);
+
+    private class StopPointNameData
+    {
+        [JsonPropertyName("commonName")]
+        public string CommonName { get; set; } = "";
+    }
+
+    private static readonly Dictionary<string, Pixel> TubeLineColors = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "bakerloo",         new Pixel(156, 105, 56)  },
+        { "central",          new Pixel(220, 36,  35)  },
+        { "circle",           new Pixel(255, 206, 0)   },
+        { "district",         new Pixel(0,   114, 41)  },
+        { "hammersmith-city", new Pixel(215, 153, 175) },
+        { "jubilee",          new Pixel(161, 165, 167) },
+        { "metropolitan",     new Pixel(155, 0,   88)  },
+        { "northern",         new Pixel(90,  90,  90)  },
+        { "piccadilly",       new Pixel(0,   24,  168) },
+        { "victoria",         new Pixel(0,   160, 226) },
+        { "waterloo-city",    new Pixel(100, 200, 150) },
+        { "dlr",              new Pixel(0,   175, 173) },
+        { "elizabeth",        new Pixel(126, 91,  198) },
+        { "overground",       new Pixel(232, 106, 16)  },
+    };
+
+    private static readonly Dictionary<string, string> LineAbbreviations = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "bakerloo",         "BL" },
+        { "central",          "CE" },
+        { "circle",           "CI" },
+        { "district",         "DI" },
+        { "hammersmith-city", "HC" },
+        { "jubilee",          "JU" },
+        { "metropolitan",     "ME" },
+        { "northern",         "NO" },
+        { "piccadilly",       "PI" },
+        { "victoria",         "VI" },
+        { "waterloo-city",    "WC" },
+        { "dlr",              "DL" },
+        { "elizabeth",        "EL" },
+        { "overground",       "OV" },
+    };
 
     public IEnumerable<AppSetting> GetSettings()
     {
@@ -72,6 +146,11 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
                 _stationId = value.ToString() ?? "";
                 _departures = Array.Empty<Departure>();
                 _lastRefresh = DateTime.MinValue;
+                _stationName = "";
+                _stationNameFetched = false;
+                _stationLineIds = Array.Empty<string>();
+                _stationLineStatuses = Array.Empty<StationLineStatus>();
+                _lastLineStatusRefresh = DateTime.MinValue;
                 break;
             case "platformFilter":
                 _platformFilter = value.ToString() ?? "";
@@ -130,6 +209,18 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
                             (DateTime.Now - _lastRefresh >= _refreshInterval || _departures.Length == 0))
                         {
                             await FetchDeparturesAsync(httpClient, ct);
+                        }
+
+                        var lineIds = _stationLineIds;
+                        if (lineIds.Length > 0 &&
+                            (DateTime.Now - _lastLineStatusRefresh >= _lineStatusRefreshInterval || _stationLineStatuses.Length == 0))
+                        {
+                            await FetchLineStatusesAsync(httpClient, lineIds, ct);
+                        }
+
+                        if (!_stationNameFetched && !string.IsNullOrWhiteSpace(_stationId))
+                        {
+                            await FetchStationNameAsync(httpClient, ct);
                         }
 
                         await Task.Delay(TimeSpan.FromSeconds(10), ct);
@@ -192,6 +283,14 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
                     })
                     .ToArray();
 
+                // Collect all unique line IDs that serve this station (from unfiltered arrivals)
+                _stationLineIds = arrivals
+                    .Where(a => !string.IsNullOrWhiteSpace(a.LineId))
+                    .Select(a => a.LineId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(id => id)
+                    .ToArray();
+
                 _lastRefresh = DateTime.Now;
             }
 
@@ -201,6 +300,76 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         {
             _isLoading = false;
             throw;
+        }
+    }
+
+    private async Task FetchLineStatusesAsync(HttpClient httpClient, string[] lineIds, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var joinedIds = string.Join(",", lineIds.Select(Uri.EscapeDataString));
+            var apiUrl = $"https://api.tfl.gov.uk/Line/{joinedIds}/Status";
+            if (!string.IsNullOrEmpty(_appKey))
+            {
+                apiUrl += $"?app_key={Uri.EscapeDataString(_appKey)}";
+            }
+
+            var response = await httpClient.GetAsync(apiUrl, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync(cancellationToken);
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var lines = JsonSerializer.Deserialize<TubeLineStatusResponse[]>(content, options) ?? Array.Empty<TubeLineStatusResponse>();
+
+                _stationLineStatuses = lines
+                    .Select(l =>
+                    {
+                        var status = l.LineStatuses?.FirstOrDefault();
+                        return new StationLineStatus(
+                            l.Id,
+                            l.Name,
+                            status?.StatusSeverity ?? 0,
+                            status?.StatusSeverityDescription ?? "Unknown"
+                        );
+                    })
+                    .OrderBy(s => s.LineId)
+                    .ToArray();
+
+                _lastLineStatusRefresh = DateTime.Now;
+            }
+        }
+        catch
+        {
+            // If line status fetch fails, keep existing data
+        }
+    }
+
+    private async Task FetchStationNameAsync(HttpClient httpClient, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var apiUrl = $"https://api.tfl.gov.uk/StopPoint/{Uri.EscapeDataString(_stationId)}";
+            if (!string.IsNullOrEmpty(_appKey))
+                apiUrl += $"?app_key={Uri.EscapeDataString(_appKey)}";
+
+            var response = await httpClient.GetAsync(apiUrl, cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync(cancellationToken);
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var data = JsonSerializer.Deserialize<StopPointNameData>(content, options);
+                if (!string.IsNullOrWhiteSpace(data?.CommonName))
+                    _stationName = StripStationSuffix(data.CommonName);
+            }
+        }
+        catch
+        {
+            // Silently fall back to empty — station name is decorative
+        }
+        finally
+        {
+            _stationNameFetched = true;
         }
     }
 
@@ -246,7 +415,91 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         }
         
         frame.DrawHorizontalLine(14 * 3 + 5, frame.Width, _color);
-        frame.DrawText(Fonts.Small, 6, 14 * 4 + 3, new Pixel(0, 160, 180), $"Last update: {_lastRefresh:HH:mm:ss}");
+        DrawLineStatusBar(frame);
+    }
+
+    private void DrawLineStatusBar(FrameBuffer frame)
+    {
+        // Bottom bar: y=49 to y=61 (13px), line-status tiles on the left
+        const int tileStartY = 49;
+        const int tileHeight = 13;
+        const int tileWidth = 11;
+        const int tileGap = 1;
+        const int startX = 1;
+        const int pad = 3;
+
+        // QuiteSmall (5x7, offsetY=-1): charY = line + (y - 7 + 1) = line + (y - 6)
+        // At y=61: renders from y=55 to y=61 — fits neatly inside the 13px tile.
+        // ExtraSmall (4x6, offsetY=-1): renders from y=56 to y=61 — same baseline.
+        const int textBaseline = tileStartY + tileHeight - 1; // = 61
+
+        var statuses = _stationLineStatuses;
+        int tileCount = statuses.Length;
+
+        // ── Line-status tiles ─────────────────────────────────────────────────
+        for (int i = 0; i < tileCount; i++)
+        {
+            var status = statuses[i];
+            bool goodService = status.Severity >= 9;
+
+            var baseColor = TubeLineColors.TryGetValue(status.LineId, out var c) ? c : new Pixel(100, 100, 100);
+
+            // Bright half-dim for good service, heavily dimmed for disruptions
+            Pixel tileColor = goodService
+                ? new Pixel((byte)(baseColor.R / 2), (byte)(baseColor.G / 2), (byte)(baseColor.B / 2))
+                : new Pixel((byte)(baseColor.R / 5), (byte)(baseColor.G / 5), (byte)(baseColor.B / 5));
+
+            int x = startX + i * (tileWidth + tileGap);
+
+            // Tile background
+            for (int dx = 0; dx < tileWidth; dx++)
+                for (int dy = 0; dy < tileHeight; dy++)
+                    frame.SetPixel(x + dx, tileStartY + dy, tileColor);
+
+            // 2-letter abbreviation centred in tile
+            var abbrev = LineAbbreviations.TryGetValue(status.LineId, out var a)
+                ? a
+                : status.LineId[..Math.Min(2, status.LineId.Length)].ToUpperInvariant();
+
+            Pixel textColor = goodService ? new Pixel(255, 255, 255) : new Pixel(255, 140, 0);
+            frame.DrawText(Fonts.ExtraSmall, x + 1, textBaseline, textColor, abbrev);
+
+            // Red disruption pip at top-right corner
+            if (!goodService)
+            {
+                frame.SetPixel(x + tileWidth - 1, tileStartY,     new Pixel(255, 0, 0));
+                frame.SetPixel(x + tileWidth - 2, tileStartY,     new Pixel(255, 0, 0));
+                frame.SetPixel(x + tileWidth - 1, tileStartY + 1, new Pixel(255, 0, 0));
+            }
+        }
+
+        // ── Station name + live clock ─────────────────────────────────────────
+        int tilesEndX = startX + tileCount * (tileWidth + tileGap);
+
+        // Right-side clock: "14:32" — always shown, right-aligned
+        var timeText = DateTime.Now.ToString("HH:mm");
+        int charW = Fonts.QuiteSmall.BoundingBox.X; // 5px per char
+        int timeTextWidth = timeText.Length * charW;
+        int timeX = frame.Width - timeTextWidth;
+        frame.DrawText(Fonts.QuiteSmall, timeX, textBaseline, new Pixel(0, 160, 180), timeText);
+
+        // Station name: left of clock, right of tiles
+        var stationName = _stationName;
+        if (!string.IsNullOrWhiteSpace(stationName))
+        {
+            int nameStartX = tilesEndX + pad;
+            int maxNameWidth = timeX - nameStartX - pad;
+            int maxChars = maxNameWidth / charW;
+
+            if (maxChars > 0)
+            {
+                var display = stationName.ToUpperInvariant();
+                if (display.Length > maxChars)
+                    display = display[..(maxChars - 1)] + "~";
+
+                frame.DrawText(Fonts.QuiteSmall, nameStartX, textBaseline, new Pixel(200, 200, 200), display);
+            }
+        }
     }
 
     private void DrawDepartureRow(FrameBuffer frame, int row, string station, int minsAway)
