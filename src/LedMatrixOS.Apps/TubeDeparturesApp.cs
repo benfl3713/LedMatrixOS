@@ -12,13 +12,14 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
 {
     public override string Id => "tube-departures";
     public override string Name => "Tube Departures";
-    public override int FrameRate => 1;
+    public override int FrameRate => 20;
 
     private BdfFont _font = Fonts.Big;
     private Pixel _color = new Pixel(255, 120, 0);
 
     // Configurable settings
     private string _stationId = "";
+    private string _stationSearch = "";
     private string _platformFilter = "";
     private int _maxDepartures = 3;
 
@@ -33,6 +34,22 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
     private DateTime _lastLineStatusRefresh = DateTime.MinValue;
     private volatile string _stationName = "";
     private bool _stationNameFetched = false;
+    private volatile string[] _stationSearchOptions = new[] { "Type at least 2 chars" };
+    private volatile bool _stationSearchDirty;
+    private string _stationSearchLastQuery = "";
+    private readonly TimeSpan _departurePageInterval = TimeSpan.FromSeconds(4);
+    private DateTime _lastDeparturePageSwitch = DateTime.MinValue;
+    private int _departurePage;
+    private bool _isPageTransitioning;
+    private int _transitionFromPage;
+    private int _transitionToPage;
+    private bool _transitionScrollUp = true;
+    private DateTime _transitionStartedAt = DateTime.MinValue;
+    private readonly TimeSpan _pageTransitionDuration = TimeSpan.FromMilliseconds(850);
+
+    private const int VisibleDepartureRows = 3;
+    private const int DeparturesClipTopY = 0;
+    private const int DeparturesClipBottomY = 46;
 
     private class Departure
     {
@@ -92,6 +109,24 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         public string CommonName { get; set; } = "";
     }
 
+    private class StopPointSearchResponse
+    {
+        [JsonPropertyName("matches")]
+        public StopPointSearchMatch[]? Matches { get; set; }
+    }
+
+    private class StopPointSearchMatch
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = "";
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = "";
+
+        [JsonPropertyName("modes")]
+        public string[]? Modes { get; set; }
+    }
+
     private static readonly Dictionary<string, Pixel> TubeLineColors = new(StringComparer.OrdinalIgnoreCase)
     {
         { "bakerloo",         new Pixel(156, 105, 56)  },
@@ -132,9 +167,11 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
     {
         return new[]
         {
-            new AppSetting("stationId", "Station ID", "TfL Naptan ID for the station (e.g. 940GZZLUBKF)", AppSettingType.String, "", _stationId),
+            new AppSetting("stationSearch", "Station Search", "Type a station name (e.g. Baker Street).", AppSettingType.String, "", _stationSearch),
+            new AppSetting("stationSelect", "Station Select", "Choose a result to set the station automatically.", AppSettingType.Select, "", "", Options: _stationSearchOptions),
+            new AppSetting("stationId", "Station ID", "TfL Naptan ID (auto-filled when you select from Station Select).", AppSettingType.String, "", _stationId),
             new AppSetting("platformFilter", "Platform Filter", "Filter by platform name (e.g. 'Eastbound'). Leave empty to show all platforms.", AppSettingType.String, "", _platformFilter),
-            new AppSetting("maxDepartures", "Max Departures", "Number of departures to display", AppSettingType.Integer, 2, _maxDepartures, 1, 6),
+            new AppSetting("maxDepartures", "Max Departures", "Number of departures to cycle through", AppSettingType.Integer, 3, _maxDepartures, 1, 12),
         };
     }
 
@@ -142,15 +179,28 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
     {
         switch (key)
         {
+            case "stationSearch":
+                _stationSearch = value.ToString() ?? "";
+                _stationSearchDirty = true;
+                if (_stationSearch.Trim().Length < 2)
+                {
+                    _stationSearchOptions = new[] { "Type at least 2 chars" };
+                }
+                break;
+            case "stationSelect":
+                var selected = value.ToString() ?? "";
+                var splitIndex = selected.IndexOf(" | ", StringComparison.Ordinal);
+                if (splitIndex > 0)
+                {
+                    var selectedStationId = selected[..splitIndex].Trim();
+                    if (!string.IsNullOrWhiteSpace(selectedStationId))
+                    {
+                        ApplyStationId(selectedStationId);
+                    }
+                }
+                break;
             case "stationId":
-                _stationId = value.ToString() ?? "";
-                _departures = Array.Empty<Departure>();
-                _lastRefresh = DateTime.MinValue;
-                _stationName = "";
-                _stationNameFetched = false;
-                _stationLineIds = Array.Empty<string>();
-                _stationLineStatuses = Array.Empty<StationLineStatus>();
-                _lastLineStatusRefresh = DateTime.MinValue;
+                ApplyStationId(value.ToString() ?? "");
                 break;
             case "platformFilter":
                 _platformFilter = value.ToString() ?? "";
@@ -158,8 +208,51 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
                 _lastRefresh = DateTime.MinValue;
                 break;
             case "maxDepartures":
-                _maxDepartures = Math.Clamp(Convert.ToInt32(value), 1, 6);
+                _maxDepartures = Math.Clamp(CoerceIntSetting(value, _maxDepartures), 1, 12);
+                ResetDeparturePaging();
                 break;
+        }
+    }
+
+    private static int CoerceIntSetting(object value, int fallback)
+    {
+        try
+        {
+            if (value is JsonElement json)
+            {
+                if (json.ValueKind == JsonValueKind.Number && json.TryGetInt32(out var n))
+                {
+                    return n;
+                }
+
+                if (json.ValueKind == JsonValueKind.String && int.TryParse(json.GetString(), out var parsed))
+                {
+                    return parsed;
+                }
+
+                return fallback;
+            }
+
+            if (value is int i)
+            {
+                return i;
+            }
+
+            if (value is long l)
+            {
+                return (int)Math.Clamp(l, int.MinValue, int.MaxValue);
+            }
+
+            if (value is string s && int.TryParse(s, out var fromString))
+            {
+                return fromString;
+            }
+
+            return Convert.ToInt32(value);
+        }
+        catch
+        {
+            return fallback;
         }
     }
 
@@ -185,7 +278,7 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
 
         if (int.TryParse(configuration["TubeDeparturesApp:MaxDepartures"], out var maxDep) && maxDep > 0)
         {
-            _maxDepartures = Math.Clamp(maxDep, 1, 6);
+            _maxDepartures = Math.Clamp(maxDep, 1, 12);
         }
 
         StartBackgroundDataLoading();
@@ -216,6 +309,11 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
                             (DateTime.Now - _lastLineStatusRefresh >= _lineStatusRefreshInterval || _stationLineStatuses.Length == 0))
                         {
                             await FetchLineStatusesAsync(httpClient, lineIds, ct);
+                        }
+
+                        if (_stationSearchDirty)
+                        {
+                            await FetchStationSearchAsync(httpClient, ct);
                         }
 
                         if (!_stationNameFetched && !string.IsNullOrWhiteSpace(_stationId))
@@ -292,6 +390,7 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
                     .ToArray();
 
                 _lastRefresh = DateTime.Now;
+                ResetDeparturePaging();
             }
 
             _isLoading = false;
@@ -373,6 +472,105 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         }
     }
 
+    private async Task FetchStationSearchAsync(HttpClient httpClient, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var query = _stationSearch.Trim();
+            _stationSearchDirty = false;
+
+            if (query.Length < 2)
+            {
+                _stationSearchOptions = new[] { "Type at least 2 chars" };
+                return;
+            }
+
+            if (string.Equals(query, _stationSearchLastQuery, StringComparison.OrdinalIgnoreCase) && _stationSearchOptions.Length > 0)
+            {
+                return;
+            }
+
+            var apiUrl = $"https://api.tfl.gov.uk/StopPoint/Search/{Uri.EscapeDataString(query)}";
+            var queryArgs = new List<string>
+            {
+                "modes=tube,dlr,overground,elizabeth-line,tram"
+            };
+
+            if (!string.IsNullOrEmpty(_appKey))
+            {
+                queryArgs.Add($"app_key={Uri.EscapeDataString(_appKey)}");
+            }
+
+            apiUrl += "?" + string.Join("&", queryArgs);
+
+            var response = await httpClient.GetAsync(apiUrl, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _stationSearchOptions = new[] { "No matches" };
+                return;
+            }
+
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var data = JsonSerializer.Deserialize<StopPointSearchResponse>(content, options);
+
+            var matches = (data?.Matches ?? Array.Empty<StopPointSearchMatch>())
+                .Where(m => !string.IsNullOrWhiteSpace(m.Id) && !string.IsNullOrWhiteSpace(m.Name))
+                .Where(IsLikelyRailStop)
+                .DistinctBy(m => m.Id)
+                .Take(12)
+                .Select(m => $"{m.Id} | {StripStationSuffix(m.Name)}")
+                .ToArray();
+
+            _stationSearchOptions = matches.Length > 0 ? matches : new[] { "No matches" };
+            _stationSearchLastQuery = query;
+        }
+        catch
+        {
+            _stationSearchOptions = new[] { "Search failed" };
+        }
+    }
+
+    private static bool IsLikelyRailStop(StopPointSearchMatch match)
+    {
+        if (match.Id.StartsWith("940GZZ", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var modes = match.Modes ?? Array.Empty<string>();
+        return modes.Any(m =>
+            string.Equals(m, "tube", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(m, "dlr", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(m, "overground", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(m, "elizabeth-line", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(m, "tram", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void ApplyStationId(string stationId)
+    {
+        _stationId = stationId;
+        _departures = Array.Empty<Departure>();
+        _lastRefresh = DateTime.MinValue;
+        ResetDeparturePaging();
+        _stationName = "";
+        _stationNameFetched = false;
+        _stationLineIds = Array.Empty<string>();
+        _stationLineStatuses = Array.Empty<StationLineStatus>();
+        _lastLineStatusRefresh = DateTime.MinValue;
+    }
+
+    private void ResetDeparturePaging()
+    {
+        _departurePage = 0;
+        _lastDeparturePageSwitch = DateTime.MinValue;
+        _isPageTransitioning = false;
+        _transitionFromPage = 0;
+        _transitionToPage = 0;
+        _transitionScrollUp = true;
+        _transitionStartedAt = DateTime.MinValue;
+    }
+
     private static string StripStationSuffix(string name)
     {
         return name
@@ -384,6 +582,41 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
 
     public override void Update(TimeSpan deltaTime, CancellationToken cancellationToken)
     {
+        var maxCount = Math.Min(_maxDepartures, _departures.Length);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(maxCount / (double)VisibleDepartureRows));
+
+        if (totalPages <= 1)
+        {
+            ResetDeparturePaging();
+            return;
+        }
+
+        if (_isPageTransitioning)
+        {
+            if (DateTime.Now - _transitionStartedAt >= _pageTransitionDuration)
+            {
+                _isPageTransitioning = false;
+                _departurePage = _transitionToPage;
+            }
+            return;
+        }
+
+        if (_lastDeparturePageSwitch == DateTime.MinValue)
+        {
+            _lastDeparturePageSwitch = DateTime.Now;
+            return;
+        }
+
+        if (DateTime.Now - _lastDeparturePageSwitch >= _departurePageInterval)
+        {
+            _transitionFromPage = _departurePage;
+            _transitionToPage = (_departurePage + 1) % totalPages;
+            // Normal paging: next page enters from below. Wrap to page 1: enters from above.
+            _transitionScrollUp = _transitionToPage > _transitionFromPage;
+            _isPageTransitioning = true;
+            _transitionStartedAt = DateTime.Now;
+            _lastDeparturePageSwitch = DateTime.Now;
+        }
     }
 
     public override void Render(FrameBuffer frame, CancellationToken cancellationToken)
@@ -407,18 +640,93 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
             return;
         }
 
-        for (int i = 0; i < _departures.Length; i++)
+        var maxCount = Math.Min(_maxDepartures, _departures.Length);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(maxCount / (double)VisibleDepartureRows));
+
+        if (_isPageTransitioning)
         {
-            var dep = _departures[i];
-            int minsAway = Math.Max(0, dep.TimeToStation / 60);
-            DrawDepartureRow(frame, i + 1, dep.DestinationName, minsAway);
+            var elapsed = DateTime.Now - _transitionStartedAt;
+            var t = Math.Clamp(elapsed.TotalMilliseconds / _pageTransitionDuration.TotalMilliseconds, 0.0, 1.0);
+
+            // Cubic bezier easing gives a smooth acceleration/deceleration profile.
+            var eased = EvaluateBezierProgress(t, 0.22, 1.0, 0.36, 1.0);
+            var pageHeight = 14 * VisibleDepartureRows;
+            var fromOffset = _transitionScrollUp
+                ? (int)Math.Round(-eased * pageHeight)
+                : (int)Math.Round(eased * pageHeight);
+            var toOffset = _transitionScrollUp
+                ? fromOffset + pageHeight
+                : fromOffset - pageHeight;
+
+            DrawDeparturePage(frame, _transitionFromPage, maxCount, fromOffset);
+            DrawDeparturePage(frame, _transitionToPage, maxCount, toOffset);
+        }
+        else
+        {
+            var activePage = Math.Clamp(_departurePage, 0, totalPages - 1);
+            DrawDeparturePage(frame, activePage, maxCount, 0);
         }
         
         frame.DrawHorizontalLine(14 * 3 + 5, frame.Width, _color);
-        DrawLineStatusBar(frame);
+
+        var statusPage = _isPageTransitioning
+            ? Math.Clamp(_transitionToPage, 0, totalPages - 1)
+            : Math.Clamp(_departurePage, 0, totalPages - 1);
+
+        DrawLineStatusBar(frame, statusPage + 1, totalPages);
     }
 
-    private void DrawLineStatusBar(FrameBuffer frame)
+    private void DrawDeparturePage(FrameBuffer frame, int page, int maxCount, int yOffset)
+    {
+        if (page < 0)
+        {
+            return;
+        }
+
+        var visibleDepartures = _departures
+            .Take(maxCount)
+            .Skip(page * VisibleDepartureRows)
+            .Take(VisibleDepartureRows)
+            .ToArray();
+
+        for (int i = 0; i < visibleDepartures.Length; i++)
+        {
+            var dep = visibleDepartures[i];
+            int minsAway = Math.Max(0, dep.TimeToStation / 60);
+            var departureNumber = page * VisibleDepartureRows + i + 1;
+            DrawDepartureRow(frame, i + 1, departureNumber, dep.DestinationName, minsAway, yOffset);
+        }
+    }
+
+    private static double EvaluateBezierProgress(double t, double p1x, double p1y, double p2x, double p2y)
+    {
+        // Solve x(u)=t with binary search, then return y(u) for a CSS-style cubic bezier.
+        var low = 0.0;
+        var high = 1.0;
+        var u = t;
+
+        for (var i = 0; i < 12; i++)
+        {
+            u = (low + high) * 0.5;
+            var x = CubicBezier(u, p1x, p2x);
+            if (x < t)
+                low = u;
+            else
+                high = u;
+        }
+
+        return CubicBezier(u, p1y, p2y);
+    }
+
+    private static double CubicBezier(double t, double p1, double p2)
+    {
+        var inv = 1.0 - t;
+        return 3.0 * inv * inv * t * p1
+             + 3.0 * inv * t * t * p2
+             + t * t * t;
+    }
+
+    private void DrawLineStatusBar(FrameBuffer frame, int currentPage, int totalPages)
     {
         // Bottom bar: y=49 to y=61 (13px), line-status tiles on the left
         const int tileStartY = 49;
@@ -483,6 +791,14 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         int timeX = frame.Width - timeTextWidth;
         frame.DrawText(Fonts.QuiteSmall, timeX, textBaseline, new Pixel(0, 160, 180), timeText);
 
+        if (totalPages > 1)
+        {
+            var pageText = $"{currentPage}/{totalPages}";
+            int pageWidth = pageText.Length * charW;
+            int pageX = timeX - pageWidth - 2;
+            frame.DrawText(Fonts.QuiteSmall, pageX, textBaseline, new Pixel(200, 160, 0), pageText);
+        }
+
         // Station name: left of clock, right of tiles
         var stationName = _stationName;
         if (!string.IsNullOrWhiteSpace(stationName))
@@ -502,7 +818,7 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         }
     }
 
-    private void DrawDepartureRow(FrameBuffer frame, int row, string station, int minsAway)
+    private void DrawDepartureRow(FrameBuffer frame, int rowPosition, int departureNumber, string station, int minsAway, int yOffset = 0)
     {
         string suffix = "due ";
         if (minsAway > 0)
@@ -513,7 +829,23 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
 
         string formatStationLength = $"-{26 - suffix.Length}";
         
-        string text = $"{row} {string.Format($"{{0,{formatStationLength}}}", station)}{suffix}";
-        frame.DrawText(_font, 0, 14 * row, _color, text);
+        string text = $"{departureNumber} {string.Format($"{{0,{formatStationLength}}}", station)}{suffix}";
+        DrawClippedText(frame, _font, 0, 14 * rowPosition + yOffset, _color, text, DeparturesClipTopY, DeparturesClipBottomY);
+    }
+
+    private static void DrawClippedText(FrameBuffer frame, BdfFont font, int x, int y, Pixel color, string text, int clipTopY, int clipBottomY)
+    {
+        // TextExtensions maps font bitmap line -> framebuffer Y using this baseline transform.
+        var baselineOffset = y - font.BoundingBox.Y - font.BoundingBox.OffsetY;
+
+        var startLine = Math.Max(0, clipTopY - baselineOffset);
+        var endLineExclusive = clipBottomY - baselineOffset + 1;
+
+        if (endLineExclusive <= startLine)
+        {
+            return;
+        }
+
+        frame.DrawText(font, x, y, color, text, startLine, endLineExclusive);
     }
 }

@@ -30,7 +30,6 @@ class _AudioStreamContent extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Card(
-      margin: const EdgeInsets.all(16),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

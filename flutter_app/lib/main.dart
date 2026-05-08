@@ -5,10 +5,9 @@ import 'package:tofu_expressive/tofu_expressive.dart';
 import 'dart:async';
 import 'api_service.dart';
 import 'widgets/app_settings_bottom_sheet.dart';
-import 'widgets/live_preview_widget.dart';
 import 'widgets/responsive_app_grid.dart';
-import 'widgets/display_settings_widget.dart';
 import 'widgets/audio_stream_widget.dart';
+import 'widgets/matrix_control_panel.dart';
 import 'utils/app_icon_helper.dart';
 import 'controllers/api_settings_controller.dart';
 import 'pages/settings_page.dart';
@@ -30,20 +29,18 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeController = Provider.of<ThemeController>(context);
-
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
         return MaterialApp(
           title: 'LED Matrix',
           debugShowCheckedModeBanner: false,
           theme: TofuTheme.light(
-            seedColor: themeController.seedColor,
+          seedColor: const Color(0xFF00E5FF),
           ),
           darkTheme: TofuTheme.dark(
-            seedColor: themeController.seedColor,
+          seedColor: const Color(0xFF00E5FF),
           ),
-          themeMode: themeController.themeMode,
+        themeMode: ThemeMode.dark,
           home: const HomePage(),
         );
       }
@@ -58,7 +55,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   late LedMatrixApi _api;
 
   List<MatrixApp> _apps = [];
@@ -67,9 +64,6 @@ class _HomePageState extends State<HomePage> {
   List<AppSetting> _appSettings = [];
   bool _loading = true;
   String? _error;
-  Timer? _previewTimer;
-  String _previewImageKey = '';
-
   // Debounce timers for API calls
   Timer? _brightnessDebounce;
   final Map<String, Timer?> _settingDebounce = {};
@@ -77,9 +71,16 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeApi();
     _loadData();
-    _startPreviewTimer();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadData();
+    }
   }
 
   void _initializeApi() {
@@ -98,7 +99,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
-    _previewTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _brightnessDebounce?.cancel();
     for (var timer in _settingDebounce.values) {
       timer?.cancel();
@@ -107,16 +108,6 @@ class _HomePageState extends State<HomePage> {
     final apiController = Provider.of<ApiSettingsController>(context, listen: false);
     apiController.removeListener(_onApiUrlChanged);
     super.dispose();
-  }
-
-  void _startPreviewTimer() {
-    _previewTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) {
-      if (mounted) {
-        setState(() {
-          _previewImageKey = DateTime.now().millisecondsSinceEpoch.toString();
-        });
-      }
-    });
   }
 
   Future<void> _loadData() async {
@@ -282,118 +273,211 @@ class _HomePageState extends State<HomePage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Padding(
+        padding: MediaQuery.of(context).viewInsets,
+        child: AppSettingsBottomSheet(
+          app: app,
+          appSettings: _appSettings,
+          onUpdateSetting: _updateAppSetting,
+          getAppIcon: AppIconHelper.getAppIcon,
+        ),
       ),
-      builder: (context) => AppSettingsBottomSheet(
-        app: app,
-        appSettings: _appSettings,
-        onUpdateSetting: _updateAppSetting,
-        getAppIcon: AppIconHelper.getAppIcon,
+    );
+  }
+
+  MatrixApp? get _activeApp {
+    if (_activeAppId == null) return null;
+    final matches = _apps.where((a) => a.id == _activeAppId);
+    return matches.isEmpty ? null : matches.first;
+  }
+
+  Widget _buildLoadingView() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'CONNECTING...',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: colorScheme.primary,
+              letterSpacing: 3,
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildErrorView() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: colorScheme.errorContainer.withOpacity(0.3),
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: colorScheme.error.withOpacity(0.3), width: 1),
+              ),
+              child: Icon(
+                Icons.wifi_off_rounded,
+                size: 48,
+                color: colorScheme.error.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'NO SIGNAL',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+                color: colorScheme.error,
+                letterSpacing: 3,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _error!,
+              style: TextStyle(
+                fontSize: 12,
+                color: colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            FilledButton.icon(
+              onPressed: _loadData,
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('RETRY'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionLabel(BuildContext context, String label, int count) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Container(
+          width: 3,
+          height: 14,
+          decoration: BoxDecoration(
+            color: colorScheme.primary,
+            borderRadius: BorderRadius.circular(2),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.primary.withOpacity(0.5),
+                blurRadius: 6,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2.5,
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Container(
+            height: 1,
+            color: colorScheme.outline.withOpacity(0.12),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: colorScheme.primary.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            '$count',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: colorScheme.primary,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Led Matrix'),
-        scrolledUnderElevation: 0,
-        actions: [
-          if (_settings != null)
-            IconButton(
-              icon: Icon(
-                _settings!.isEnabled ? Icons.power_settings_new : Icons.power_off,
-                color: _settings!.isEnabled 
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              onPressed: () => _setPower(!_settings!.isEnabled),
-              tooltip: _settings!.isEnabled ? 'Turn Off Display' : 'Turn On Display',
-            ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const SettingsPage(),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
-          ),
-        ],
-      ),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
+          ? _buildLoadingView()
           : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error_outline, size: 64),
-                      const SizedBox(height: 16),
-                      Text('Error: $_error'),
-                      const SizedBox(height: 24),
-                      FilledButton.icon(
-                        onPressed: _loadData,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.all(16),
+              ? _buildErrorView()
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Preview Card
-                    LivePreviewWidget(
-                      api: _api,
-                      previewImageKey: _previewImageKey,
-                    ),
-
-
-                    // Audio Streaming Widget (only show for equalizer app)
-                    if (_activeAppId == 'equalizer') ...[
-                      const AudioStreamWidget(),
-                      const SizedBox(height: 16),
-                    ],
-                    const SizedBox(height: 16),
-
-                    // Apps Section
-                    Text(
-                      'Applications',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    ResponsiveAppGrid(
-                      apps: _apps,
+                    MatrixControlPanel(
+                      settings: _settings,
                       activeAppId: _activeAppId,
-                      onActivateApp: _activateApp,
-                      onShowSettings: _showAppSettingsBottomSheet,
+                      apps: _apps,
+                      onPowerToggle: _settings != null
+                          ? () => _setPower(!_settings!.isEnabled)
+                          : () {},
+                      onSettings: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const SettingsPage()),
+                      ),
+                      onRefresh: _loadData,
+                      onBrightnessChanged: _setBrightness,
+                      getAppIcon: AppIconHelper.getAppIcon,
+                      onConfigureActive: _activeApp != null
+                          ? () => _showAppSettingsBottomSheet(_activeApp!)
+                          : null,
                     ),
-
-                    const SizedBox(height: 16),
-
-                    // Display Settings
-                    if (_settings != null) ...[
-                      Text(
-                        'Display Settings',
-                        style: Theme.of(context).textTheme.titleLarge,
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(12, 16, 12, 32),
+                        children: [
+                          if (_activeAppId == 'equalizer') ...[
+                            const AudioStreamWidget(),
+                            const SizedBox(height: 16),
+                          ],
+                          _buildSectionLabel(context, 'APPS', _apps.length),
+                          const SizedBox(height: 10),
+                          ResponsiveAppGrid(
+                            apps: _apps,
+                            activeAppId: _activeAppId,
+                            onActivateApp: _activateApp,
+                            onShowSettings: _showAppSettingsBottomSheet,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 8),
-                      DisplaySettingsWidget(
-                        settings: _settings!,
-                        onBrightnessChanged: _setBrightness,
-                      ),
-                    ],
+                    ),
                   ],
                 ),
     );
