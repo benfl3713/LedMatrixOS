@@ -5,47 +5,294 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LedMatrixOS Simulator Preview</title>
     <style>
-        body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
+        body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; color: #222; }
+        .grid { display: grid; grid-template-columns: 320px 1fr; gap: 24px; align-items: start; }
+        .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; background: #fff; }
         .row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
-        img { image-rendering: pixelated; border: 1px solid #ccc; }
-        label { min-width: 120px; display: inline-block; }
-        input[type=range] { width: 200px; }
-        button { padding: 6px 12px; }
+        .stack { display: flex; flex-direction: column; gap: 10px; }
+        img { image-rendering: pixelated; border: 1px solid #ccc; width: 1024px; max-width: 100%; height: auto; }
+        label { min-width: 110px; display: inline-block; font-weight: 600; }
+        input[type=range], input[type=text], input[type=number], select { width: 180px; }
+        button { padding: 6px 10px; }
+        .muted { color: #666; font-size: 12px; }
+        .setting { border-top: 1px solid #f0f0f0; padding-top: 10px; }
+        .setting:first-child { border-top: none; padding-top: 0; }
+        .setting-name { font-weight: 600; margin-bottom: 4px; }
+        .status { min-height: 18px; font-size: 12px; color: #555; }
+        .ok { color: #157f1f; }
+        .err { color: #b00020; }
     </style>
     <script>
         let timer;
+        const typeMap = { 0: 'Boolean', 1: 'Integer', 2: 'String', 3: 'Color', 4: 'Select' };
+
+        function showStatus(message, isError = false) {
+            const el = document.getElementById('status');
+            el.textContent = message;
+            el.className = 'status ' + (isError ? 'err' : 'ok');
+        }
+
+        function normalizeType(t) {
+            if (typeof t === 'string') return t;
+            return typeMap[t] || 'String';
+        }
+
+        function titleCaseWords(text) {
+            return text
+                .split(' ')
+                .map(w => w ? (w[0].toUpperCase() + w.slice(1)) : w)
+                .join(' ');
+        }
+
+        function getSettingOptionLabel(settingKey, value) {
+            const raw = String(value ?? '');
+            if (settingKey !== 'lineId') {
+                return raw;
+            }
+
+            const known = {
+                'bakerloo': 'Bakerloo line',
+                'central': 'Central line',
+                'circle': 'Circle line',
+                'district': 'District line',
+                'hammersmith-city': 'Hammersmith & City line',
+                'jubilee': 'Jubilee line',
+                'metropolitan': 'Metropolitan line',
+                'northern': 'Northern line',
+                'piccadilly': 'Piccadilly line',
+                'victoria': 'Victoria line',
+                'waterloo-city': 'Waterloo & City line',
+                'dlr': 'DLR',
+                'elizabeth': 'Elizabeth line',
+                'london-overground': 'London Overground',
+                'liberty': 'Liberty line',
+                'lioness': 'Lioness line',
+                'mildmay': 'Mildmay line',
+                'suffragette': 'Suffragette line',
+                'weaver': 'Weaver line',
+                'windrush': 'Windrush line',
+                'tram': 'Tram'
+            };
+
+            if (known[raw]) {
+                return known[raw];
+            }
+
+            return titleCaseWords(raw.replace(/[-_]+/g, ' '));
+        }
+
         async function refreshImage() {
             const img = document.getElementById('preview');
             const url = '/preview?_=' + Date.now();
             img.src = url;
         }
+
         function start() {
             if (timer) clearInterval(timer);
             timer = setInterval(refreshImage, 100);
         }
+
         async function setBrightness(v) {
             await fetch('/api/settings/brightness/' + v, { method: 'POST' });
+            document.getElementById('brightnessValue').textContent = v;
         }
-        async function switchApp() {
-            const id = document.getElementById('appId').value;
-            await fetch('/api/apps/' + id, { method: 'POST' });
+
+        async function loadApps(selectAppId = null) {
+            const res = await fetch('/api/apps');
+            if (!res.ok) throw new Error('Unable to load apps');
+            const data = await res.json();
+            const apps = data.apps || [];
+            const active = selectAppId || data.activeApp;
+
+            const sel = document.getElementById('appSelect');
+            sel.innerHTML = '';
+            for (const app of apps) {
+                const opt = document.createElement('option');
+                opt.value = app.id;
+                opt.textContent = app.name + (app.hasSettings ? '' : ' (no settings)');
+                sel.appendChild(opt);
+            }
+
+            if (active) {
+                sel.value = active;
+            }
+
+            await loadAppSettings(sel.value);
         }
-        window.addEventListener('load', () => { start(); });
+
+        async function activateSelectedApp() {
+            const id = document.getElementById('appSelect').value;
+            const res = await fetch('/api/apps/' + encodeURIComponent(id), { method: 'POST' });
+            if (!res.ok) {
+                showStatus('Failed to activate app: ' + id, true);
+                return;
+            }
+            await loadAppSettings(id);
+            showStatus('Activated: ' + id);
+        }
+
+        async function updateSetting(appId, key, value) {
+            const body = {};
+            body[key] = value;
+            const res = await fetch('/api/apps/' + encodeURIComponent(appId) + '/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!res.ok) {
+                const txt = await res.text();
+                throw new Error(txt || 'Failed to update setting');
+            }
+        }
+
+        function buildSettingControl(appId, setting) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'setting';
+
+            const name = document.createElement('div');
+            name.className = 'setting-name';
+            name.textContent = setting.name;
+            wrapper.appendChild(name);
+
+            const row = document.createElement('div');
+            row.className = 'row';
+            wrapper.appendChild(row);
+
+            const type = normalizeType(setting.type);
+            const key = setting.key;
+            const currentValue = setting.currentValue;
+            let commitTimer;
+
+            const commit = (value, debounceMs = 0) => {
+                clearTimeout(commitTimer);
+                commitTimer = setTimeout(async () => {
+                    try {
+                        await updateSetting(appId, key, value);
+                        showStatus('Updated ' + key);
+                    } catch (e) {
+                        showStatus('Failed to update ' + key + ': ' + e.message, true);
+                    }
+                }, debounceMs);
+            };
+
+            if (type === 'Boolean') {
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.checked = !!currentValue;
+                input.addEventListener('change', () => commit(input.checked));
+                row.appendChild(input);
+            } else if (type === 'Integer') {
+                const input = document.createElement('input');
+                input.type = 'number';
+                if (setting.minValue !== null && setting.minValue !== undefined) input.min = String(setting.minValue);
+                if (setting.maxValue !== null && setting.maxValue !== undefined) input.max = String(setting.maxValue);
+                input.value = String(currentValue ?? setting.defaultValue ?? 0);
+                input.addEventListener('change', () => commit(Number(input.value)));
+                row.appendChild(input);
+            } else if (type === 'Select') {
+                const input = document.createElement('select');
+                for (const option of setting.options || []) {
+                    const opt = document.createElement('option');
+                    opt.value = option;
+                    opt.textContent = getSettingOptionLabel(key, option);
+                    input.appendChild(opt);
+                }
+                input.value = String(currentValue ?? setting.defaultValue ?? '');
+                input.addEventListener('change', () => commit(input.value));
+                row.appendChild(input);
+            } else {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = String(currentValue ?? setting.defaultValue ?? '');
+                input.addEventListener('input', () => commit(input.value, 250));
+                row.appendChild(input);
+            }
+
+            if (setting.description) {
+                const desc = document.createElement('div');
+                desc.className = 'muted';
+                desc.textContent = setting.description;
+                wrapper.appendChild(desc);
+            }
+
+            return wrapper;
+        }
+
+        async function loadAppSettings(appId) {
+            const container = document.getElementById('settingsPanel');
+            container.innerHTML = '';
+
+            const res = await fetch('/api/apps/' + encodeURIComponent(appId) + '/settings');
+            if (!res.ok) {
+                container.innerHTML = '<div class="muted">Activate this app to edit settings.</div>';
+                return;
+            }
+
+            const data = await res.json();
+            const settings = data.settings || [];
+            if (settings.length === 0) {
+                container.innerHTML = '<div class="muted">No configurable settings for this app.</div>';
+                return;
+            }
+
+            for (const setting of settings) {
+                container.appendChild(buildSettingControl(appId, setting));
+            }
+        }
+
+        async function init() {
+            start();
+            try {
+                const settingsRes = await fetch('/api/settings');
+                if (settingsRes.ok) {
+                    const data = await settingsRes.json();
+                    const brightness = data.brightness ?? 100;
+                    document.getElementById('brightness').value = brightness;
+                    document.getElementById('brightnessValue').textContent = brightness;
+                }
+
+                await loadApps();
+            } catch (e) {
+                showStatus(e.message, true);
+            }
+        }
+
+        window.addEventListener('load', init);
     </script>
 </head>
 <body>
     <h1>LedMatrixOS Simulator</h1>
-    <div class="row">
-        <label>Brightness</label>
-        <input type="range" min="0" max="100" value="100" oninput="setBrightness(this.value)" />
-    </div>
-    <div class="row">
-        <label>Activate App</label>
-        <input id="appId" placeholder="clock" />
-        <button onclick="switchApp()">Activate</button>
-    </div>
-    <div class="row">
-        <img id="preview" width="1024" height="256" />
+    <div id="status" class="status"></div>
+    <div class="grid">
+        <div class="stack">
+            <div class="card">
+                <div class="row">
+                    <label>Brightness</label>
+                    <input id="brightness" type="range" min="0" max="100" value="100" oninput="setBrightness(this.value)" />
+                    <span id="brightnessValue">100</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="row">
+                    <label>Active App</label>
+                    <select id="appSelect"></select>
+                    <br />
+                    <button onclick="activateSelectedApp()">Activate</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-top:0">App Settings</h3>
+                <div id="settingsPanel" class="stack">
+                    <div class="muted">Select an app to load settings.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <img id="preview" width="1024" height="256" />
+        </div>
     </div>
 </body>
 </html>

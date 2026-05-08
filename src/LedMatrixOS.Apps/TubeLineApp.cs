@@ -11,7 +11,7 @@ using LedMatrixOS.Graphics.Text;
 
 namespace LedMatrixOS.Apps;
 
-public class TubeLineApp : MatrixAppBase
+public class TubeLineApp : MatrixAppBase, IConfigurableApp
 {
     public override string Id => "tube-line";
     public override string Name => "Tube Line";
@@ -46,7 +46,42 @@ public class TubeLineApp : MatrixAppBase
         ["northern"] = Color.FromRgb(100, 100, 100),
         ["piccadilly"] = Color.FromRgb(0, 15, 159),
         ["victoria"] = Color.FromRgb(0, 152, 216),
-        ["waterloo-city"] = Color.FromRgb(147, 206, 186)
+        ["waterloo-city"] = Color.FromRgb(147, 206, 186),
+        ["dlr"] = Color.FromRgb(0, 175, 173),
+        ["elizabeth"] = Color.FromRgb(126, 91, 198),
+        ["london-overground"] = Color.FromRgb(232, 106, 16),
+        ["liberty"] = Color.FromRgb(124, 127, 130),
+        ["lioness"] = Color.FromRgb(255, 201, 47),
+        ["mildmay"] = Color.FromRgb(0, 102, 177),
+        ["suffragette"] = Color.FromRgb(0, 156, 73),
+        ["weaver"] = Color.FromRgb(149, 67, 103),
+        ["windrush"] = Color.FromRgb(220, 36, 31),
+        ["tram"] = Color.FromRgb(132, 189, 0)
+    };
+
+    private static readonly string[] SupportedLineIds =
+    {
+        "bakerloo",
+        "central",
+        "circle",
+        "district",
+        "hammersmith-city",
+        "jubilee",
+        "metropolitan",
+        "northern",
+        "piccadilly",
+        "victoria",
+        "waterloo-city",
+        "dlr",
+        "elizabeth",
+        "london-overground",
+        "liberty",
+        "lioness",
+        "mildmay",
+        "suffragette",
+        "weaver",
+        "windrush",
+        "tram"
     };
 
     private class StopPoint
@@ -135,6 +170,38 @@ public class TubeLineApp : MatrixAppBase
         public double Longitude { get; set; }
     }
 
+    public IEnumerable<AppSetting> GetSettings()
+    {
+        return
+        [
+            new AppSetting(
+                "lineId",
+                "Line",
+                "TfL line ID to render.",
+                AppSettingType.Select,
+                "jubilee",
+                _selectedLineId,
+                Options: SupportedLineIds)
+        ];
+    }
+
+    public void UpdateSetting(string key, object value)
+    {
+        if (!string.Equals(key, "lineId", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var normalized = NormalizeLineId(value?.ToString());
+        if (string.Equals(normalized, _selectedLineId, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _selectedLineId = normalized;
+        ResetLineDataState();
+    }
+
     public override Task OnActivatedAsync((int height, int width) dimensions, IConfiguration configuration, CancellationToken cancellationToken)
     {
         // Read TFL API key and selected line from configuration
@@ -147,7 +214,7 @@ public class TubeLineApp : MatrixAppBase
         var configuredLine = configuration["TubeLineApp:LineId"];
         if (!string.IsNullOrEmpty(configuredLine))
         {
-            _selectedLineId = configuredLine.ToLower();
+            _selectedLineId = NormalizeLineId(configuredLine);
         }
 
         // Start background data loading
@@ -203,55 +270,40 @@ public class TubeLineApp : MatrixAppBase
 
         try
         {
-            // Fetch route with stops
-            var routeUrl = $"https://api.tfl.gov.uk/Line/{_selectedLineId}/Route/Sequence/Inbound";
-            if (!string.IsNullOrEmpty(_appKey))
+            var routeData = await FetchRouteDataAsync(httpClient, cancellationToken);
+            if (routeData != null)
             {
-                routeUrl += $"?app_key={Uri.EscapeDataString(_appKey)}";
-            }
+                _lineStops = BuildOrderedStops(routeData);
 
-            var routeResponse = await httpClient.GetAsync(routeUrl, cancellationToken);
-            
-            if (routeResponse.IsSuccessStatusCode)
-            {
-                var content = await routeResponse.Content.ReadAsStringAsync(cancellationToken);
-                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                var routeData = JsonSerializer.Deserialize<LineRouteData>(content, options);
-
-                if (routeData != null)
+                var stopIndexById = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                var stopIndexByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (var i = 0; i < _lineStops.Length; i++)
                 {
-                    _lineStops = BuildOrderedStops(routeData);
-
-                    var stopIndexById = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                    var stopIndexByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                    for (var i = 0; i < _lineStops.Length; i++)
+                    foreach (var key in GetStopIdCandidates(_lineStops[i].Id))
                     {
-                        foreach (var key in GetStopIdCandidates(_lineStops[i].Id))
+                        if (!stopIndexById.ContainsKey(key))
                         {
-                            if (!stopIndexById.ContainsKey(key))
-                            {
-                                stopIndexById[key] = i;
-                            }
-                        }
-
-                        var normalizedName = NormalizeStationName(_lineStops[i].Name);
-                        if (!string.IsNullOrWhiteSpace(normalizedName) && !stopIndexByName.ContainsKey(normalizedName))
-                        {
-                            stopIndexByName[normalizedName] = i;
+                            stopIndexById[key] = i;
                         }
                     }
 
-                    _stopIndexById = stopIndexById;
-                    _stopIndexByName = stopIndexByName;
-
-                    // Fetch train positions for this line
-                    await FetchTrainPositionsAsync(httpClient, cancellationToken);
-
-                    if (_lineStops.Length > 0)
+                    var normalizedName = NormalizeStationName(_lineStops[i].Name);
+                    if (!string.IsNullOrWhiteSpace(normalizedName) && !stopIndexByName.ContainsKey(normalizedName))
                     {
-                        _hasLoadedInitialData = true;
-                        _isLoading = false;
+                        stopIndexByName[normalizedName] = i;
                     }
+                }
+
+                _stopIndexById = stopIndexById;
+                _stopIndexByName = stopIndexByName;
+
+                // Fetch train positions for this line
+                await FetchTrainPositionsAsync(httpClient, cancellationToken);
+
+                if (_lineStops.Length > 0)
+                {
+                    _hasLoadedInitialData = true;
+                    _isLoading = false;
                 }
             }
 
@@ -265,6 +317,97 @@ public class TubeLineApp : MatrixAppBase
             }
             throw;
         }
+    }
+
+    private async Task<LineRouteData?> FetchRouteDataAsync(HttpClient httpClient, CancellationToken cancellationToken)
+    {
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+        foreach (var direction in new[] { "all", "inbound", "outbound" })
+        {
+            var routeUrl = $"https://api.tfl.gov.uk/Line/{_selectedLineId}/Route/Sequence/{direction}";
+            if (!string.IsNullOrEmpty(_appKey))
+            {
+                routeUrl += $"?app_key={Uri.EscapeDataString(_appKey)}";
+            }
+
+            var routeResponse = await httpClient.GetAsync(routeUrl, cancellationToken);
+            if (!routeResponse.IsSuccessStatusCode)
+            {
+                continue;
+            }
+
+            var content = await routeResponse.Content.ReadAsStringAsync(cancellationToken);
+            var routeData = JsonSerializer.Deserialize<LineRouteData>(content, options);
+            if (routeData?.Stations is { Length: > 0 } || routeData?.StopPointSequences is { Length: > 0 })
+            {
+                return routeData;
+            }
+        }
+
+        return null;
+    }
+
+    private static string NormalizeLineId(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return "jubilee";
+        }
+
+        var normalized = raw.Trim().ToLowerInvariant();
+        normalized = normalized.Replace(" ", "-").Replace("_", "-");
+
+        if (normalized.EndsWith("-line", StringComparison.Ordinal))
+        {
+            normalized = normalized[..^5];
+        }
+
+        // Backwards-compatible aliases for Overground naming.
+        if (normalized is "overground")
+        {
+            normalized = "london-overground";
+        }
+        else if (normalized is "mildmay-line" or "mildmayline")
+        {
+            normalized = "mildmay";
+        }
+        else if (normalized is "windrush-line" or "windrushline")
+        {
+            normalized = "windrush";
+        }
+        else if (normalized is "weaver-line" or "weaverline")
+        {
+            normalized = "weaver";
+        }
+        else if (normalized is "suffragette-line" or "suffragetteline")
+        {
+            normalized = "suffragette";
+        }
+        else if (normalized is "lioness-line" or "lionessline")
+        {
+            normalized = "lioness";
+        }
+        else if (normalized is "liberty-line" or "libertyline")
+        {
+            normalized = "liberty";
+        }
+
+        return SupportedLineIds.Contains(normalized, StringComparer.OrdinalIgnoreCase)
+            ? normalized
+            : "jubilee";
+    }
+
+    private void ResetLineDataState()
+    {
+        _lineStops = Array.Empty<StopPoint>();
+        _trainPositions = Array.Empty<TrainPosition>();
+        _stopIndexById = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        _stopIndexByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        _hasLoadedInitialData = false;
+        _isLoading = true;
+        _lastRefresh = DateTime.MinValue;
+        _lastSuccessfulUpdateUtc = DateTime.MinValue;
     }
 
     private static StopPoint[] BuildOrderedStops(LineRouteData routeData)
