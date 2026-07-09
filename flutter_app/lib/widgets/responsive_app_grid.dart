@@ -26,15 +26,15 @@ class ResponsiveAppGrid extends StatelessWidget {
         int crossAxisCount;
 
         if (screenWidth > 1200) {
-          crossAxisCount = 6; // Large desktop
+          crossAxisCount = 6;
         } else if (screenWidth > 900) {
-          crossAxisCount = 5; // Desktop
+          crossAxisCount = 5;
         } else if (screenWidth > 700) {
-          crossAxisCount = 4; // Tablet landscape
+          crossAxisCount = 4;
         } else if (screenWidth > 500) {
-          crossAxisCount = 3; // Tablet portrait
+          crossAxisCount = 4;
         } else {
-          crossAxisCount = 2; // Mobile
+          crossAxisCount = 3;
         }
 
         return GridView.builder(
@@ -42,26 +42,29 @@ class ResponsiveAppGrid extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
-            childAspectRatio: 1.1,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
+            childAspectRatio: 0.95,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
           ),
           itemCount: apps.length,
           itemBuilder: (context, index) {
             final app = apps[index];
             final isActive = app.id == activeAppId;
             
-            return AppCard(
-              app: app,
-              isActive: isActive,
-              getAppIcon: AppIconHelper.getAppIcon,
-              onTap: () {
-                if (isActive && app.hasSettings) {
-                  onShowSettings(app);
-                } else {
-                  onActivateApp(app.id);
-                }
-              },
+            return ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: 100),
+              child: AppCard(
+                app: app,
+                isActive: isActive,
+                getAppIcon: AppIconHelper.getAppIcon,
+                onTap: () {
+                  if (isActive && app.hasSettings) {
+                    onShowSettings(app);
+                  } else {
+                    onActivateApp(app.id);
+                  }
+                },
+              ),
             );
           },
         );

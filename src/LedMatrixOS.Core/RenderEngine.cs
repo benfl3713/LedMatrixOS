@@ -17,8 +17,8 @@ public sealed class RenderEngine : IDisposable
     private readonly object _stateLock = new();
     private CancellationTokenSource? _cts;
 
-    private int _targetFps = 60;
-    
+    private const int _targetFps = 60;
+
     // Transition animation state
     private bool _isTransitioning;
     private FrameBuffer? _oldFrame;
@@ -81,7 +81,6 @@ public sealed class RenderEngine : IDisposable
     private async Task RunLoopAsync(CancellationToken cancellationToken)
     {
         var sw = new Stopwatch();
-        var targetFrameTime = TimeSpan.FromSeconds(1.0 / (_isTransitioning ? 60 : TargetFps));
         sw.Start();
         var last = sw.Elapsed;
 
@@ -137,7 +136,7 @@ public sealed class RenderEngine : IDisposable
             }
 
             // sleep to maintain target FPS
-            targetFrameTime = TimeSpan.FromSeconds(1.0 / (_isTransitioning ? 60 : TargetFps));
+            var targetFrameTime = TimeSpan.FromSeconds(1.0 / (_isTransitioning ? 60 : TargetFps));
             var frameTime = sw.Elapsed - now;
             var sleep = targetFrameTime - frameTime;
             if (sleep > TimeSpan.Zero)
