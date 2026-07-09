@@ -128,7 +128,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                 errorText: _isValidUrl ? null : 'Please enter a valid URL',
               ),
-              keyboardType: TextInputType.url,
+              //keyboardType: TextInputType.url,
               textInputAction: TextInputAction.done,
               onFieldSubmitted: (_) => _saveSettings(),
             ),

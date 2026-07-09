@@ -51,17 +51,20 @@ class ResponsiveAppGrid extends StatelessWidget {
             final app = apps[index];
             final isActive = app.id == activeAppId;
             
-            return AppCard(
-              app: app,
-              isActive: isActive,
-              getAppIcon: AppIconHelper.getAppIcon,
-              onTap: () {
-                if (isActive && app.hasSettings) {
-                  onShowSettings(app);
-                } else {
-                  onActivateApp(app.id);
-                }
-              },
+            return ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: 100),
+              child: AppCard(
+                app: app,
+                isActive: isActive,
+                getAppIcon: AppIconHelper.getAppIcon,
+                onTap: () {
+                  if (isActive && app.hasSettings) {
+                    onShowSettings(app);
+                  } else {
+                    onActivateApp(app.id);
+                  }
+                },
+              ),
             );
           },
         );

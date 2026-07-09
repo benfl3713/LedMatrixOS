@@ -369,6 +369,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               icon: const Icon(Icons.refresh_rounded, size: 16),
               label: const Text('RETRY'),
             ),
+            TextButton(
+                onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const SettingsPage()),
+                    ),
+                child: Text('Change Settings'))
           ],
         ),
       ),

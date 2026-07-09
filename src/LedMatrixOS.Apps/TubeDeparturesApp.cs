@@ -22,6 +22,7 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
     private string _stationSearch = "";
     private string _platformFilter = "";
     private int _maxDepartures = 3;
+    private bool _colorDeparturesByLine;
 
     private string? _appKey;
     private volatile Departure[] _departures = Array.Empty<Departure>();
@@ -37,7 +38,7 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
     private volatile string[] _stationSearchOptions = new[] { "Type at least 2 chars" };
     private volatile bool _stationSearchDirty;
     private string _stationSearchLastQuery = "";
-    private readonly TimeSpan _departurePageInterval = TimeSpan.FromSeconds(4);
+    private readonly TimeSpan _departurePageInterval = TimeSpan.FromSeconds(8);
     private DateTime _lastDeparturePageSwitch = DateTime.MinValue;
     private int _departurePage;
     private bool _isPageTransitioning;
@@ -57,6 +58,7 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         public int TimeToStation { get; set; }
         public string PlatformName { get; set; } = "";
         public string LineName { get; set; } = "";
+        public string LineId { get; set; } = "";
     }
 
     private class ArrivalData
@@ -172,6 +174,7 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
             new AppSetting("stationId", "Station ID", "TfL Naptan ID (auto-filled when you select from Station Select).", AppSettingType.String, "", _stationId),
             new AppSetting("platformFilter", "Platform Filter", "Filter by platform name (e.g. 'Eastbound'). Leave empty to show all platforms.", AppSettingType.String, "", _platformFilter),
             new AppSetting("maxDepartures", "Max Departures", "Number of departures to cycle through", AppSettingType.Integer, 3, _maxDepartures, 1, 12),
+            new AppSetting("colorDeparturesByLine", "Colour Departures By Line", "When enabled, each departure row uses the line colour.", AppSettingType.Boolean, false, _colorDeparturesByLine),
         };
     }
 
@@ -211,6 +214,51 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
                 _maxDepartures = Math.Clamp(CoerceIntSetting(value, _maxDepartures), 1, 12);
                 ResetDeparturePaging();
                 break;
+            case "colorDeparturesByLine":
+                _colorDeparturesByLine = CoerceBoolSetting(value, _colorDeparturesByLine);
+                break;
+        }
+    }
+
+    private static bool CoerceBoolSetting(object value, bool fallback)
+    {
+        try
+        {
+            if (value is JsonElement json)
+            {
+                if (json.ValueKind == JsonValueKind.True) return true;
+                if (json.ValueKind == JsonValueKind.False) return false;
+                if (json.ValueKind == JsonValueKind.String && bool.TryParse(json.GetString(), out var parsed))
+                {
+                    return parsed;
+                }
+
+                return fallback;
+            }
+
+            if (value is bool b)
+            {
+                return b;
+            }
+
+            if (value is string s)
+            {
+                if (bool.TryParse(s, out var parsed))
+                {
+                    return parsed;
+                }
+
+                if (int.TryParse(s, out var n))
+                {
+                    return n != 0;
+                }
+            }
+
+            return Convert.ToBoolean(value);
+        }
+        catch
+        {
+            return fallback;
         }
     }
 
@@ -279,6 +327,11 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         if (int.TryParse(configuration["TubeDeparturesApp:MaxDepartures"], out var maxDep) && maxDep > 0)
         {
             _maxDepartures = Math.Clamp(maxDep, 1, 12);
+        }
+
+        if (bool.TryParse(configuration["TubeDeparturesApp:ColorDeparturesByLine"], out var colorByLine))
+        {
+            _colorDeparturesByLine = colorByLine;
         }
 
         StartBackgroundDataLoading();
@@ -378,6 +431,7 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
                         TimeToStation = a.TimeToStation,
                         PlatformName = a.PlatformName,
                         LineName = a.LineName,
+                        LineId = a.LineId,
                     })
                     .ToArray();
 
@@ -694,8 +748,41 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
             var dep = visibleDepartures[i];
             int minsAway = Math.Max(0, dep.TimeToStation / 60);
             var departureNumber = page * VisibleDepartureRows + i + 1;
-            DrawDepartureRow(frame, i + 1, departureNumber, dep.DestinationName, minsAway, yOffset);
+            var rowColor = GetDepartureRowColor(dep.LineId);
+            DrawDepartureRow(frame, i + 1, departureNumber, dep.DestinationName, minsAway, rowColor, yOffset);
         }
+    }
+
+    private Pixel GetDepartureRowColor(string? lineId)
+    {
+        if (!_colorDeparturesByLine)
+        {
+            return _color;
+        }
+
+        var normalized = NormalizeLineId(lineId);
+        if (TubeLineColors.TryGetValue(normalized, out var lineColor))
+        {
+            return lineColor;
+        }
+
+        return _color;
+    }
+
+    private static string NormalizeLineId(string? lineId)
+    {
+        if (string.IsNullOrWhiteSpace(lineId))
+        {
+            return string.Empty;
+        }
+
+        var normalized = lineId.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "london-overground" => "overground",
+            "elizabeth-line" => "elizabeth",
+            _ => normalized
+        };
     }
 
     private static double EvaluateBezierProgress(double t, double p1x, double p1y, double p2x, double p2y)
@@ -818,7 +905,7 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         }
     }
 
-    private void DrawDepartureRow(FrameBuffer frame, int rowPosition, int departureNumber, string station, int minsAway, int yOffset = 0)
+    private void DrawDepartureRow(FrameBuffer frame, int rowPosition, int departureNumber, string station, int minsAway, Pixel textColor, int yOffset = 0)
     {
         string suffix = "due ";
         if (minsAway > 0)
@@ -830,7 +917,7 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         string formatStationLength = $"-{26 - suffix.Length}";
         
         string text = $"{departureNumber} {string.Format($"{{0,{formatStationLength}}}", station)}{suffix}";
-        DrawClippedText(frame, _font, 0, 14 * rowPosition + yOffset, _color, text, DeparturesClipTopY, DeparturesClipBottomY);
+        DrawClippedText(frame, _font, 0, 14 * rowPosition + yOffset, textColor, text, DeparturesClipTopY, DeparturesClipBottomY);
     }
 
     private static void DrawClippedText(FrameBuffer frame, BdfFont font, int x, int y, Pixel color, string text, int clipTopY, int clipBottomY)
