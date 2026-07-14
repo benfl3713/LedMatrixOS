@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../api_service.dart';
+import 'glass_container.dart';
 
 /// Returns a subtle hue colour for an app's icon background based on its category.
 Color _appAccentColor(String appId) {
@@ -42,60 +43,48 @@ class AppCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final accent = _appAccentColor(app.id);
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeInOut,
-      decoration: BoxDecoration(
-        color: isActive
-            ? Color.alphaBlend(accent.withValues(alpha: 0.55), colorScheme.surface)
-            : Color.alphaBlend(
-                accent.withValues(alpha: 0.22), colorScheme.surfaceContainer),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isActive ? accent.withValues(alpha: 0.85) : accent.withValues(alpha: 0.25),
-          width: isActive ? 1.5 : 1,
-        ),
-        boxShadow: isActive
-            ? [
-                BoxShadow(
-                  color: accent.withValues(alpha: 0.45),
-                  blurRadius: 16,
-                  spreadRadius: 0,
-                ),
-              ]
-            : [],
+    return GlassContainer(
+      borderRadius: 24,
+      blur: 10,
+      opacity: isActive ? 0.25 : 0.1,
+      color: isActive ? accent : colorScheme.surface,
+      border: Border.all(
+        color: isActive 
+            ? accent.withValues(alpha: 0.6) 
+            : colorScheme.onSurface.withValues(alpha: 0.1),
+        width: isActive ? 2 : 1,
       ),
+      boxShadow: isActive
+          ? [
+              BoxShadow(
+                color: accent.withValues(alpha: 0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ]
+          : [],
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          splashColor: accent.withValues(alpha: 0.25),
-          highlightColor: accent.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(24),
+          splashColor: accent.withValues(alpha: 0.3),
           child: Padding(
-            padding: const EdgeInsets.all(11),
+            padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Icon in a tinted rounded box
                 Container(
-                  padding: const EdgeInsets.all(7),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: isActive
-                        ? accent.withValues(alpha: 0.45)
-                        : accent.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(
-                      color: accent.withValues(alpha: isActive ? 0.7 : 0.35),
-                      width: 1,
-                    ),
+                    color: (isActive ? Colors.white : accent).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
                     getAppIcon(app.id),
-                    size: 22,
-                    color: isActive
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.75),
+                    size: 24,
+                    color: isActive ? Colors.white : accent.withValues(alpha: 0.9),
                   ),
                 ),
                 const Spacer(),
@@ -104,12 +93,10 @@ class AppCard extends StatelessWidget {
                   app.name,
                   style: TextStyle(
                     fontSize: 14,
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                    color: isActive
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.65),
-                    letterSpacing: 0.1,
-                    height: 1.2,
+                    fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+                    color: isActive ? Colors.white : colorScheme.onSurface,
+                    letterSpacing: -0.2,
+                    height: 1.1,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -120,19 +107,19 @@ class AppCard extends StatelessWidget {
                     children: [
                       Icon(
                         Icons.tune_rounded,
-                        size: 9,
-                        color: isActive
-                            ? Colors.white.withValues(alpha: 0.55)
-                            : Colors.white.withValues(alpha: 0.3),
+                        size: 10,
+                        color: (isActive ? Colors.white : colorScheme.primary)
+                            .withValues(alpha: 0.5),
                       ),
-                      const SizedBox(width: 3),
+                      const SizedBox(width: 4),
                       Text(
-                        'configurable',
+                        'CONFIG',
                         style: TextStyle(
-                          fontSize: 9,
-                          color: isActive
-                              ? Colors.white.withValues(alpha: 0.55)
-                              : Colors.white.withValues(alpha: 0.3),
+                          fontSize: 8,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                          color: (isActive ? Colors.white : colorScheme.primary)
+                              .withValues(alpha: 0.5),
                         ),
                       ),
                     ],

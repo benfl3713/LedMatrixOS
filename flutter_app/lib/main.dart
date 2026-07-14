@@ -12,6 +12,7 @@ import 'utils/app_icon_helper.dart';
 import 'controllers/api_settings_controller.dart';
 import 'pages/settings_page.dart';
 
+
 void main() {
   runApp(
     MultiProvider(
@@ -35,7 +36,7 @@ class MyApp extends StatelessWidget {
           title: 'LED Matrix',
           debugShowCheckedModeBanner: false,
           theme: TofuTheme.light(
-          seedColor: const Color(0xFF00E5FF),
+          seedColor: const Color(0xFFFF9900),
           ),
           darkTheme: TofuTheme.dark(
           seedColor: const Color(0xFFFF9900),
@@ -392,108 +393,175 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _buildSectionLabel(BuildContext context, String label, int count) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Container(
-          width: 3,
-          height: 14,
-          decoration: BoxDecoration(
-            color: colorScheme.primary,
-            borderRadius: BorderRadius.circular(2),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.primary.withValues(alpha: 0.5),
-                blurRadius: 6,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2.5,
-            color: colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Container(
-            height: 1,
-            color: colorScheme.outline.withValues(alpha: 0.12),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-          decoration: BoxDecoration(
-            color: colorScheme.primary.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            '$count',
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Text(
+            label,
             style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.5,
               color: colorScheme.primary,
             ),
           ),
-        ),
-      ],
+          const SizedBox(width: 12),
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    colorScheme.primary.withValues(alpha: 0.3),
+                    colorScheme.primary.withValues(alpha: 0.0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                color: colorScheme.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _loading
-          ? _buildLoadingView()
-          : _error != null
-              ? _buildErrorView()
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    MatrixControlPanel(
-                      settings: _settings,
-                      activeAppId: _activeAppId,
-                      apps: _apps,
-                      onPowerToggle: _settings != null
-                          ? () => _setPower(!_settings!.isEnabled)
-                          : () {},
-                      onSettings: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => const SettingsPage()),
-                      ),
-                      onRefresh: _loadData,
-                      onBrightnessChanged: _setBrightness,
-                      getAppIcon: AppIconHelper.getAppIcon,
-                      onConfigureActive: _activeApp != null
-                          ? () => _showAppSettingsBottomSheet(_activeApp!)
-                          : null,
-                    ),
-                    Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(12, 16, 12, 32),
+      extendBodyBehindAppBar: true,
+      body: Stack(
+        children: [
+          // Animated Background
+          const _AnimatedMeshBackground(),
+          
+          _loading
+              ? _buildLoadingView()
+              : _error != null
+                  ? _buildErrorView()
+                  : SafeArea(
+                      bottom: false,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (_activeAppId == 'equalizer') ...[
-                            const AudioStreamWidget(),
-                            const SizedBox(height: 16),
-                          ],
-                          _buildSectionLabel(context, 'APPS', _apps.length),
-                          ResponsiveAppGrid(
-                            apps: _apps,
+                          MatrixControlPanel(
+                            settings: _settings,
                             activeAppId: _activeAppId,
-                            onActivateApp: _activateApp,
-                            onShowSettings: _showAppSettingsBottomSheet,
+                            apps: _apps,
+                            onPowerToggle: _settings != null
+                                ? () => _setPower(!_settings!.isEnabled)
+                                : () {},
+                            onSettings: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) => const SettingsPage()),
+                            ),
+                            onRefresh: _loadData,
+                            onBrightnessChanged: _setBrightness,
+                            getAppIcon: AppIconHelper.getAppIcon,
+                            onConfigureActive: _activeApp != null
+                                ? () => _showAppSettingsBottomSheet(_activeApp!)
+                                : null,
+                          ),
+                          Expanded(
+                            child: ListView(
+                              padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+                              children: [
+                                // if (_settings != null) ...[
+                                //   LivePreviewWidget(
+                                //     api: _api,
+                                //     previewImageKey: DateTime.now().millisecondsSinceEpoch.toString(),
+                                //   ),
+                                //   const SizedBox(height: 20),
+                                // ],
+                                if (_activeAppId == 'equalizer') ...[
+                                  const AudioStreamWidget(),
+                                  const SizedBox(height: 20),
+                                ],
+                                _buildSectionLabel(context, 'APPS', _apps.length),
+                                ResponsiveAppGrid(
+                                  apps: _apps,
+                                  activeAppId: _activeAppId,
+                                  onActivateApp: _activateApp,
+                                  onShowSettings: _showAppSettingsBottomSheet,
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnimatedMeshBackground extends StatefulWidget {
+  const _AnimatedMeshBackground();
+
+  @override
+  State<_AnimatedMeshBackground> createState() => _AnimatedMeshBackgroundState();
+}
+
+class _AnimatedMeshBackgroundState extends State<_AnimatedMeshBackground>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(seconds: 15),
+      vsync: this,
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color.lerp(colorScheme.surface, colorScheme.primaryContainer, 0.2)!,
+                colorScheme.surface,
+                Color.lerp(colorScheme.surface, colorScheme.secondaryContainer, 0.15)!,
+              ],
+              stops: [
+                0.0,
+                0.5 + 0.1 * (1.0 - _controller.value),
+                1.0,
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

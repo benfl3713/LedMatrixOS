@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../api_service.dart';
+import 'glass_container.dart';
 
 class LivePreviewWidget extends StatelessWidget {
   final LedMatrixApi api;
@@ -15,51 +16,68 @@ class LivePreviewWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Card(
-      clipBehavior: Clip.hardEdge,
+    return GlassContainer(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      borderRadius: 28,
+      opacity: 0.12,
+      blur: 15,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+            padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
             child: Row(
               children: [
-                Icon(Icons.monitor_rounded, color: colorScheme.primary, size: 18),
-                const SizedBox(width: 8),
+                Icon(Icons.videocam_rounded, color: colorScheme.primary, size: 20),
+                const SizedBox(width: 10),
                 Text(
-                  'Live Preview',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                  'LIVE FEED',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.2,
+                    color: colorScheme.onSurface,
+                  ),
                 ),
                 const Spacer(),
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: colorScheme.errorContainer,
+                    color: colorScheme.error.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: colorScheme.error.withValues(alpha: 0.3),
+                      width: 1,
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        width: 5,
-                        height: 5,
+                        width: 6,
+                        height: 6,
                         decoration: BoxDecoration(
                           color: colorScheme.error,
                           shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: colorScheme.error.withValues(alpha: 0.5),
+                              blurRadius: 6,
+                              spreadRadius: 2,
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 6),
                       Text(
                         'LIVE',
                         style: TextStyle(
                           fontSize: 10,
-                          color: colorScheme.onErrorContainer,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
+                          color: colorScheme.error,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
                         ),
                       ),
                     ],
@@ -70,9 +88,14 @@ class LivePreviewWidget extends StatelessWidget {
           ),
           Container(
             width: double.infinity,
-            color: Colors.black,
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            clipBehavior: Clip.antiAlias,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 180, minHeight: 80),
+              constraints: const BoxConstraints(maxHeight: 180, minHeight: 100),
               child: Image.network(
                 '${api.getPreviewUrl()}&key=$previewImageKey',
                 gaplessPlayback: true,
@@ -80,23 +103,22 @@ class LivePreviewWidget extends StatelessWidget {
                 filterQuality: FilterQuality.none,
                 errorBuilder: (context, error, stackTrace) {
                   return const SizedBox(
-                    height: 100,
+                    height: 120,
                     child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.tv_off_rounded,
-                              size: 36, color: Colors.white24),
-                          SizedBox(height: 8),
+                              size: 40, color: Colors.white24),
+                          SizedBox(height: 12),
                           Text(
-                            'Preview unavailable',
-                            style:
-                                TextStyle(color: Colors.white38, fontSize: 12),
-                          ),
-                          Text(
-                            'Simulator mode only',
-                            style:
-                                TextStyle(color: Colors.white24, fontSize: 11),
+                            'PREVIEW OFFLINE',
+                            style: TextStyle(
+                                color: Colors.white38, 
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.0,
+                            ),
                           ),
                         ],
                       ),
@@ -106,7 +128,7 @@ class LivePreviewWidget extends StatelessWidget {
                 loadingBuilder: (context, child, loadingProgress) {
                   if (loadingProgress == null) return child;
                   return const SizedBox(
-                    height: 100,
+                    height: 120,
                     child: Center(
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
