@@ -102,35 +102,69 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 24),
             
             // API URL Input
-            Text(
-              'API Server URL',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
+            Consumer<ApiSettingsController>(
+              builder: (context, controller, child) {
+                return Opacity(
+                  opacity: controller.useMockMode ? 0.5 : 1.0,
+                  child: AbsorbPointer(
+                    absorbing: controller.useMockMode,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'API Server URL',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: _urlController,
+                          decoration: InputDecoration(
+                            hintText: 'http://localhost:5000',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            prefixIcon: const Icon(Icons.link),
+                            suffixIcon: _isValidUrl
+                                ? Icon(
+                                    Icons.check_circle,
+                                    color: colorScheme.primary,
+                                  )
+                                : Icon(
+                                    Icons.error,
+                                    color: colorScheme.error,
+                                  ),
+                            errorText: _isValidUrl ? null : 'Please enter a valid URL',
+                          ),
+                          //keyboardType: TextInputType.url,
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) => _saveSettings(),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _urlController,
-              decoration: InputDecoration(
-                hintText: 'http://localhost:5000',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                prefixIcon: const Icon(Icons.link),
-                suffixIcon: _isValidUrl
-                    ? Icon(
-                        Icons.check_circle,
-                        color: colorScheme.primary,
-                      )
-                    : Icon(
-                        Icons.error,
-                        color: colorScheme.error,
-                      ),
-                errorText: _isValidUrl ? null : 'Please enter a valid URL',
-              ),
-              //keyboardType: TextInputType.url,
-              textInputAction: TextInputAction.done,
-              onFieldSubmitted: (_) => _saveSettings(),
+            const SizedBox(height: 16),
+            
+            // Mock Mode Toggle
+            Consumer<ApiSettingsController>(
+              builder: (context, controller, child) {
+                return SwitchListTile(
+                  title: const Text('Mock Mode'),
+                  subtitle: const Text('Use simulated data for testing'),
+                  value: controller.useMockMode,
+                  onChanged: (value) async {
+                    await controller.updateUseMockMode(value);
+                  },
+                  contentPadding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
             
@@ -194,8 +228,8 @@ class _SettingsPageState extends State<SettingsPage> {
                             const SizedBox(height: 8),
                             _buildInfoRow(
                               'Status',
-                              'Connected',
-                              Icons.check_circle,
+                              controller.useMockMode ? 'Mocked' : 'Connected',
+                              controller.useMockMode ? Icons.science : Icons.check_circle,
                               colorScheme.primary,
                             ),
                           ],

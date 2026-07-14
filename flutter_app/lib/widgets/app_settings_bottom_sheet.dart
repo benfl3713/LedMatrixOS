@@ -150,7 +150,7 @@ class _AppSettingsBottomSheetState extends State<AppSettingsBottomSheet> {
 
       case AppSettingType.select:
         return DropdownButtonFormField<String>(
-          value: setting.currentValue.toString(),
+          initialValue: setting.currentValue.toString(),
           decoration: const InputDecoration(
             border: OutlineInputBorder(),
             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -200,7 +200,7 @@ class _AppSettingsBottomSheetState extends State<AppSettingsBottomSheet> {
               decoration: BoxDecoration(
                 border: Border(
                   top: BorderSide(
-                    color: colorScheme.primary.withOpacity(0.45),
+                    color: colorScheme.primary.withValues(alpha: 0.45),
                     width: 2,
                   ),
                 ),
@@ -218,7 +218,7 @@ class _AppSettingsBottomSheetState extends State<AppSettingsBottomSheet> {
                         width: 36,
                         height: 4,
                         decoration: BoxDecoration(
-                          color: colorScheme.primary.withOpacity(0.4),
+                          color: colorScheme.primary.withValues(alpha: 0.4),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -231,15 +231,15 @@ class _AppSettingsBottomSheetState extends State<AppSettingsBottomSheet> {
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: colorScheme.primary.withOpacity(0.12),
+                            color: colorScheme.primary.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: colorScheme.primary.withOpacity(0.3),
+                              color: colorScheme.primary.withValues(alpha: 0.3),
                               width: 1,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: colorScheme.primary.withOpacity(0.18),
+                                color: colorScheme.primary.withValues(alpha: 0.18),
                                 blurRadius: 12,
                               ),
                             ],
@@ -282,7 +282,7 @@ class _AppSettingsBottomSheetState extends State<AppSettingsBottomSheet> {
                     const SizedBox(height: 16),
                     Divider(
                         height: 1,
-                        color: colorScheme.outline.withOpacity(0.15)),
+                        color: colorScheme.outline.withValues(alpha: 0.15)),
                   ],
                 ),
               ),
@@ -299,7 +299,7 @@ class _AppSettingsBottomSheetState extends State<AppSettingsBottomSheet> {
                             Icons.tune_rounded,
                             size: 52,
                             color:
-                                colorScheme.onSurfaceVariant.withOpacity(0.25),
+                                colorScheme.onSurfaceVariant.withValues(alpha: 0.25),
                           ),
                           const SizedBox(height: 14),
                           Text(
@@ -308,7 +308,7 @@ class _AppSettingsBottomSheetState extends State<AppSettingsBottomSheet> {
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
                               color:
-                                  colorScheme.onSurfaceVariant.withOpacity(0.4),
+                                  colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
                               letterSpacing: 2,
                             ),
                           ),

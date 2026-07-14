@@ -85,16 +85,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _initializeApi() {
     final apiController = Provider.of<ApiSettingsController>(context, listen: false);
-    _api = LedMatrixApi(baseUrl: apiController.apiUrl);
+    _updateApiInstance(apiController);
     
-    // Listen to API URL changes
-    apiController.addListener(_onApiUrlChanged);
+    // Listen to API settings changes
+    apiController.addListener(_onApiSettingsChanged);
   }
 
-  void _onApiUrlChanged() {
+  void _updateApiInstance(ApiSettingsController apiController) {
+    if (apiController.useMockMode) {
+      _api = MockLedMatrixApi();
+    } else {
+      _api = HttpLedMatrixApi(baseUrl: apiController.apiUrl);
+    }
+  }
+
+  void _onApiSettingsChanged() {
     final apiController = Provider.of<ApiSettingsController>(context, listen: false);
-    _api = LedMatrixApi(baseUrl: apiController.apiUrl);
-    _loadData(); // Reload data with new API URL
+    _updateApiInstance(apiController);
+    _loadData(); // Reload data with new API configuration
   }
 
   @override
@@ -104,9 +112,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     for (var timer in _settingDebounce.values) {
       timer?.cancel();
     }
-    // Remove API URL change listener
+    // Remove API settings change listener
     final apiController = Provider.of<ApiSettingsController>(context, listen: false);
-    apiController.removeListener(_onApiUrlChanged);
+    apiController.removeListener(_onApiSettingsChanged);
     super.dispose();
   }
 
@@ -333,15 +341,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: colorScheme.errorContainer.withOpacity(0.3),
+                color: colorScheme.errorContainer.withValues(alpha: 0.3),
                 shape: BoxShape.circle,
                 border: Border.all(
-                    color: colorScheme.error.withOpacity(0.3), width: 1),
+                    color: colorScheme.error.withValues(alpha: 0.3), width: 1),
               ),
               child: Icon(
                 Icons.wifi_off_rounded,
                 size: 48,
-                color: colorScheme.error.withOpacity(0.7),
+                color: colorScheme.error.withValues(alpha: 0.7),
               ),
             ),
             const SizedBox(height: 24),
@@ -394,7 +402,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             borderRadius: BorderRadius.circular(2),
             boxShadow: [
               BoxShadow(
-                color: colorScheme.primary.withOpacity(0.5),
+                color: colorScheme.primary.withValues(alpha: 0.5),
                 blurRadius: 6,
               ),
             ],
@@ -414,14 +422,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         Expanded(
           child: Container(
             height: 1,
-            color: colorScheme.outline.withOpacity(0.12),
+            color: colorScheme.outline.withValues(alpha: 0.12),
           ),
         ),
         const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
           decoration: BoxDecoration(
-            color: colorScheme.primary.withOpacity(0.12),
+            color: colorScheme.primary.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Text(

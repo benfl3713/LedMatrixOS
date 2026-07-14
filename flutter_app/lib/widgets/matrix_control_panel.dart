@@ -42,13 +42,13 @@ class MatrixControlPanel extends StatelessWidget {
         color: colorScheme.surfaceContainerHighest,
         border: Border(
           bottom: BorderSide(
-            color: colorScheme.primary.withOpacity(0.25),
+            color: colorScheme.primary.withValues(alpha: 0.25),
             width: 1,
           ),
         ),
         boxShadow: [
           BoxShadow(
-            color: colorScheme.primary.withOpacity(0.08),
+            color: colorScheme.primary.withValues(alpha: 0.08),
             blurRadius: 24,
             offset: const Offset(0, 4),
           ),
@@ -58,7 +58,7 @@ class MatrixControlPanel extends StatelessWidget {
         bottom: false,
         child: CustomPaint(
           painter: _DotGridPainter(
-            dotColor: colorScheme.onSurface.withOpacity(0.05),
+            dotColor: colorScheme.onSurface.withValues(alpha: 0.05),
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 8, 14),
@@ -71,10 +71,10 @@ class MatrixControlPanel extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(7),
                       decoration: BoxDecoration(
-                        color: colorScheme.primary.withOpacity(0.12),
+                        color: colorScheme.primary.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: colorScheme.primary.withOpacity(0.35),
+                          color: colorScheme.primary.withValues(alpha: 0.35),
                           width: 1,
                         ),
                       ),
@@ -127,7 +127,7 @@ class MatrixControlPanel extends StatelessWidget {
                         boxShadow: isOnline
                             ? [
                                 BoxShadow(
-                                  color: colorScheme.primary.withOpacity(0.7),
+                                  color: colorScheme.primary.withValues(alpha: 0.7),
                                   blurRadius: 8,
                                   spreadRadius: 1,
                                 ),
@@ -175,15 +175,15 @@ class MatrixControlPanel extends StatelessWidget {
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
                               color: isEnabled
-                                  ? colorScheme.primary.withOpacity(0.5)
-                                  : colorScheme.outline.withOpacity(0.25),
+                                  ? colorScheme.primary.withValues(alpha: 0.5)
+                                  : colorScheme.outline.withValues(alpha: 0.25),
                               width: 1,
                             ),
                             boxShadow: isEnabled
                                 ? [
                                     BoxShadow(
                                       color:
-                                          colorScheme.primary.withOpacity(0.25),
+                                          colorScheme.primary.withValues(alpha: 0.25),
                                       blurRadius: 10,
                                       spreadRadius: 1,
                                     ),
@@ -227,7 +227,7 @@ class MatrixControlPanel extends StatelessWidget {
                       Icon(
                         Icons.brightness_3_rounded,
                         size: 13,
-                        color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                       ),
                       Expanded(
                         child: SliderTheme(
@@ -242,7 +242,7 @@ class MatrixControlPanel extends StatelessWidget {
                                 colorScheme.surfaceContainerHigh,
                             thumbColor: colorScheme.primary,
                             overlayColor:
-                                colorScheme.primary.withOpacity(0.15),
+                                colorScheme.primary.withValues(alpha: 0.15),
                           ),
                           child: Slider(
                             value: settings!.brightness.toDouble(),
@@ -283,10 +283,10 @@ class MatrixControlPanel extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 9),
                     decoration: BoxDecoration(
-                      color: colorScheme.primary.withOpacity(0.08),
+                      color: colorScheme.primary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: colorScheme.primary.withOpacity(0.22),
+                        color: colorScheme.primary.withValues(alpha: 0.22),
                         width: 1,
                       ),
                     ),
@@ -331,10 +331,10 @@ class MatrixControlPanel extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 9, vertical: 5),
                               decoration: BoxDecoration(
-                                color: colorScheme.primary.withOpacity(0.15),
+                                color: colorScheme.primary.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(7),
                                 border: Border.all(
-                                  color: colorScheme.primary.withOpacity(0.3),
+                                  color: colorScheme.primary.withValues(alpha: 0.3),
                                   width: 1,
                                 ),
                               ),
@@ -379,7 +379,7 @@ class MatrixControlPanel extends StatelessWidget {
         height: 3,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: colorScheme.onSurfaceVariant.withOpacity(0.35),
+          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.35),
         ),
       ),
     );

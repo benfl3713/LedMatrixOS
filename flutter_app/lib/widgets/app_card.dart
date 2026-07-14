@@ -47,18 +47,18 @@ class AppCard extends StatelessWidget {
       curve: Curves.easeInOut,
       decoration: BoxDecoration(
         color: isActive
-            ? Color.alphaBlend(accent.withOpacity(0.55), colorScheme.surface)
+            ? Color.alphaBlend(accent.withValues(alpha: 0.55), colorScheme.surface)
             : Color.alphaBlend(
                 accent.withValues(alpha: 0.22), colorScheme.surfaceContainer),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isActive ? accent.withOpacity(0.85) : accent.withOpacity(0.25),
+          color: isActive ? accent.withValues(alpha: 0.85) : accent.withValues(alpha: 0.25),
           width: isActive ? 1.5 : 1,
         ),
         boxShadow: isActive
             ? [
                 BoxShadow(
-                  color: accent.withOpacity(0.45),
+                  color: accent.withValues(alpha: 0.45),
                   blurRadius: 16,
                   spreadRadius: 0,
                 ),
@@ -82,11 +82,11 @@ class AppCard extends StatelessWidget {
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
                     color: isActive
-                        ? accent.withOpacity(0.45)
-                        : accent.withOpacity(0.25),
+                        ? accent.withValues(alpha: 0.45)
+                        : accent.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(9),
                     border: Border.all(
-                      color: accent.withOpacity(isActive ? 0.7 : 0.35),
+                      color: accent.withValues(alpha: isActive ? 0.7 : 0.35),
                       width: 1,
                     ),
                   ),
@@ -95,7 +95,7 @@ class AppCard extends StatelessWidget {
                     size: 22,
                     color: isActive
                         ? Colors.white
-                        : Colors.white.withOpacity(0.75),
+                        : Colors.white.withValues(alpha: 0.75),
                   ),
                 ),
                 const Spacer(),
@@ -107,7 +107,7 @@ class AppCard extends StatelessWidget {
                     fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                     color: isActive
                         ? Colors.white
-                        : Colors.white.withOpacity(0.65),
+                        : Colors.white.withValues(alpha: 0.65),
                     letterSpacing: 0.1,
                     height: 1.2,
                   ),
@@ -122,8 +122,8 @@ class AppCard extends StatelessWidget {
                         Icons.tune_rounded,
                         size: 9,
                         color: isActive
-                            ? Colors.white.withOpacity(0.55)
-                            : Colors.white.withOpacity(0.3),
+                            ? Colors.white.withValues(alpha: 0.55)
+                            : Colors.white.withValues(alpha: 0.3),
                       ),
                       const SizedBox(width: 3),
                       Text(
@@ -131,8 +131,8 @@ class AppCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 9,
                           color: isActive
-                              ? Colors.white.withOpacity(0.55)
-                              : Colors.white.withOpacity(0.3),
+                              ? Colors.white.withValues(alpha: 0.55)
+                              : Colors.white.withValues(alpha: 0.3),
                         ),
                       ),
                     ],
