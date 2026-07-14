@@ -49,7 +49,7 @@ class AppCard extends StatelessWidget {
         color: isActive
             ? Color.alphaBlend(accent.withOpacity(0.55), colorScheme.surface)
             : Color.alphaBlend(
-                accent.withOpacity(0.22), colorScheme.surfaceContainer),
+                accent.withValues(alpha: 0.22), colorScheme.surfaceContainer),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isActive ? accent.withOpacity(0.85) : accent.withOpacity(0.25),
@@ -70,8 +70,8 @@ class AppCard extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(14),
-          splashColor: accent.withOpacity(0.25),
-          highlightColor: accent.withOpacity(0.1),
+          splashColor: accent.withValues(alpha: 0.25),
+          highlightColor: accent.withValues(alpha: 0.1),
           child: Padding(
             padding: const EdgeInsets.all(11),
             child: Column(
@@ -103,7 +103,7 @@ class AppCard extends StatelessWidget {
                 Text(
                   app.name,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 14,
                     fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                     color: isActive
                         ? Colors.white

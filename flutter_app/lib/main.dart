@@ -38,7 +38,7 @@ class MyApp extends StatelessWidget {
           seedColor: const Color(0xFF00E5FF),
           ),
           darkTheme: TofuTheme.dark(
-          seedColor: const Color(0xFF00E5FF),
+          seedColor: const Color(0xFFFF9900),
           ),
         themeMode: ThemeMode.dark,
           home: const HomePage(),
@@ -475,7 +475,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                             const SizedBox(height: 16),
                           ],
                           _buildSectionLabel(context, 'APPS', _apps.length),
-                          const SizedBox(height: 10),
                           ResponsiveAppGrid(
                             apps: _apps,
                             activeAppId: _activeAppId,
