@@ -43,7 +43,7 @@ class MatrixControlPanel extends StatelessWidget {
       child: GlassContainer(
         borderRadius: 32,
         padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-        opacity: 0.15,
+        opacity: 0.25,
         blur: 20,
         boxShadow: [
           BoxShadow(
@@ -58,36 +58,6 @@ class MatrixControlPanel extends StatelessWidget {
             // ── Title row ──────────────────────────────────────────
             Row(
               children: [
-                Text(
-                  'LED MATRIX',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: colorScheme.onSurface,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const Spacer(),
-                IconButton.filledTonal(
-                  icon: Icon(Icons.settings_outlined,
-                      size: 20, color: colorScheme.onSurfaceVariant),
-                  onPressed: onSettings,
-                ),
-                const SizedBox(width: 8),
-                IconButton.filledTonal(
-                  icon: Icon(Icons.refresh_rounded,
-                      size: 20, color: colorScheme.onSurfaceVariant),
-                  onPressed: onRefresh,
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-
-            // ── Status row ─────────────────────────────────────────
-            Row(
-              children: [
-                // Online indicator
                 Container(
                   width: 8,
                   height: 8,
@@ -127,56 +97,71 @@ class MatrixControlPanel extends StatelessWidget {
                   ),
                 ],
                 const Spacer(),
-                // Power toggle pill
-                if (settings != null)
-                  GestureDetector(
-                    onTap: onPowerToggle,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isEnabled
-                            ? colorScheme.primary
-                            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: isEnabled
-                            ? [
-                                BoxShadow(
-                                  color: colorScheme.primary.withValues(alpha: 0.4),
-                                  blurRadius: 15,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ]
-                            : [],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.power_settings_new_rounded,
-                            size: 16,
-                            color: isEnabled
-                                ? colorScheme.onPrimary
-                                : colorScheme.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            isEnabled ? 'ON' : 'OFF',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w900,
-                              color: isEnabled
-                                  ? colorScheme.onPrimary
-                                  : colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                IconButton.filledTonal(
+                  icon: Icon(Icons.settings_outlined,
+                      size: 20, color: colorScheme.onSurfaceVariant),
+                  onPressed: onSettings,
+                ),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  icon: Icon(Icons.refresh_rounded,
+                      size: 20, color: colorScheme.onSurfaceVariant),
+                  onPressed: onRefresh,
+                ),
               ],
             ),
+
+            const SizedBox(height: 16),
+
+            if (settings != null)
+              GestureDetector(
+                onTap: onPowerToggle,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isEnabled
+                        ? colorScheme.primary
+                        : colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: isEnabled
+                        ? [
+                            BoxShadow(
+                              color: colorScheme.primary.withValues(alpha: 0.4),
+                              blurRadius: 15,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : [],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.max,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.power_settings_new_rounded,
+                        size: 20,
+                        color: isEnabled
+                            ? colorScheme.onPrimary
+                            : colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        isEnabled ? 'ON' : 'OFF',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: isEnabled
+                              ? colorScheme.onPrimary
+                              : colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
             // ── Brightness row ─────────────────────────────────────
             if (settings != null) ...[

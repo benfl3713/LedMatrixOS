@@ -253,8 +253,8 @@ class _AppSettingsBottomSheetState extends State<AppSettingsBottomSheet> {
       expand: false,
       builder: (context, scrollController) => GlassContainer(
         borderRadius: 36,
-        opacity: 0.2,
-        blur: 25,
+        opacity: 0.8,
+        blur: 20,
         border: Border.all(
           color: colorScheme.onSurface.withValues(alpha: 0.1),
           width: 1.5,

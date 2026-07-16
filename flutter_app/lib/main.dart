@@ -41,7 +41,7 @@ class MyApp extends StatelessWidget {
           darkTheme: TofuTheme.dark(
           seedColor: const Color(0xFFFF9900),
           ),
-        themeMode: ThemeMode.dark,
+        themeMode: ThemeMode.system,
           home: const HomePage(),
         );
       }
