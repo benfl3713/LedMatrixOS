@@ -1,5 +1,6 @@
 using LedMatrixOS.Core;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
@@ -29,6 +30,16 @@ public sealed class EqualizerApp : MatrixAppBase, IConfigurableApp
     private int _smoothness = 5;
     private bool _autoGenerate = true;
     private string _audioSource = "Auto"; // "Auto" or "Microphone"
+
+    public EqualizerApp()
+    {
+    }
+
+    [ActivatorUtilitiesConstructor]
+    public EqualizerApp(AudioDataService audioService)
+    {
+        _audioService = audioService;
+    }
 
     public void SetAudioService(AudioDataService audioService)
     {
