@@ -134,6 +134,11 @@ class LedMatrixApi {
     throw Exception('Failed to load health: ${response.statusCode}');
   }
 
+  Uri getPreviewSocketUri() {
+    final uri = Uri.parse(baseUrl);
+    return uri.replace(scheme: uri.scheme == 'https' ? 'wss' : 'ws', path: '/ws/preview');
+  }
+
   String getPreviewUrl() {
     return '$baseUrl/preview?_=${DateTime.now().millisecondsSinceEpoch}';
   }
