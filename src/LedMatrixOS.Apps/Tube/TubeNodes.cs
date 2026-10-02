@@ -6,52 +6,6 @@ using SixLabors.ImageSharp;
 
 namespace LedMatrixOS.Apps.Tube;
 
-/// <summary>
-/// A string rasterised once. Widgets keep one and only rebuild it when the text or font changes, so drawing allocates nothing per frame
-/// (the platform's own GlyphRun is internal to the Graphics project).
-/// </summary>
-internal sealed class TextRun
-{
-    private BdfFont? _font;
-    private string _text = "";
-    private bool[,]? _map;
-
-    public int Width { get; private set; }
-    public int Height { get; private set; }
-
-    public bool Set(BdfFont font, string text)
-    {
-        if (ReferenceEquals(font, _font) && string.Equals(text, _text)) return false;
-        _font = font;
-        _text = text;
-        _map = text.Length == 0 ? null : font.GetMapOfString(text);
-        Width = _map?.GetLength(0) ?? 0;
-        Height = font.BoundingBox.Y;
-        return true;
-    }
-
-    /// <summary>Draws with the top left of the line box at (x, y); <paramref name="shadow"/> adds a black 1px drop shadow.</summary>
-    public void Draw(FrameBuffer frame, int x, int y, Pixel color, bool shadow = false)
-    {
-        if (_map is null) return;
-        int rows = _map.GetLength(1);
-        for (int line = 0; line < rows; line++)
-        {
-            for (int bit = 0; bit < Width; bit++)
-            {
-                if (!_map[bit, line]) continue;
-                if (shadow) frame.SetPixel(x + bit + 1, y + line + 1, Pixel.Black);
-            }
-        }
-
-        for (int line = 0; line < rows; line++)
-        {
-            for (int bit = 0; bit < Width; bit++)
-                if (_map[bit, line]) frame.SetPixel(x + bit, y + line, color);
-        }
-    }
-}
-
 /// <summary>Colours and small drawing helpers shared by the Tube widgets. Nothing here allocates.</summary>
 internal static class TubeGfx
 {
