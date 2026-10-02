@@ -1,6 +1,6 @@
 # LedMatrixOS
 
-A flexible and extensible LED matrix display system built with .NET 9, designed to run on Raspberry Pi with RGB LED matrices or in a simulated environment for development and testing.
+A flexible and extensible LED matrix display system built with .NET 10, designed to run on Raspberry Pi with RGB LED matrices or in a simulated environment for development and testing.
 
 > Example Spotify app on a 256x64 RGB LED matrix <br/>
 >![LedMatrixOS Demo](docs/preview.png)
@@ -53,12 +53,12 @@ The project is organized into several modules:
 ## Requirements
 
 ### For Simulator Mode
-- .NET 9.0 SDK or runtime
+- .NET 10.0 SDK or runtime
 - Any platform (Windows, Linux, macOS)
 
 ### For Hardware Mode (Raspberry Pi)
 - Raspberry Pi (tested on Pi 3/4)
-- .NET 9.0 runtime (ARM)
+- .NET 10.0 runtime (ARM)
 - RGB LED Matrix panels
 - [rpi-rgb-led-matrix library](https://github.com/hzeller/rpi-rgb-led-matrix) installed
 - Root privileges (for GPIO access)
@@ -367,7 +367,7 @@ This project is provided as-is for educational and personal use.
 
 ## Acknowledgments
 
-- Built with [.NET 9](https://dotnet.microsoft.com/)
+- Built with [.NET 10](https://dotnet.microsoft.com/)
 - Uses [SixLabors.ImageSharp](https://github.com/SixLabors/ImageSharp) for graphics
 - Hardware support via [rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix) by Henner Zeller
 - Inspired by the LED matrix community
