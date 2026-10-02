@@ -27,6 +27,7 @@ public static class BuiltInApps
         yield return typeof(TubeLineApp);
         yield return typeof(TubeDeparturesApp);
         yield return typeof(CommuteApp);
+        yield return typeof(HomeAssistantTilesApp);
         yield return typeof(WidgetDemoApp);
     }
 }
