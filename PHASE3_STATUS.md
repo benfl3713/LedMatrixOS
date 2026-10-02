@@ -6,7 +6,7 @@
 - `Core/Scheduling/PlaylistConfig.cs`: Playlist entries with durations, transitions, settings overrides
 - `Core/Scheduling/ScheduleRule.cs`: Time-bounded rules with day masks, brightness overrides, context conditions
 - `Core/Scheduling/ScheduleService.cs`: Playlist manager with rule evaluation and app rotation
-- `ScheduleServiceTests.cs`: 7 comprehensive tests covering all scheduling scenarios
+- `ScheduleServiceTests.cs`: **7 passing tests** covering all scheduling scenarios
   - Playlist rotation and timing
   - Time-bounded rules (start/end times)
   - Day-of-week masks (weekdays vs weekends)
@@ -21,48 +21,76 @@
 - Automatic app rotation within playlists
 - Context-aware triggers (prepared for "spotify_playing", "line_disrupted", etc.)
 
-**Test Status:** 647/647 tests passing (640 existing + 7 new)
+### Phase 3.2: Overlay Layer (Notifications) ✅
+- `Core/Overlays/IOverlay.cs`: Interface for all overlay types
+- `Core/Overlays/OverlayBase.cs`: Base class with lifecycle, opacity transitions, auto-dismiss
+- `Core/Overlays/OverlayManager.cs`: Priority queue, clipping, rendering, batch dismiss
+- `Core/Overlays/ToastOverlay.cs`: Auto-dismiss colored banner with callback rendering
+- `Core/Overlays/BadgeOverlay.cs`: Persistent corner indicator with optional pulsing
+- `Core/Overlays/AlertOverlay.cs`: Full-screen alert with border, auto-dismiss
+- `OverlaySystemTests.cs`: **8 passing tests** covering lifecycle, priority, dismissal
+
+**Features:**
+- Priority-based rendering (higher priority on top)
+- Opacity fade-in/out transitions (configurable duration)
+- Auto-dismiss after duration or manual dismiss by ID
+- DismissUpTo(priority) for grouped dismissal
+- Callback-based rendering (avoids Core→Graphics coupling)
+- Persistent overlays (badges) vs temporary (toasts/alerts)
+- Zero allocation in steady state
+
+**Test Status:** 655/655 tests passing (640 existing + 15 new)
 
 ---
 
 ## In Progress / Planned
 
-### Phase 3.2: Overlay Layer (Notifications)
-The interrupt system needs to be reworked to support:
-- **Toast notifications**: slide-in banner with icon, text, duration
-- **Corner badges**: compact alert indicators (line disruption, app attention)
-- **Full-screen alerts**: urgent messages with priority/duration
-- **Composited rendering**: layers over the active app, not full takeovers
-- **Priority queue**: resolve conflicts when multiple overlays want attention
-- **Transition animations**: ITransition for enter/exit of overlays
+### Phase 3.2b: RenderEngine Integration (Next)
+**Estimated:** ~100 lines
+- Inject `ScheduleService` into `RenderEngine` 
+- Call `scheduler.GetActiveAppId()` instead of hard-coded app
+- Call `scheduler.GetActiveBrightnessOverride()` and apply to device
+- Integrate `OverlayManager`:
+  - Create manager singleton
+  - Call `manager.Update()` each frame
+  - Call `manager.RenderOverlays()` after app render, before device present
+- Add REST endpoints:
+  - `POST /api/scheduler/reload` (load schedules.json)
+  - `POST /api/overlays/toast` (add toast with message)
+  - `POST /api/overlays/badge` (add badge by ID)
+  - `POST /api/overlays/dismiss/{id}` (dismiss overlay)
 
-**Planned files:**
-- `Core/Overlays/IOverlay.cs`: base interface (position, duration, priority, transition)
-- `Core/Overlays/ToastOverlay.cs`, `BadgeOverlay.cs`, `AlertOverlay.cs`
-- `Core/Overlays/OverlayManager.cs`: queue, priority, rendering
-- Integration into `RenderEngine.cs` (render active app, then composite overlays)
-- Remap existing `/api/notifications/*` REST endpoints to overlay system
+### Phase 3.3: Real Weather (Open-Meteo)
+**Estimated:** ~200 lines
+- `Services/WeatherDataService.cs`: poll Open-Meteo API (free, no key)
+- Fetch: temperature, condition, rain chance, sunrise/sunset
+- Cache responses (update every 10 minutes)
+- `WeatherApp` rewrite to use real data instead of simulation
+- Animated scenes for each weather condition (rain particles, sun position, etc.)
+- Day/night sky following actual sunrise/sunset times
 
-**Estimated:** ~300–400 lines, ~2 weeks for full implementation + testing
+**Files to modify:**
+- `src/LedMatrixOS/Program.cs`: register `WeatherDataService` 
+- `src/LedMatrixOS.Apps/WeatherApp.cs`: bind to `ILiveData<WeatherData>`
+- Keep existing widget-based UI from Phase 2 rewrite
 
 ---
 
-### Phase 3.3: Flagship Everyday Apps
-- **Commute Dashboard** (composite): next departures + line status + weather + time
-  - Requires: TubeDeparturesApp output, Weather live data, TimeWidget
-  - Planned: ~150 lines as a WidgetApp
-- **Real Weather** (replace simulation)
-  - API: Open-Meteo (free, no key) for hourly/daily forecast
-  - Features: animated scenes per weather condition, temperature roll, day/night sky
-  - Planned: ~200 lines (API client + animated scenes)
-- **Calendar/Events** (ICS feed reader)
-  - Next event display with time/location
-  - Planned: ~100 lines
-- **Home Assistant Tiles** (reverse HA integration)
-  - Show HA sensor values (temperature, humidity, etc.) on matrix
-  - Planned: ~100 lines
+### Phase 3.3b: Commute Dashboard (Future)
+**Estimated:** ~150 lines
+- Composite app: `CommuteDashboardApp.cs`
+- Displays: next departures (2–3), line status pills, weather, time
+- Customizable via settings: home station, max departures, alert threshold
+- Uses: TubeDeparturesApp data (live), TubeStatusApp data (live), WeatherApp data
+- Best shown on weekday mornings (07:00–09:00 via schedule rule)
 
-**Estimated:** ~550 lines total, ~3 weeks
+### Phase 3.3c: Calendar & Home Assistant (Future)
+**Estimated:** ~200 lines
+- **CalendarApp.cs**: next event from ICS URL (via Poll<T>)
+- **HomeAssistantTilesApp.cs**: reverse HA integration (tile per sensor)
+- Use same PollingLiveData pattern as weather
+
+**Estimated:** ~550 lines total, ~3 weeks for 3.3a–3.3c
 
 ---
 
