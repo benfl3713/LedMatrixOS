@@ -101,11 +101,23 @@ public class CommuteAppTests(ITestOutputHelper output)
         Fonts.Load();
         var app = new CommuteApp(new HttpClient(new TflStubHandler()));
         Assert.Equal("commute", app.Id);
-        Assert.Equal(new[] { "stationId", "platformFilter", "walkMinutes", "location", "units" }, app.GetSettings().Select(s => s.Key).ToArray());
+        Assert.Equal(new[] { "stationSearch", "stationSelect", "stationId", "platformFilter", "walkMinutes", "location", "units" }, app.GetSettings().Select(s => s.Key).ToArray());
         var walk = app.GetSettings().Single(s => s.Key == "walkMinutes");
         Assert.Equal(8, walk.CurrentValue);
         Assert.Equal(0, walk.MinValue);
         Assert.Equal(60, walk.MaxValue);
+    }
+
+    [Fact]
+    public void StationSelect_SetsTheStationFromAChosenResult()
+    {
+        Fonts.Load();
+        var app = new CommuteApp(new HttpClient(new TflStubHandler()));
+        Assert.Equal(new[] { "Type at least 2 chars" }, app.GetSettings().Single(s => s.Key == "stationSelect").Options);
+
+        app.UpdateSetting("stationSelect", "940GZZLUBST | Baker Street Underground Station");
+
+        Assert.Equal("940GZZLUBST", app.StationId);
     }
 
     [Fact]

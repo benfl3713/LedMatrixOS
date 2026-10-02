@@ -25,7 +25,12 @@ public class CommuteApp : WidgetApp
 
     private static readonly IReadOnlyList<LineStatus> NoStatuses = [];
 
-    [Setting("Station ID", Description = "TfL Naptan ID of your station (find it in the Tube Departures app).")]
+    private const string NoStationSearchHint = "Type at least 2 chars";
+
+    [Setting("Station Search", Description = "Type a station name (e.g. Baker Street), then choose it in Station Select.")]
+    public string StationSearch { get; set; } = "";
+
+    [Setting("Station ID", Description = "TfL Naptan ID (filled in when you choose a result from Station Select).")]
     public string StationId { get; set; } = "";
 
     [Setting("Platform Filter", Description = "Only trains whose platform contains this text (e.g. 'Eastbound'). Leave empty for all.")]
@@ -49,6 +54,9 @@ public class CommuteApp : WidgetApp
     private volatile ILiveData<WeatherSnapshot>? _weather;
     private CancellationTokenSource? _stationCts, _weatherCts;
     private bool _active, _locationFromUser;
+
+    private volatile string[] _stationSearchOptions = [NoStationSearchHint];
+    private string _stationSearchLastQuery = "";
 
     private LeaveCard? _card;
     private WeatherChip? _chip;
@@ -170,8 +178,70 @@ public class CommuteApp : WidgetApp
         await base.OnDeactivatedAsync(cancellationToken);
     }
 
+    // stationSelect has options that change as the user types, so it is not a [Setting] property.
+    public override IEnumerable<AppSetting> GetSettings()
+    {
+        foreach (var setting in base.GetSettings())
+        {
+            yield return setting;
+            if (setting.Key == "stationSearch")
+                yield return new AppSetting("stationSelect", "Station Select", "Choose a result to set the station automatically.", AppSettingType.Select, "", "", Options: _stationSearchOptions);
+        }
+    }
+
+    public override void UpdateSetting(string key, object value)
+    {
+        if (key != "stationSelect")
+        {
+            base.UpdateSetting(key, value);
+            return;
+        }
+
+        var selected = value.ToString() ?? "";
+        var split = selected.IndexOf(" | ", StringComparison.Ordinal);
+        if (split > 0 && selected[..split].Trim() is { Length: > 0 } id)
+        {
+            StationId = id;
+            if (_active) RestartStationPolling();
+        }
+    }
+
+    private void SearchStations()
+    {
+        var query = StationSearch.Trim();
+        if (query.Length < 2)
+        {
+            _stationSearchOptions = [NoStationSearchHint];
+            return;
+        }
+
+        RunInBackground(ct => SearchStationsAsync(query, ct));
+    }
+
+    private async Task SearchStationsAsync(string query, CancellationToken ct)
+    {
+        try
+        {
+            if (string.Equals(query, _stationSearchLastQuery, StringComparison.OrdinalIgnoreCase)) return;
+
+            var (options, succeeded) = await _api.SearchStationsAsync(query, ct);
+            if (succeeded) _stationSearchLastQuery = query;
+
+            // The user may have kept typing while this was in flight; only the latest query may publish its results
+            if (string.Equals(query, StationSearch.Trim(), StringComparison.OrdinalIgnoreCase)) _stationSearchOptions = options;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        catch
+        {
+            _stationSearchOptions = ["Search failed"];
+        }
+    }
+
     protected override void OnSettingChanged(string key)
     {
+        if (key == "stationSearch") SearchStations();
         if (!_active) return;
         switch (key)
         {
