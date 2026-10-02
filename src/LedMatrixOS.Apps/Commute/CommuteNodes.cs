@@ -86,7 +86,7 @@ internal sealed class LeaveCard : Node
         var numberRect = new Rectangle(x, bounds.Y + 10, DigitsWidth, 37);
         if (goNow)
         {
-            TubeGfx.FillRound(frame, new Rectangle(x, numberRect.Y + 2, _go.Width + 6, 33), 3, color);
+            frame.FillRoundedRect(new Rectangle(x, numberRect.Y + 2, _go.Width + 6, 33), 3, color);
             _go.Draw(frame, x + 3, numberRect.Y + 3, Pixel.Black);
         }
         else
