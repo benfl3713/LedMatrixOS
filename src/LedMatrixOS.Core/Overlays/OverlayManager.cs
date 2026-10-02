@@ -101,6 +101,12 @@ public sealed class OverlayManager
             }
     }
 
+    /// <summary>Drop every overlay with this id immediately (no fade-out). Returns true if any was removed.</summary>
+    public bool Remove(string id)
+    {
+        lock (_gate) return _overlays.RemoveAll(o => o.Id == id) > 0;
+    }
+
     /// <summary>Clear all overlays immediately.</summary>
     public void Clear()
     {
