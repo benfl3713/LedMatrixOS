@@ -1,127 +1,38 @@
-using LedMatrixOS.Core;
-using Microsoft.Extensions.Configuration;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Drawing;
-using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
-using SixLabors.Fonts;
+using LedMatrixOS.Apps.Visuals;
+using LedMatrixOS.Core.Settings;
+using LedMatrixOS.Graphics.UI;
 
 namespace LedMatrixOS.Apps;
 
-public sealed class MatrixRainApp : MatrixAppBase
+/// <summary>
+/// Digital rain in three depth layers (tiny dim glyphs far away, katakana up close), bright white-hot heads, long fading trails,
+/// shimmering glyphs, an occasional scan-line word reveal and short glitch bursts, all under a bloom pass.
+/// </summary>
+public sealed class MatrixRainApp : WidgetApp
 {
     public override string Id => "matrix-rain";
     public override string Name => "Matrix Rain";
 
-    private (int height, int width) _frameDimensions;
-    private readonly List<RainDrop> _drops = new();
-    private Random _random = new();
-    private Font? _font;
-    private readonly string _chars = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789";
+    [Setting("Colour", Description = "Rain colour", Options = ["Green", "Cyan", "Red", "Purple", "Gold", "Rainbow"])]
+    public string Colour { get; set; } = "Green";
 
-    private class RainDrop
-    {
-        public int Column { get; set; }
-        public float Y { get; set; }
-        public float Speed { get; set; }
-        public string Character { get; set; } = "";
-        public float Brightness { get; set; }
-    }
+    [Setting("Density", Description = "How many streams fall at once", Min = 1, Max = 10)]
+    public int Density { get; set; } = 6;
 
-    public override Task OnActivatedAsync((int height, int width) dimensions, IConfiguration configuration, CancellationToken cancellationToken)
-    {
-        _frameDimensions = dimensions;
-        try
-        {
-            _font = SystemFonts.CreateFont("Consolas", 8);
-        }
-        catch
-        {
-            _font = SystemFonts.CreateFont("Nimbus Sans", 8);
-        }
+    [Setting("Speed", Description = "Fall speed", Min = 1, Max = 10)]
+    public int Speed { get; set; } = 5;
 
-        // Create rain drops for each column
-        var columns = dimensions.width / 6; // Approximate character width
-        for (int i = 0; i < columns; i++)
-        {
-            if (_random.NextDouble() < 0.3) // 30% chance of rain in each column
-            {
-                _drops.Add(new RainDrop
-                {
-                    Column = i,
-                    Y = _random.Next(-dimensions.height, 0),
-                    Speed = _random.Next(10, 30),
-                    Character = _chars[_random.Next(_chars.Length)].ToString(),
-                    Brightness = _random.NextSingle()
-                });
-            }
-        }
+    [Setting("Words", Description = "Occasionally reveal a word in the rain")]
+    public bool Words { get; set; } = true;
 
-        return base.OnActivatedAsync(dimensions, configuration, cancellationToken);
-    }
+    [Setting("Glitch", Description = "Occasional horizontal glitch bursts")]
+    public bool Glitch { get; set; } = true;
 
-    public override void Update(TimeSpan deltaTime, CancellationToken cancellationToken)
-    {
-        var dt = (float)deltaTime.TotalSeconds;
+    [Setting("Glow", Description = "Bloom around the bright heads (turn off on slow hardware)")]
+    public bool Glow { get; set; } = true;
 
-        for (int i = _drops.Count - 1; i >= 0; i--)
-        {
-            var drop = _drops[i];
-            drop.Y += drop.Speed * dt;
+    /// <summary>Fixes the random sequence (tests); null picks a random seed per activation.</summary>
+    public int? Seed { get; set; }
 
-            // Remove drops that have fallen off screen
-            if (drop.Y > _frameDimensions.height + 10)
-            {
-                _drops.RemoveAt(i);
-            }
-            else
-            {
-                // Randomly change character
-                if (_random.NextDouble() < 0.1)
-                {
-                    drop.Character = _chars[_random.Next(_chars.Length)].ToString();
-                }
-            }
-        }
-
-        // Add new drops occasionally
-        if (_random.NextDouble() < 0.05 && _drops.Count < 50)
-        {
-            var columns = _frameDimensions.width / 6;
-            _drops.Add(new RainDrop
-            {
-                Column = _random.Next(columns),
-                Y = -10,
-                Speed = _random.Next(10, 30),
-                Character = _chars[_random.Next(_chars.Length)].ToString(),
-                Brightness = _random.NextSingle()
-            });
-        }
-    }
-
-    public override void Render(FrameBuffer frame, CancellationToken cancellationToken)
-    {
-        if (_font == null) return;
-
-        using var image = new Image<Rgb24>(frame.Width, frame.Height);
-
-        image.Mutate(ctx =>
-        {
-            foreach (var drop in _drops)
-            {
-                var x = drop.Column * 6;
-                var color = Color.FromRgb(0, (byte)(255 * drop.Brightness), 0);
-                
-                var textOptions = new RichTextOptions(_font)
-                {
-                    Origin = new PointF(x, drop.Y)
-                };
-
-                ctx.DrawText(textOptions, drop.Character, color);
-            }
-        });
-
-        frame.RenderImage(image);
-    }
+    protected override Node Build() => new Panel { Children = { new RainVisual(this, Seed ?? Random.Shared.Next()) } };
 }
