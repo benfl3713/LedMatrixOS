@@ -87,9 +87,37 @@
             img.src = url;
         }
 
+        // Live preview over a WebSocket (binary RGB frames); falls back to polling the PNG if it cannot connect
+        function startSocket() {
+            const canvas = document.getElementById('previewCanvas');
+            const ctx = canvas.getContext('2d');
+            const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/preview');
+            ws.binaryType = 'arraybuffer';
+            let opened = false;
+            ws.onopen = () => { opened = true; if (timer) { clearInterval(timer); timer = null; } document.getElementById('preview').style.display = 'none'; canvas.style.display = 'block'; };
+            ws.onmessage = (e) => {
+                const view = new DataView(e.data);
+                const w = view.getUint16(0, true), h = view.getUint16(2, true);
+                if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+                const rgb = new Uint8Array(e.data, 4);
+                const image = ctx.createImageData(w, h);
+                for (let i = 0, o = 0; i < w * h; i++) {
+                    image.data[o++] = rgb[i * 3]; image.data[o++] = rgb[i * 3 + 1]; image.data[o++] = rgb[i * 3 + 2]; image.data[o++] = 255;
+                }
+                ctx.putImageData(image, 0, 0);
+            };
+            ws.onclose = () => {
+                if (!timer) timer = setInterval(refreshImage, 100);
+                document.getElementById('preview').style.display = '';
+                canvas.style.display = 'none';
+                setTimeout(startSocket, 2000);
+            };
+        }
+
         function start() {
             if (timer) clearInterval(timer);
             timer = setInterval(refreshImage, 100);
+            startSocket();
         }
 
         async function setBrightness(v) {
@@ -293,6 +321,7 @@
 
         <div class="card">
             <img id="preview" width="1024" height="256" />
+            <canvas id="previewCanvas" width="256" height="64" style="display:none;width:1024px;height:256px;image-rendering:pixelated"></canvas>
         </div>
     </div>
 </body>

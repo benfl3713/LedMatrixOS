@@ -79,6 +79,7 @@ var app = builder.Build();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseCors();
+app.UseWebSockets();
 
 // Start render loop
 var engine = app.Services.GetRequiredService<RenderEngine>();
@@ -185,6 +186,39 @@ app.MapPost("/api/settings/transition/{name}", (string name, RenderEngine eng) =
     if (!eng.Transitions.IsValidName(name)) return Results.NotFound($"Unknown transition '{name}'");
     eng.TransitionName = name.ToLowerInvariant();
     return Results.Ok(new { transition = eng.TransitionName });
+});
+
+// Live preview: binary frames [width u16][height u16][RGB...] at up to 30 fps, only when the picture changed
+app.MapGet("/ws/preview", async (HttpContext context, RenderEngine eng) =>
+{
+    if (!context.WebSockets.IsWebSocketRequest) return Results.BadRequest("WebSocket request expected");
+
+    using var socket = await context.WebSockets.AcceptWebSocketAsync();
+    using var subscription = eng.Broadcaster.Subscribe();
+    var ct = context.RequestAborted;
+    long last = 0;
+    var message = new byte[0];
+
+    // A viewer that closes shows up as a completed receive
+    var closed = Task.Run(async () =>
+    {
+        var buffer = new byte[64];
+        try { while (socket.State == System.Net.WebSockets.WebSocketState.Open && (await socket.ReceiveAsync(buffer, ct)).MessageType != System.Net.WebSockets.WebSocketMessageType.Close) { } }
+        catch (Exception) { }
+    }, ct);
+
+    try
+    {
+        while (socket.State == System.Net.WebSockets.WebSocketState.Open && !closed.IsCompleted)
+        {
+            int length = eng.Broadcaster.TryRead(ref last, ref message);
+            if (length > 0) await socket.SendAsync(new ArraySegment<byte>(message, 0, length), System.Net.WebSockets.WebSocketMessageType.Binary, true, ct);
+            await Task.Delay(33, ct);
+        }
+    }
+    catch (OperationCanceledException) { }
+    catch (System.Net.WebSockets.WebSocketException) { }
+    return Results.Empty;
 });
 
 // Simulator preview

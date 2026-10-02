@@ -39,6 +39,9 @@ public sealed class RenderEngine : IDisposable
 
     public TransitionRegistry Transitions { get; }
 
+    /// <summary>Latest presented frame, for live previews.</summary>
+    public FrameBroadcaster Broadcaster { get; } = new();
+
     /// <summary>Draws the crash card shown in place of an app that threw (set by the host; Core has no fonts). Falls back to a plain red screen.</summary>
     public Action<FrameBuffer, CrashInfo>? CrashRenderer { get; set; }
 
@@ -128,7 +131,7 @@ public sealed class RenderEngine : IDisposable
                 {
                     _frame.Clear(Pixel.Black);
                     var fps = _interruptService.RunInterrupt(_frame);
-                    _device.Present(_frame);
+                    PresentFrame();
                     _hasPresentedFrame = true;
 
                     var interruptTimeSpan= TimeSpan.FromSeconds(1.0 / fps);
@@ -149,7 +152,7 @@ public sealed class RenderEngine : IDisposable
                     _frame.Clear(Pixel.Black);
                     if (CrashRenderer != null) CrashRenderer(_frame, crash);
                     else _frame.Clear(new Pixel(120, 0, 0));
-                    _device.Present(_frame);
+                    PresentFrame();
                     _hasPresentedFrame = true;
                 }
                 else if (app != null)
@@ -194,7 +197,7 @@ public sealed class RenderEngine : IDisposable
                         Overlays.Update(delta);
                         Overlays.RenderOverlays(_frame, ctx);
 
-                        _device.Present(_frame);
+                        PresentFrame();
                         _hasPresentedFrame = true;
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
@@ -217,6 +220,12 @@ public sealed class RenderEngine : IDisposable
                 catch (TaskCanceledException) { }
             }
         }
+    }
+
+    private void PresentFrame()
+    {
+        Broadcaster.Publish(_frame);
+        _device.Present(_frame);
     }
 
     private void BeginTransitionIfPending()

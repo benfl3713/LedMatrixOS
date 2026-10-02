@@ -39,7 +39,7 @@
 - Persistent overlays (badges) vs temporary (toasts/alerts)
 - Zero allocation in steady state
 
-**Test Status:** 702/702 passing
+**Test Status:** 735/735 passing
 
 ---
 
@@ -69,11 +69,16 @@ Already delivered by the Phase 2 `WeatherApp` rewrite (Open-Meteo, location and 
 - `HomeAssistantTilesApp` (`id: ha-tiles`): up to four labelled tiles per page (numbers, on/off, N/A), paged with a fade. Entities are set as `sensor.x|Label, light.y`.
 - URL and long-lived token come from configuration only (`HomeAssistant:BaseUrl`, `HomeAssistant:Token`), never from a setting.
 - 17 tests (parsing, API client with a stub handler, goldens, zero-allocation).
-- Not done: calendar / ICS app.
+
+### Calendar app ✅
+`CalendarApp` (`id: calendar`) shows the next event from an `.ics` feed (`Calendar:IcsUrl`, config only) with the next three beside it. The parser handles UTC/TZID/floating times, all-day events, folding, and simple recurrence (daily, weekly with BYDAY, monthly, yearly, INTERVAL/COUNT/UNTIL/EXDATE). Overridden instances (RECURRENCE-ID) are not handled.
+
+### WebSocket live preview ✅
+`GET /ws/preview` streams binary frames (`[width u16][height u16][RGB...]`, up to 30 fps, only when the picture changed) from `FrameBroadcaster`, which copies frames only while someone is subscribed. The web UI uses it with a fallback to polling `/preview`; checked in the browser. The Flutter app still polls the PNG.
 
 ### Client updates ✅
 - Home Assistant integration: services `show_toast`, `set_badge`, `dismiss_overlay`, `reload_schedule` (see `services.yaml`). The new apps appear in the existing app select automatically.
-- Flutter: `showToast`, `setBadge`, `dismissOverlay`, `clearOverlays`, `reloadSchedule`, `getHealth`, a "Send message" button and icons for the new apps. **Not compiled**: the installed Flutter SDK (Dart 3.7) cannot resolve the project's `flutter_lints` constraint.
+- Flutter: `showToast`, `setBadge`, `dismissOverlay`, `clearOverlays`, `reloadSchedule`, `getHealth`, a "Send message" button and icons for the new apps. `flutter analyze` reports no errors or warnings.
 
 ### Crash card ✅
 Any app that throws shows its name and exception on the panel instead of freezing (`CrashGuard` + `CrashCard`), retries after 5s, and clears on app switch.
