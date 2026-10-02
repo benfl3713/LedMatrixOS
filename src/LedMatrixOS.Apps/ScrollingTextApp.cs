@@ -1,165 +1,49 @@
-using LedMatrixOS.Core;
-using Microsoft.Extensions.Configuration;
-using SixLabors.Fonts;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
+using LedMatrixOS.Apps.Ambient;
+using LedMatrixOS.Core.Settings;
+using LedMatrixOS.Graphics.UI;
 
 namespace LedMatrixOS.Apps;
 
 /// <summary>
-/// Scrolling text marquee with customizable message and effects
+/// A text ticker made to be read from across a room: big pixel type that loops with a separator icon between repeats, painted with
+/// gradient, rainbow, fire or per-letter wave effects, over a soft glow or a border of chasing marquee bulbs.
+/// Changing the message drops the old text away while the new one bounces up from below.
+/// The old font size setting (8-48) maps onto four crisp sizes.
 /// </summary>
-public sealed class ScrollingTextApp : MatrixAppBase, IConfigurableApp
+public sealed class ScrollingTextApp : WidgetApp
 {
     public override string Id => "scrolling-text";
     public override string Name => "Scrolling Text";
 
-    private float _scrollPosition;
-    private Font? _font;
-    private int _displayWidth;
-    
-    // Settings
-    private string _message = "HELLO WORLD!";
-    private int _scrollSpeed = 30;
-    private string _textColor = "Red";
-    private string _backgroundColor = "Black";
-    private int _fontSize = 24;
-    private string _fontStyle = "Bold";
+    [Setting("Message", Description = "Text to scroll across the display")]
+    public string Message { get; set; } = "HELLO WORLD!";
 
-    public override async Task OnActivatedAsync((int height, int width) dimensions, IConfiguration configuration, CancellationToken cancellationToken)
-    {
-        await base.OnActivatedAsync(dimensions, configuration, cancellationToken);
-        _displayWidth = dimensions.width;
-        LoadFont();
-        _scrollPosition = dimensions.width;
-    }
+    [Setting("Scroll Speed", Description = "How fast the text scrolls (pixels/sec)", Min = 10, Max = 100)]
+    public int ScrollSpeed { get; set; } = 30;
 
-    private void LoadFont()
-    {
-        FontFamily fontFamily;
-        try
-        {
-            fontFamily = SystemFonts.Get("Nimbus Sans");
-        }
-        catch (Exception e)
-        {
-            fontFamily = SystemFonts.Get("Arial");
-        }
-        var style = _fontStyle == "Bold" ? FontStyle.Bold : FontStyle.Regular;
-        _font = fontFamily.CreateFont(_fontSize, style);
-    }
+    [Setting("Font Size", Description = "Size of the text (8-48): up to 12 small, 20 medium, 32 large, above that huge", Min = 8, Max = 48)]
+    public int FontSize { get; set; } = 24;
 
-    public override void Update(TimeSpan deltaTime, CancellationToken cancellationToken)
-    {
-        _scrollPosition -= _scrollSpeed * (float)deltaTime.TotalSeconds;
-        
-        // Reset when completely off screen
-        if (_font != null)
-        {
-            var textWidth = TextMeasurer.MeasureSize(_message, new TextOptions(_font)).Width;
-            if (_scrollPosition < -textWidth)
-            {
-                _scrollPosition = _displayWidth;
-            }
-        }
-    }
+    [Setting("Font Style", Description = "Bold or Regular", Options = ["Regular", "Bold"])]
+    public string FontStyle { get; set; } = "Bold";
 
-    public override void Render(FrameBuffer frame, CancellationToken cancellationToken)
-    {
-        if (_font == null) return;
+    [Setting("Text Color", Description = "Color of the text", Options = ["Red", "Green", "Blue", "Yellow", "Cyan", "Magenta", "Orange", "White"])]
+    public string TextColor { get; set; } = "Red";
 
-        using var image = new Image<Rgb24>(frame.Width, frame.Height);
-        
-        image.Mutate(ctx =>
-        {
-            ctx.Fill(GetBackgroundColor());
-            
-            var textOptions = new RichTextOptions(_font)
-            {
-                Origin = new PointF(_scrollPosition, frame.Height / 2f),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            
-            ctx.DrawText(textOptions, _message, GetTextColor());
-        });
-        
-        frame.RenderImage(image);
-    }
+    [Setting("Background Color", Description = "Background color", Options = ["Black", "DarkBlue", "DarkGray", "Navy"])]
+    public string BackgroundColor { get; set; } = "Black";
 
-    private Color GetTextColor()
-    {
-        return _textColor switch
-        {
-            "Red" => Color.Red,
-            "Green" => Color.Green,
-            "Blue" => Color.Blue,
-            "Yellow" => Color.Yellow,
-            "Cyan" => Color.Cyan,
-            "Magenta" => Color.Magenta,
-            "Orange" => Color.Orange,
-            "White" => Color.White,
-            _ => Color.Red
-        };
-    }
+    [Setting("Text Effect", Description = "How the text is coloured and animated", Options = ["Solid", "Gradient", "Rainbow", "Wave", "Rainbow Wave", "Fire"])]
+    public string TextEffect { get; set; } = "Gradient";
 
-    private Color GetBackgroundColor()
-    {
-        return _backgroundColor switch
-        {
-            "DarkBlue" => Color.DarkBlue,
-            "DarkGray" => Color.DarkGray,
-            "Navy" => Color.Navy,
-            _ => Color.Black
-        };
-    }
+    [Setting("Separator", Description = "Icon drawn between repeats of the message", Options = ["None", "Star", "Heart", "Bolt", "Diamond", "Dot", "Arrow"])]
+    public string Separator { get; set; } = "Star";
 
-    public IEnumerable<AppSetting> GetSettings()
-    {
-        return new[]
-        {
-            new AppSetting("message", "Message", "Text to scroll across the display", AppSettingType.String, "HELLO WORLD!", _message),
-            new AppSetting("scrollSpeed", "Scroll Speed", "How fast the text scrolls (pixels/sec)", AppSettingType.Integer, 30, _scrollSpeed, MinValue: 10, MaxValue: 100),
-            new AppSetting("fontSize", "Font Size", "Size of the text", AppSettingType.Integer, 24, _fontSize, MinValue: 8, MaxValue: 48),
-            new AppSetting("fontStyle", "Font Style", "Bold or Regular", AppSettingType.Select, "Bold", _fontStyle, 
-                Options: new[] { "Regular", "Bold" }),
-            new AppSetting("textColor", "Text Color", "Color of the text", AppSettingType.Select, "Red", _textColor, 
-                Options: new[] { "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta", "Orange", "White" }),
-            new AppSetting("backgroundColor", "Background Color", "Background color", AppSettingType.Select, "Black", _backgroundColor, 
-                Options: new[] { "Black", "DarkBlue", "DarkGray", "Navy" })
-        };
-    }
+    [Setting("Loop", Description = "Repeat the message continuously (off scrolls it once, then starts again)")]
+    public bool Loop { get; set; } = true;
 
-    public void UpdateSetting(string key, object value)
-    {
-        switch (key)
-        {
-            case "message":
-                _message = value?.ToString() ?? "HELLO WORLD!";
-                break;
-            case "scrollSpeed":
-                _scrollSpeed = value is System.Text.Json.JsonElement jsonSpeed 
-                    ? jsonSpeed.GetInt32() 
-                    : Convert.ToInt32(value);
-                break;
-            case "fontSize":
-                _fontSize = value is System.Text.Json.JsonElement jsonSize 
-                    ? jsonSize.GetInt32() 
-                    : Convert.ToInt32(value);
-                LoadFont();
-                break;
-            case "fontStyle":
-                _fontStyle = value?.ToString() ?? "Bold";
-                LoadFont();
-                break;
-            case "textColor":
-                _textColor = value?.ToString() ?? "Red";
-                break;
-            case "backgroundColor":
-                _backgroundColor = value?.ToString() ?? "Black";
-                break;
-        }
-    }
+    [Setting("Decoration", Description = "Edge treatment around the text", Options = ["None", "Edge Glow", "Chase Lights"])]
+    public string Decor { get; set; } = "Edge Glow";
+
+    protected override Node Build() => new Ticker(this);
 }

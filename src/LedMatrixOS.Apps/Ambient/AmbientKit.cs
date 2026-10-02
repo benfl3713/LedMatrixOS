@@ -9,6 +9,19 @@ internal static class Gfx
 {
     public static Pixel Mix(Pixel a, Pixel b, float t) => Pixel.Lerp(a, b, t);
 
+    /// <summary>Blends through hue (shortest way round the wheel) so a cyan to amber fade stays vivid instead of passing through grey.</summary>
+    public static Pixel HueMix(Pixel a, Pixel b, float t)
+    {
+        if (t <= 0f) return a;
+        if (t >= 1f) return b;
+        ToHsv(a, out var h1, out var s1, out var v1);
+        ToHsv(b, out var h2, out var s2, out var v2);
+        float d = h2 - h1;
+        if (d > 180f) d -= 360f;
+        else if (d < -180f) d += 360f;
+        return Pixel.FromHsv(h1 + d * t, s1 + (s2 - s1) * t, v1 + (v2 - v1) * t);
+    }
+
     public static Pixel Dim(Pixel p, float f) => p.WithBrightness(f);
 
     /// <summary>Hue in degrees, saturation and value 0-1.</summary>

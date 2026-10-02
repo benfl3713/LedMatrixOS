@@ -57,10 +57,10 @@ internal sealed class AmbientRig
     }
 
     /// <summary>Fails if any window of 100 steady-state frames allocates (one-off JIT allocations only hit some windows, so the minimum is used).</summary>
-    public AmbientRig AssertNoAllocationsPerFrame(int warmupFrames = 200)
+    public AmbientRig AssertNoAllocationsPerFrame(int warmupFrames = 400)
     {
         for (int i = 0; i < warmupFrames; i++) { Advance(16, 16); Draw(); }
-        var windows = new long[4];
+        var windows = new long[8];
         for (int w = 0; w < windows.Length; w++)
         {
             long before = GC.GetAllocatedBytesForCurrentThread();

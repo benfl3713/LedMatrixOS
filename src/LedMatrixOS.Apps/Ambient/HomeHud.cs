@@ -1,4 +1,5 @@
 using System.Globalization;
+using BdfFontParser;
 using System.Numerics;
 using LedMatrixOS.Core;
 using LedMatrixOS.Core.Animation;
@@ -14,6 +15,7 @@ internal sealed class DateBlock : Node
     private readonly HomeState _s;
     private readonly GlyphLine _weekday = new(), _date = new(), _ampm = new();
     private string _weekdayText = "", _dateText = "", _ampmText = "";
+    private readonly BdfFont _big = Fonts.Big, _sm = Fonts.Small, _tiny = Fonts.QuiteSmall;
 
     public DateBlock(HomeState state)
     {
@@ -35,9 +37,9 @@ internal sealed class DateBlock : Node
     protected override void OnRender(FrameBuffer frame, Rectangle bounds)
     {
         if (Alpha <= 0.01f) return;
-        _weekday.Set(Fonts.Big, _weekdayText);
-        _date.Set(Fonts.Small, _dateText);
-        _ampm.Set(Fonts.QuiteSmall, _ampmText);
+        _weekday.Set(_big, _weekdayText);
+        _date.Set(_sm, _dateText);
+        _ampm.Set(_tiny, _ampmText);
 
         var p = _s.Pal;
         int ampmH = _ampmText.Length > 0 ? _ampm.Height + 2 : 0;
