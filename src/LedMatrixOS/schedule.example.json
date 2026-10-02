@@ -1,0 +1,19 @@
+{
+  "playlists": [
+    {
+      "name": "commute",
+      "entries": [
+        { "appId": "commute", "durationMs": 30000 },
+        { "appId": "weather", "durationMs": 10000 }
+      ]
+    },
+    {
+      "name": "night",
+      "entries": [ { "appId": "clock", "durationMs": 60000 } ]
+    }
+  ],
+  "rules": [
+    { "playlistId": "commute", "priority": 100, "daysMask": 62, "startTime": "07:15", "endTime": "08:45" },
+    { "playlistId": "night", "priority": 90, "startTime": "23:00", "endTime": "07:00", "brightnessOverride": 20 }
+  ]
+}

@@ -39,7 +39,7 @@
 - Persistent overlays (badges) vs temporary (toasts/alerts)
 - Zero allocation in steady state
 
-**Test Status:** 656/656 passing
+**Test Status:** 681/681 passing
 
 ---
 
@@ -53,29 +53,17 @@
 - Verified in the simulator: toast renders over the running app, and a two-app playlist rotates with a brightness override.
 - Not done: Flutter and Home Assistant clients do not know the new endpoints yet, and the old `/api/notifications*` endpoints still use the full-screen interrupt path.
 
-### Phase 3.3: Real Weather (Open-Meteo)
-**Estimated:** ~200 lines
-- `Services/WeatherDataService.cs`: poll Open-Meteo API (free, no key)
-- Fetch: temperature, condition, rain chance, sunrise/sunset
-- Cache responses (update every 10 minutes)
-- `WeatherApp` rewrite to use real data instead of simulation
-- Animated scenes for each weather condition (rain particles, sun position, etc.)
-- Day/night sky following actual sunrise/sunset times
+### Phase 3.3a: Real Weather ✅
+Already delivered by the Phase 2 `WeatherApp` rewrite (Open-Meteo, location and units settings, animated scenes). Nothing further to do.
 
-**Files to modify:**
-- `src/LedMatrixOS/Program.cs`: register `WeatherDataService` 
-- `src/LedMatrixOS.Apps/WeatherApp.cs`: bind to `ILiveData<WeatherData>`
-- Keep existing widget-based UI from Phase 2 rewrite
-
----
-
-### Phase 3.3b: Commute Dashboard (Future)
-**Estimated:** ~150 lines
-- Composite app: `CommuteDashboardApp.cs`
-- Displays: next departures (2–3), line status pills, weather, time
-- Customizable via settings: home station, max departures, alert threshold
-- Uses: TubeDeparturesApp data (live), TubeStatusApp data (live), WeatherApp data
-- Best shown on weekday mornings (07:00–09:00 via schedule rule)
+### Phase 3.3b: Commute Dashboard ✅
+- `CommuteApp` (`id: commute`): the hero is "LEAVE IN n MIN" for the first train you can still walk to (green, then amber, then a flashing GO plate). It sits beside current weather, with line status pills and the clock along the bottom.
+- `Commute/CommutePlanner.cs`: pure logic with unit tests (walk time, urgency thresholds, all-missed).
+- Reuses the Tube departures data (`TflApi`, `DepartureBoardModel`, `LinePill`) and the Open-Meteo `IWeatherSource`.
+- Settings: Station ID (falls back to `Commute:StationId`, then `TubeDeparturesApp:StationId`), Platform Filter, Walk Minutes, Location, Units.
+- 25 tests including 7 goldens (reviewed by eye) and a zero-allocation steady-state test.
+- `src/LedMatrixOS/schedule.example.json` shows a weekday-morning commute playlist plus a night-dim rule; copy it next to the executable as `schedule.json`.
+- Limitation: there is no station search in this app yet. Use Tube Departures to find the Naptan ID.
 
 ### Phase 3.3c: Calendar & Home Assistant (Future)
 **Estimated:** ~200 lines
