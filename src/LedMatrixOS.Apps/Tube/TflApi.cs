@@ -88,6 +88,32 @@ internal sealed class TflApi(HttpClient http)
         return (matches.Length > 0 ? matches : ["No matches"], true);
     }
 
+    /// <summary>A bus stop's display name with its indicator, e.g. "Victoria Station (Stop B)".</summary>
+    public async Task<string> GetStopLabelAsync(string stopId, CancellationToken ct)
+    {
+        var data = await http.GetFromJsonAsync<StopPointName>(WithKey($"{Root}/StopPoint/{Uri.EscapeDataString(stopId)}"), ct);
+        if (string.IsNullOrWhiteSpace(data?.CommonName)) return "";
+        var name = StripStationSuffix(data.CommonName);
+        return string.IsNullOrWhiteSpace(data.Indicator) ? name : $"{name} ({data.Indicator.Trim()})";
+    }
+
+    /// <summary>Bus stops matching <paramref name="query"/> as "id | name" strings, or a single message such as "No matches".</summary>
+    public async Task<(string[] Options, bool Succeeded)> SearchBusStopsAsync(string query, CancellationToken ct)
+    {
+        var url = WithKey($"{Root}/StopPoint/Search/{Uri.EscapeDataString(query)}", "modes=bus&maxResults=12");
+        var response = await http.GetAsync(url, ct);
+        if (!response.IsSuccessStatusCode) return (["No matches"], false);
+
+        var data = await response.Content.ReadFromJsonAsync<SearchResponse>(ct);
+        var matches = (data?.Matches ?? [])
+            .Where(m => !string.IsNullOrWhiteSpace(m.Id) && !string.IsNullOrWhiteSpace(m.Name))
+            .DistinctBy(m => m.Id)
+            .Take(12)
+            .Select(m => $"{m.Id} | {m.Name.Trim()}")
+            .ToArray();
+        return (matches.Length > 0 ? matches : ["No matches"], true);
+    }
+
     public static string StripStationSuffix(string name) => name
         .Replace(" Underground Station", "", StringComparison.OrdinalIgnoreCase)
         .Replace(" Rail Station", "", StringComparison.OrdinalIgnoreCase)
@@ -112,7 +138,11 @@ internal sealed class TflApi(HttpClient http)
         return (match.Modes ?? []).Any(m => rail.Contains(m, StringComparer.OrdinalIgnoreCase));
     }
 
-    private sealed class StopPointName { [JsonPropertyName("commonName")] public string CommonName { get; set; } = ""; }
+    private sealed class StopPointName
+    {
+        [JsonPropertyName("commonName")] public string CommonName { get; set; } = "";
+        [JsonPropertyName("indicator")] public string? Indicator { get; set; }
+    }
 
     private sealed class SearchResponse { [JsonPropertyName("matches")] public SearchMatch[]? Matches { get; set; } }
 

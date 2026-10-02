@@ -62,6 +62,7 @@ internal sealed class DepartureBoardModel
     private readonly List<Departure> _scratch = new();
     private TflArrival[]? _source;
     private string _filter = "";
+    private string[] _routes = [];
     private int _max;
     private Departure[] _visible = [];
     private Departure[] _hero = [];
@@ -69,6 +70,12 @@ internal sealed class DepartureBoardModel
     private Departure[][] _pages = [];
 
     public TimeSpan Now { get; private set; }
+
+    /// <summary>
+    /// When set, the filter text is a comma separated list of route names (buses) that must match a departure's line name exactly,
+    /// instead of a substring of its platform.
+    /// </summary>
+    public bool FilterByRoute { get; set; }
 
     /// <summary>True once any arrivals have been seen for the current station.</summary>
     public bool HasSource => _source is not null;
@@ -111,6 +118,7 @@ internal sealed class DepartureBoardModel
         if (platformFilter != _filter || max != _max)
         {
             _filter = platformFilter;
+            _routes = _filter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             _max = max;
             dirty = true;
         }
@@ -119,7 +127,7 @@ internal sealed class DepartureBoardModel
         foreach (var d in _sorted)
         {
             if (d.RemainingSeconds(now) < -LingerSeconds) continue;
-            if (_filter.Length > 0 && !d.PlatformFilterText.Contains(_filter, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!PassesFilter(d)) continue;
             _scratch.Add(d);
             if (_scratch.Count >= max) break;
         }
@@ -127,6 +135,16 @@ internal sealed class DepartureBoardModel
         if (!dirty && SameAsVisible()) return false;
         Publish();
         return true;
+    }
+
+    private bool PassesFilter(Departure d)
+    {
+        if (_filter.Length == 0) return true;
+        if (!FilterByRoute) return d.PlatformFilterText.Contains(_filter, StringComparison.OrdinalIgnoreCase);
+
+        foreach (var route in _routes)
+            if (string.Equals(route, d.LineName, StringComparison.OrdinalIgnoreCase)) return true;
+        return _routes.Length == 0;
     }
 
     private bool SameAsVisible()
