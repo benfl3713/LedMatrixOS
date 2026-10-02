@@ -39,7 +39,7 @@
 - Persistent overlays (badges) vs temporary (toasts/alerts)
 - Zero allocation in steady state
 
-**Test Status:** 735/735 passing
+**Test Status:** 731/731 passing
 
 ---
 
