@@ -1,0 +1,63 @@
+show_toast:
+  name: Show message
+  description: Show a banner over whatever the matrix is displaying.
+  fields:
+    message:
+      name: Message
+      required: true
+      example: "Dinner is ready"
+      selector:
+        text:
+    seconds:
+      name: Duration
+      default: 4
+      selector:
+        number:
+          min: 1
+          max: 60
+          unit_of_measurement: s
+    color:
+      name: Text colour
+      description: Hex colour, e.g. "#000000".
+      selector:
+        text:
+    background:
+      name: Background colour
+      description: Hex colour, e.g. "#ffffff".
+      selector:
+        text:
+
+set_badge:
+  name: Set badge
+  description: Show a small corner indicator until it is dismissed. Using the same id again replaces it.
+  fields:
+    id:
+      name: Id
+      required: true
+      example: front_door
+      selector:
+        text:
+    color:
+      name: Colour
+      description: Hex colour, e.g. "#ff3c3c".
+      selector:
+        text:
+    pulsing:
+      name: Pulsing
+      default: true
+      selector:
+        boolean:
+
+dismiss_overlay:
+  name: Dismiss overlay
+  description: Remove one overlay by id, or every overlay when no id is given.
+  fields:
+    id:
+      name: Id
+      example: front_door
+      selector:
+        text:
+
+reload_schedule:
+  name: Reload schedule
+  description: Re-read schedule.json on the matrix.

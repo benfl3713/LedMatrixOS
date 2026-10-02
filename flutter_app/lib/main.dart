@@ -241,6 +241,34 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
   }
 
+  Future<void> _showMessageDialog() async {
+    final controller = TextEditingController();
+    final message = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Send message'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 60,
+          decoration: const InputDecoration(hintText: 'Shown as a banner on the matrix'),
+          onSubmitted: (value) => Navigator.pop(context, value),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Send')),
+        ],
+      ),
+    );
+
+    if (message == null || message.trim().isEmpty) return;
+    try {
+      await _api.showToast(message.trim());
+    } catch (e) {
+      // Silent error handling
+    }
+  }
+
   Future<void> _setPower(bool enabled) async {
     // Update UI immediately for responsiveness
     setState(() {
@@ -474,6 +502,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                             const AudioStreamWidget(),
                             const SizedBox(height: 16),
                           ],
+                          OutlinedButton.icon(
+                            onPressed: _showMessageDialog,
+                            icon: const Icon(Icons.campaign_rounded),
+                            label: const Text('Send message'),
+                          ),
+                          const SizedBox(height: 16),
                           _buildSectionLabel(context, 'APPS', _apps.length),
                           const SizedBox(height: 10),
                           ResponsiveAppGrid(

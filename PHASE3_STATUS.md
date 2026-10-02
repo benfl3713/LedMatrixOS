@@ -39,7 +39,7 @@
 - Persistent overlays (badges) vs temporary (toasts/alerts)
 - Zero allocation in steady state
 
-**Test Status:** 681/681 passing
+**Test Status:** 702/702 passing
 
 ---
 
@@ -65,13 +65,18 @@ Already delivered by the Phase 2 `WeatherApp` rewrite (Open-Meteo, location and 
 - `src/LedMatrixOS/schedule.example.json` shows a weekday-morning commute playlist plus a night-dim rule; copy it next to the executable as `schedule.json`.
 - Limitation: there is no station search in this app yet. Use Tube Departures to find the Naptan ID.
 
-### Phase 3.3c: Calendar & Home Assistant (Future)
-**Estimated:** ~200 lines
-- **CalendarApp.cs**: next event from ICS URL (via Poll<T>)
-- **HomeAssistantTilesApp.cs**: reverse HA integration (tile per sensor)
-- Use same PollingLiveData pattern as weather
+### Phase 3.3c: Home Assistant tiles ✅
+- `HomeAssistantTilesApp` (`id: ha-tiles`): up to four labelled tiles per page (numbers, on/off, N/A), paged with a fade. Entities are set as `sensor.x|Label, light.y`.
+- URL and long-lived token come from configuration only (`HomeAssistant:BaseUrl`, `HomeAssistant:Token`), never from a setting.
+- 17 tests (parsing, API client with a stub handler, goldens, zero-allocation).
+- Not done: calendar / ICS app.
 
-**Estimated:** ~550 lines total, ~3 weeks for 3.3a–3.3c
+### Client updates ✅
+- Home Assistant integration: services `show_toast`, `set_badge`, `dismiss_overlay`, `reload_schedule` (see `services.yaml`). The new apps appear in the existing app select automatically.
+- Flutter: `showToast`, `setBadge`, `dismissOverlay`, `clearOverlays`, `reloadSchedule`, `getHealth`, a "Send message" button and icons for the new apps. **Not compiled**: the installed Flutter SDK (Dart 3.7) cannot resolve the project's `flutter_lints` constraint.
+
+### Crash card ✅
+Any app that throws shows its name and exception on the panel instead of freezing (`CrashGuard` + `CrashCard`), retries after 5s, and clears on app switch.
 
 ---
 

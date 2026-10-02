@@ -85,6 +85,55 @@ class LedMatrixApi {
     return response.statusCode == 200;
   }
   
+  /// Shows a banner over whatever is running. Colours are hex strings such as "#ff0000".
+  Future<bool> showToast(String message, {double seconds = 4, String? color, String? background}) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/overlays/toast'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'message': message,
+        'seconds': seconds,
+        if (color != null) 'color': color,
+        if (background != null) 'background': background,
+      }),
+    );
+
+    return response.statusCode == 200;
+  }
+
+  Future<bool> setBadge(String id, {String? color, bool pulsing = true}) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/overlays/badge'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'id': id, if (color != null) 'color': color, 'pulsing': pulsing}),
+    );
+
+    return response.statusCode == 200;
+  }
+
+  Future<bool> dismissOverlay(String id) async {
+    final response = await http.delete(Uri.parse('$baseUrl/api/overlays/${Uri.encodeComponent(id)}'));
+    return response.statusCode == 200;
+  }
+
+  Future<bool> clearOverlays() async {
+    final response = await http.delete(Uri.parse('$baseUrl/api/overlays'));
+    return response.statusCode == 200;
+  }
+
+  Future<bool> reloadSchedule() async {
+    final response = await http.post(Uri.parse('$baseUrl/api/schedule/reload'));
+    return response.statusCode == 200;
+  }
+
+  Future<Map<String, dynamic>> getHealth() async {
+    final response = await http.get(Uri.parse('$baseUrl/api/health'));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to load health: ${response.statusCode}');
+  }
+
   String getPreviewUrl() {
     return '$baseUrl/preview?_=${DateTime.now().millisecondsSinceEpoch}';
   }

@@ -97,3 +97,52 @@ class LedMatrixCoordinator(DataUpdateCoordinator):
             _LOGGER.error("Error activating app: %s", err)
             return False
 
+    async def _post_json(self, path: str, payload: dict[str, Any]) -> bool:
+        """POST a JSON body and report whether the device accepted it."""
+        try:
+            async with self.session.post(f"{self.base_url}/{path}", json=payload) as response:
+                return response.status == 200
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error calling %s: %s", path, err)
+            return False
+
+    async def show_toast(
+        self,
+        message: str,
+        seconds: float = 4,
+        color: str | None = None,
+        background: str | None = None,
+    ) -> bool:
+        """Show a banner over whatever is running."""
+        payload: dict[str, Any] = {"message": message, "seconds": seconds}
+        if color:
+            payload["color"] = color
+        if background:
+            payload["background"] = background
+        return await self._post_json("overlays/toast", payload)
+
+    async def set_badge(self, badge_id: str, color: str | None = None, pulsing: bool = True) -> bool:
+        """Show (or replace) a corner badge until it is dismissed."""
+        payload: dict[str, Any] = {"id": badge_id, "pulsing": pulsing}
+        if color:
+            payload["color"] = color
+        return await self._post_json("overlays/badge", payload)
+
+    async def dismiss_overlay(self, overlay_id: str | None = None) -> bool:
+        """Dismiss one overlay by id, or all of them when no id is given."""
+        path = f"overlays/{overlay_id}" if overlay_id else "overlays"
+        try:
+            async with self.session.delete(f"{self.base_url}/{path}") as response:
+                return response.status == 200
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error dismissing overlay: %s", err)
+            return False
+
+    async def reload_schedule(self) -> bool:
+        """Re-read schedule.json on the device."""
+        try:
+            async with self.session.post(f"{self.base_url}/schedule/reload") as response:
+                return response.status == 200
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error reloading schedule: %s", err)
+            return False

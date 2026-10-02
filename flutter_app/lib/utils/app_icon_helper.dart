@@ -13,6 +13,12 @@ class AppIconHelper {
       case 'countdown-timer':
         return Icons.timer_rounded;
 
+      // Everyday
+      case 'commute':
+        return Icons.directions_walk_rounded;
+      case 'ha-tiles':
+        return Icons.home_rounded;
+
       // Visuals
       case 'solid_color':
         return Icons.circle;
