@@ -16,7 +16,8 @@ public class AppSnapshotTests
     [Fact]
     public void SolidColorApp_Snapshot()
     {
-        var frame = SnapshotHelper.RenderApp(new SolidColorApp());
+        // SolidColorApp is a WidgetApp now, so it needs FrameContext updates; the default "Solid" mode is still one flat colour.
+        var frame = AmbientRig.Render(new SolidColorApp(), TimeSpan.FromMilliseconds(100));
         SnapshotHelper.AssertMatchesSnapshot(frame, "solid_color_default");
     }
 
