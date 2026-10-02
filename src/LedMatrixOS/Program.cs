@@ -18,8 +18,8 @@ builder.Configuration
 
 // Settings
 var config = builder.Configuration.Get<AppConfig>();
-int width = 256;
-int height = 64;
+int width = builder.Configuration.GetValue("Display:Width", 256);
+int height = builder.Configuration.GetValue("Display:Height", 64);
 bool useSimulator = builder.Configuration.GetValue("Matrix:UseSimulator", false);
 
 Fonts.Load();
@@ -137,6 +137,17 @@ app.MapPost("/api/apps/{id}/settings", async (string id, Dictionary<string, obje
     
     return Results.BadRequest("App does not support configuration");
 });
+
+app.MapGet("/api/health", (RenderEngine eng, IMatrixDevice device, AppManager apps) =>
+    Results.Ok(new
+    {
+        status = eng.IsRunning ? "ok" : "stopped",
+        activeApp = apps.ActiveApp?.Id,
+        device.IsEnabled,
+        device.Width,
+        device.Height,
+        uptimeSeconds = (int)(DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalSeconds,
+    }));
 
 app.MapGet("/api/settings", (IMatrixDevice device, RenderEngine eng) => 
     Results.Ok(new { 
