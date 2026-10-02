@@ -7,7 +7,7 @@ namespace LedMatrixOS.Core.Overlays;
 /// </summary>
 public abstract class OverlayBase : IOverlay
 {
-    private float _opacity = 1f;
+    private float _opacity = 0f;
     private TimeSpan _elapsedTime = TimeSpan.Zero;
 
     public string Id { get; }

@@ -119,10 +119,30 @@ public sealed class OverlaySystemTests
         // Should stay opaque until duration expires
         toast.Update(TimeSpan.FromMilliseconds(8000));
         Assert.True(toast.Opacity > 0.9f);
-        Assert.True(toast.IsExiting); // Duration passed, start fading out
+        Assert.False(toast.IsExiting);
 
-        // After another 150ms, should fade out
+        // Elapsed 10.05s: past the 10s duration, 50ms into the 150ms fade-out
+        toast.Update(TimeSpan.FromMilliseconds(1900));
+        Assert.True(toast.IsExiting);
+        Assert.InRange(toast.Opacity, 0.5f, 0.9f);
+
         toast.Update(TimeSpan.FromMilliseconds(200));
-        Assert.True(toast.Opacity < 0.5f);
+        Assert.True(toast.ShouldDismiss);
+    }
+
+    [Fact]
+    public void Manager_CompositesBadgeOntoFrameAtItsBounds()
+    {
+        var mgr = new OverlayManager(32, 16);
+        var frame = new FrameBuffer(32, 16);
+        var red = new Pixel(255, 0, 0);
+        mgr.Add(new BadgeOverlay("b", new Rectangle(20, 4, 4, 4), red));
+        mgr.Update(TimeSpan.FromSeconds(1)); // past the fade-in
+
+        mgr.RenderOverlays(frame, new FrameContext(TimeSpan.Zero, TimeSpan.Zero, 0));
+
+        Assert.Equal(red, frame.GetPixel(21, 5));
+        Assert.Equal(Pixel.Black, frame.GetPixel(0, 0));
+        Assert.Equal(Pixel.Black, frame.GetPixel(25, 5));
     }
 }

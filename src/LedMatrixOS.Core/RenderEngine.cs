@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using LedMatrixOS.Core.Overlays;
 using LedMatrixOS.Core.Transitions;
 using Microsoft.Extensions.Logging;
 
@@ -37,6 +38,9 @@ public sealed class RenderEngine : IDisposable
 
     public TransitionRegistry Transitions { get; }
 
+    /// <summary>Toasts, badges and alerts composited over whatever is running (after post-effects).</summary>
+    public OverlayManager Overlays { get; }
+
     /// <summary>Name of a registered transition or "random" (a new pick for every app switch).</summary>
     public string TransitionName { get; set; } = "slide-up";
 
@@ -56,13 +60,14 @@ public sealed class RenderEngine : IDisposable
     }
 
     public RenderEngine(IMatrixDevice device, AppManager apps, InterruptService interruptService,
-        TransitionRegistry? transitions = null, ILogger<RenderEngine>? logger = null)
+        TransitionRegistry? transitions = null, ILogger<RenderEngine>? logger = null, OverlayManager? overlays = null)
     {
         _device = device;
         _apps = apps;
         _interruptService = interruptService;
         _logger = logger;
         Transitions = transitions ?? new TransitionRegistry();
+        Overlays = overlays ?? new OverlayManager(device.Width, device.Height);
         _frame = new FrameBuffer(device.Width, device.Height);
         _appFrame = new FrameBuffer(device.Width, device.Height);
         _oldFrame = new FrameBuffer(device.Width, device.Height);
@@ -172,6 +177,9 @@ public sealed class RenderEngine : IDisposable
 
                         foreach (var effect in PostEffects)
                             effect.Apply(_frame, ctx);
+
+                        Overlays.Update(delta);
+                        Overlays.RenderOverlays(_frame, ctx);
 
                         _device.Present(_frame);
                         _hasPresentedFrame = true;

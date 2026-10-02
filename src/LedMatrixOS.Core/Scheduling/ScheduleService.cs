@@ -20,6 +20,17 @@ public sealed class ScheduleService
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
+    /// <summary>Callers that mutate the schedule (reload) while the runner reads it lock on this.</summary>
+    public object Gate { get; } = new();
+
+    public void Clear()
+    {
+        _playlists.Clear();
+        _rules.Clear();
+        _activePlaylistId = null;
+        _activeEntryIndex = 0;
+    }
+
     /// <summary>Add a playlist to the scheduler. Later calls override earlier ones.</summary>
     public void RegisterPlaylist(PlaylistConfig config)
     {
@@ -54,7 +65,16 @@ public sealed class ScheduleService
                         var appId = e.GetProperty("appId").GetString() ?? "";
                         var durationMs = e.GetProperty("durationMs").GetInt32();
                         var duration = TimeSpan.FromMilliseconds(durationMs);
-                        var entry = new PlaylistEntry(appId, duration);
+                        Dictionary<string, string>? overrides = null;
+                        if (e.TryGetProperty("settings", out var settingsElem) && settingsElem.ValueKind == JsonValueKind.Object)
+                        {
+                            overrides = new();
+                            foreach (var prop in settingsElem.EnumerateObject())
+                                overrides[prop.Name] = prop.Value.ValueKind == JsonValueKind.String
+                                    ? prop.Value.GetString() ?? "" : prop.Value.GetRawText();
+                        }
+                        var transition = e.TryGetProperty("transition", out var tr) ? tr.GetString() : null;
+                        var entry = new PlaylistEntry(appId, duration, overrides, transition);
                         entries.Add(entry);
                     }
                     RegisterPlaylist(new PlaylistConfig { Name = name, Entries = entries });
@@ -94,9 +114,10 @@ public sealed class ScheduleService
     public string? GetActiveAppId()
     {
         var now = _timeProvider.GetUtcNow();
+        var local = _timeProvider.GetLocalNow().DateTime;
 
         // Find the active playlist based on current time and rules
-        var applicableRule = _rules.FirstOrDefault(r => r.Matches(now.DateTime));
+        var applicableRule = _rules.FirstOrDefault(r => r.Matches(local));
         var targetPlaylistId = applicableRule?.PlaylistId;
 
         // If the active playlist changed, restart from index 0
@@ -142,7 +163,7 @@ public sealed class ScheduleService
     /// <summary>Get the active brightness override, if any.</summary>
     public byte? GetActiveBrightnessOverride()
     {
-        var now = _timeProvider.GetUtcNow();
-        return _rules.FirstOrDefault(r => r.Matches(now.DateTime))?.BrightnessOverride;
+        var local = _timeProvider.GetLocalNow().DateTime;
+        return _rules.FirstOrDefault(r => r.Matches(local))?.BrightnessOverride;
     }
 }

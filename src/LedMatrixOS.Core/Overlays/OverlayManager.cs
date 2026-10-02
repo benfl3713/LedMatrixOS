@@ -9,9 +9,13 @@ namespace LedMatrixOS.Core.Overlays;
 public sealed class OverlayManager
 {
     private readonly List<IOverlay> _overlays = new();
+    private readonly object _gate = new();
     private readonly FrameBuffer _clipBuffer;
 
-    public int Count => _overlays.Count;
+    public int Width => _clipBuffer.Width;
+    public int Height => _clipBuffer.Height;
+
+    public int Count { get { lock (_gate) return _overlays.Count; } }
 
     public OverlayManager(int width = 256, int height = 64)
     {
@@ -21,14 +25,18 @@ public sealed class OverlayManager
     /// <summary>Add an overlay to the manager. It will be rendered next frame.</summary>
     public void Add(IOverlay overlay)
     {
-        if (overlay.Opacity <= 0) return; // Skip fully transparent overlays
+        lock (_gate)
+        {
         _overlays.Add(overlay);
         _overlays.Sort((a, b) => a.Priority.CompareTo(b.Priority)); // Maintain priority order
+            }
     }
 
     /// <summary>Update all overlays and remove dismissed ones.</summary>
     public void Update(TimeSpan deltaTime)
     {
+        lock (_gate)
+        {
         for (int i = _overlays.Count - 1; i >= 0; i--)
         {
             if (_overlays[i] is OverlayBase overlay)
@@ -39,11 +47,14 @@ public sealed class OverlayManager
                 }
             }
         }
+            }
     }
 
     /// <summary>Composite all overlays onto the frame. Called after the main app render.</summary>
     public void RenderOverlays(FrameBuffer frame, FrameContext context)
     {
+        lock (_gate)
+        {
         // Render in priority order (lowest first, so they layer correctly)
         foreach (var overlay in _overlays)
         {
@@ -59,21 +70,27 @@ public sealed class OverlayManager
             // Composite the clipped result onto the main frame
             BlendRegionToFrame(frame, bounds, _clipBuffer, overlay.Opacity);
         }
+            }
     }
 
     /// <summary>Dismiss all overlays with priority <= maxPriority (for input handling, low priority first).</summary>
     public void DismissUpTo(int maxPriority)
     {
+        lock (_gate)
+        {
         foreach (var overlay in _overlays)
         {
             if (overlay.Priority <= maxPriority && overlay is OverlayBase b)
                 b.Dismiss();
         }
+            }
     }
 
     /// <summary>Dismiss a specific overlay by ID.</summary>
     public bool Dismiss(string id)
     {
+        lock (_gate)
+        {
         var overlay = _overlays.FirstOrDefault(o => o.Id == id);
         if (overlay is OverlayBase b)
         {
@@ -81,12 +98,16 @@ public sealed class OverlayManager
             return true;
         }
         return false;
+            }
     }
 
     /// <summary>Clear all overlays immediately.</summary>
     public void Clear()
     {
+        lock (_gate)
+        {
         _overlays.Clear();
+            }
     }
 
     private void BlendRegionToFrame(FrameBuffer frame, Rectangle bounds, FrameBuffer source, float opacity)

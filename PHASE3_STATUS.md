@@ -39,26 +39,19 @@
 - Persistent overlays (badges) vs temporary (toasts/alerts)
 - Zero allocation in steady state
 
-**Test Status:** 655/655 tests passing (640 existing + 15 new)
+**Test Status:** 656/656 passing
 
 ---
 
 ## In Progress / Planned
 
-### Phase 3.2b: RenderEngine Integration (Next)
-**Estimated:** ~100 lines
-- Inject `ScheduleService` into `RenderEngine` 
-- Call `scheduler.GetActiveAppId()` instead of hard-coded app
-- Call `scheduler.GetActiveBrightnessOverride()` and apply to device
-- Integrate `OverlayManager`:
-  - Create manager singleton
-  - Call `manager.Update()` each frame
-  - Call `manager.RenderOverlays()` after app render, before device present
-- Add REST endpoints:
-  - `POST /api/scheduler/reload` (load schedules.json)
-  - `POST /api/overlays/toast` (add toast with message)
-  - `POST /api/overlays/badge` (add badge by ID)
-  - `POST /api/overlays/dismiss/{id}` (dismiss overlay)
+### Phase 3.2b: RenderEngine Integration ✅
+- `RenderEngine.Overlays` is updated and composited each frame, after post-effects.
+- `ScheduleRunner` (hosted service) applies the schedule once a second. It is edge-triggered, so a manual app switch sticks until the playlist next rotates. It also applies per-entry settings overrides and brightness overrides (the previous brightness is restored when the rule ends).
+- Rules match against local time. `schedule.json` is read from the app directory.
+- Endpoints: `POST /api/overlays/toast`, `POST /api/overlays/badge`, `DELETE /api/overlays/{id}`, `DELETE /api/overlays`, `POST /api/schedule/reload`, `GET /api/schedule`.
+- Verified in the simulator: toast renders over the running app, and a two-app playlist rotates with a brightness override.
+- Not done: Flutter and Home Assistant clients do not know the new endpoints yet, and the old `/api/notifications*` endpoints still use the full-screen interrupt path.
 
 ### Phase 3.3: Real Weather (Open-Meteo)
 **Estimated:** ~200 lines

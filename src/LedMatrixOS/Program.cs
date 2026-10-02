@@ -2,6 +2,7 @@ using System.Text.Json;
 using LedMatrixOS;
 using LedMatrixOS.Apps;
 using LedMatrixOS.Core;
+using LedMatrixOS.Core.Scheduling;
 using LedMatrixOS.Core.Transitions;
 using LedMatrixOS.Endpoints;
 using LedMatrixOS.Graphics.Text;
@@ -41,6 +42,14 @@ builder.Services.AddSingleton<AppManager>(sp =>
 });
 builder.Services.AddSingleton<AudioDataService>();
 builder.Services.AddSingleton<InterruptService>();
+var schedulePath = Path.Combine(AppContext.BaseDirectory, "schedule.json");
+builder.Services.AddSingleton<ScheduleService>(_ =>
+{
+    var schedule = new ScheduleService();
+    schedule.TryLoadFromJson(schedulePath);
+    return schedule;
+});
+builder.Services.AddHostedService<ScheduleRunner>();
 builder.Services.AddSingleton<IMatrixDevice>(sp =>
 {
     if (useSimulator)
@@ -219,6 +228,7 @@ app.MapGet("/api/audio/status", (AudioDataService audioService) =>
 });
 
 app.MapNotificationEndpoints();
+app.MapOverlayEndpoints(schedulePath);
 
 app.Run();
 
