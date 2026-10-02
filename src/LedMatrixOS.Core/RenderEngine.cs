@@ -83,6 +83,7 @@ public sealed class RenderEngine : IDisposable
         var sw = new Stopwatch();
         sw.Start();
         var last = sw.Elapsed;
+        long frameIndex = 0;
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -116,7 +117,7 @@ public sealed class RenderEngine : IDisposable
                 {
                     try
                     {
-                        app.Update(delta, cancellationToken);
+                        app.Update(new FrameContext(now, delta, frameIndex++), cancellationToken);
                         _frame.Clear(Pixel.Black);
                         app.Render(_frame, cancellationToken);
                         

@@ -30,12 +30,13 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod());
 });
 
+builder.Services.AddHttpClient();
 builder.Services.AddSingleton<AppSettingsStorage>(_ => 
     new AppSettingsStorage(Path.Combine(AppContext.BaseDirectory, "app-settings.json")));
 builder.Services.AddSingleton<AppManager>(sp => 
 {
     var settingsStorage = sp.GetRequiredService<AppSettingsStorage>();
-    return new AppManager(builder.Configuration, height, width, settingsStorage);
+    return new AppManager(sp, builder.Configuration, height, width, settingsStorage);
 });
 builder.Services.AddSingleton<AudioDataService>();
 builder.Services.AddSingleton<InterruptService>();
@@ -72,16 +73,6 @@ app.UseCors();
 // Start render loop
 var engine = app.Services.GetRequiredService<RenderEngine>();
 var appManager = app.Services.GetRequiredService<AppManager>();
-var audioService = app.Services.GetRequiredService<AudioDataService>();
-
-// Set up audio service for equalizer app when it's activated
-appManager.AppActivated += (sender, appInstance) =>
-{
-    if (appInstance is EqualizerApp equalizerApp)
-    {
-        equalizerApp.SetAudioService(audioService);
-    }
-};
 
 await appManager.ActivateAsync("home", CancellationToken.None);
 engine.Start();
@@ -90,12 +81,7 @@ app.Lifetime.ApplicationStopping.Register(engine.Stop);
 // API endpoints
 app.MapGet("/api/apps", (AppManager appManager) => 
 {
-    var apps = appManager.Apps.Select(appType =>
-    {
-        var instance = (IMatrixApp?)Activator.CreateInstance(appType);
-        var hasSettings = instance is IConfigurableApp;
-        return new { Id = instance?.Id, Name = instance?.Name, HasSettings = hasSettings };
-    }).ToList();
+    var apps = appManager.AppInfos.Select(i => new { i.Id, i.Name, i.HasSettings }).ToList();
     return Results.Ok(new { apps, activeApp = appManager.ActiveApp?.Id });
 });
 

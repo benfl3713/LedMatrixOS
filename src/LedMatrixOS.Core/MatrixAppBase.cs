@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using LedMatrixOS.Core.Data;
 using Microsoft.Extensions.Configuration;
 
 namespace LedMatrixOS.Core;
@@ -43,7 +44,26 @@ public abstract class MatrixAppBase : IMatrixApp
         _backgroundTasks.Add(task);
     }
 
-    public abstract void Update(TimeSpan deltaTime, CancellationToken cancellationToken);
+    protected ILiveData<T> Poll<T>(TimeSpan interval, Func<CancellationToken, Task<T>> fetch)
+    {
+        var data = new PollingLiveData<T>(interval, fetch);
+        RunInBackground(data.RunAsync);
+        return data;
+    }
+
+    /// <summary>
+    /// Called by the engine every frame. Defaults to the legacy <see cref="Update(TimeSpan, CancellationToken)"/>,
+    /// so override either one (the FrameContext overload wins if both are overridden).
+    /// </summary>
+    public virtual void Update(FrameContext context, CancellationToken cancellationToken)
+    {
+        Update(context.Delta, cancellationToken);
+    }
+
+    public virtual void Update(TimeSpan deltaTime, CancellationToken cancellationToken)
+    {
+    }
+
     public abstract void Render(FrameBuffer frame, CancellationToken cancellationToken);
 }
 
