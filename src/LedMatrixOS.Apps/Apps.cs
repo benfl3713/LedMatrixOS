@@ -26,5 +26,6 @@ public static class BuiltInApps
         yield return typeof(TubeStatusApp);
         yield return typeof(TubeLineApp);
         yield return typeof(TubeDeparturesApp);
+        yield return typeof(WidgetDemoApp);
     }
 }
