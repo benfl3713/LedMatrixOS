@@ -25,12 +25,17 @@ public static class SettingsBinder
         }
     }
 
-    /// <summary>Applies a value to the setting with the given key. Returns false if no such setting exists.</summary>
-    public static bool TryUpdate(object target, string key, object value)
+    /// <summary>
+    /// Applies a value to the setting with the given key (case-insensitive). Returns false if no such setting exists;
+    /// <paramref name="canonicalKey"/> is the setting's own camelCase key however the caller spelled it.
+    /// </summary>
+    public static bool TryUpdate(object target, string key, object value, out string canonicalKey)
     {
+        canonicalKey = key;
         var entry = Cache.GetOrAdd(target.GetType(), Discover)
             .FirstOrDefault(e => string.Equals(e.Key, key, StringComparison.OrdinalIgnoreCase));
         if (entry == null) return false;
+        canonicalKey = entry.Key;
 
         var property = entry.Property;
         var current = property.GetValue(target);

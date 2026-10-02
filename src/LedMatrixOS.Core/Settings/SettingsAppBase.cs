@@ -10,9 +10,9 @@ public abstract class SettingsAppBase : MatrixAppBase, IConfigurableApp
 
     public void UpdateSetting(string key, object value)
     {
-        if (SettingsBinder.TryUpdate(this, key, value))
+        if (SettingsBinder.TryUpdate(this, key, value, out var canonicalKey))
         {
-            OnSettingChanged(key);
+            OnSettingChanged(canonicalKey);
         }
     }
 
