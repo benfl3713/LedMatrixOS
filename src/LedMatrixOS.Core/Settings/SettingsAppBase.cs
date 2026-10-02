@@ -6,9 +6,9 @@ namespace LedMatrixOS.Core.Settings;
 /// </summary>
 public abstract class SettingsAppBase : MatrixAppBase, IConfigurableApp
 {
-    public IEnumerable<AppSetting> GetSettings() => SettingsBinder.GetSettings(this);
+    public virtual IEnumerable<AppSetting> GetSettings() => SettingsBinder.GetSettings(this);
 
-    public void UpdateSetting(string key, object value)
+    public virtual void UpdateSetting(string key, object value)
     {
         if (SettingsBinder.TryUpdate(this, key, value, out var canonicalKey))
         {

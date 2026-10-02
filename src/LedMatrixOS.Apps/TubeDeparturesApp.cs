@@ -1,14 +1,17 @@
 using BdfFontParser;
 using LedMatrixOS.Core;
+using LedMatrixOS.Core.Data;
+using LedMatrixOS.Core.Settings;
 using LedMatrixOS.Graphics.Text;
 using Microsoft.Extensions.Configuration;
-using System.Text.Json;
+using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using LedMatrixOS.Graphics;
+using SixLabors.ImageSharp;
 
 namespace LedMatrixOS.Apps;
 
-public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
+public class TubeDeparturesApp : SettingsAppBase
 {
     public override string Id => "tube-departures";
     public override string Name => "Tube Departures";
@@ -17,26 +20,38 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
     private BdfFont _font = Fonts.Big;
     private Pixel _color = new Pixel(255, 120, 0);
 
-    // Configurable settings
-    private string _stationId = "";
-    private string _stationSearch = "";
-    private string _platformFilter = "";
-    private int _maxDepartures = 3;
-    private bool _colorDeparturesByLine;
+    private const string NoStationSearchHint = "Type at least 2 chars";
 
+    // Configurable settings (declaration order is the order they appear in the UI; stationSelect is inserted after stationSearch)
+    [Setting("Station Search", Description = "Type a station name (e.g. Baker Street).")]
+    public string StationSearch { get; set; } = "";
+
+    [Setting("Station ID", Description = "TfL Naptan ID (auto-filled when you select from Station Select).")]
+    public string StationId { get; set; } = "";
+
+    [Setting("Platform Filter", Description = "Filter by platform name (e.g. 'Eastbound'). Leave empty to show all platforms.")]
+    public string PlatformFilter { get; set; } = "";
+
+    [Setting("Max Departures", Description = "Number of departures to cycle through", Min = 1, Max = 12)]
+    public int MaxDepartures { get; set; } = 3;
+
+    [Setting("Colour Departures By Line", Description = "When enabled, each departure row uses the line colour.")]
+    public bool ColorDeparturesByLine { get; set; }
+
+    private readonly HttpClient _http;
     private string? _appKey;
-    private volatile Departure[] _departures = Array.Empty<Departure>();
-    private volatile bool _isLoading = true;
     private readonly TimeSpan _refreshInterval = TimeSpan.FromSeconds(30);
-    private DateTime _lastRefresh = DateTime.MinValue;
-    private volatile StationLineStatus[] _stationLineStatuses = Array.Empty<StationLineStatus>();
-    private volatile string[] _stationLineIds = Array.Empty<string>();
     private readonly TimeSpan _lineStatusRefreshInterval = TimeSpan.FromMinutes(5);
-    private DateTime _lastLineStatusRefresh = DateTime.MinValue;
-    private volatile string _stationName = "";
-    private bool _stationNameFetched = false;
-    private volatile string[] _stationSearchOptions = new[] { "Type at least 2 chars" };
-    private volatile bool _stationSearchDirty;
+    private readonly TimeSpan _stationNameRefreshInterval = TimeSpan.FromHours(6);
+
+    // Live data for the current station; replaced (and the old polls stopped) whenever the station changes
+    private volatile ILiveData<ArrivalData[]>? _arrivals;
+    private volatile ILiveData<StationLineStatus[]>? _lineStatuses;
+    private volatile ILiveData<string>? _stationNameData;
+    private CancellationTokenSource? _stationPollCts;
+    private DateTimeOffset? _arrivalsSeenAt;
+
+    private volatile string[] _stationSearchOptions = new[] { NoStationSearchHint };
     private string _stationSearchLastQuery = "";
     private readonly TimeSpan _departurePageInterval = TimeSpan.FromSeconds(8);
     private DateTime _lastDeparturePageSwitch = DateTime.MinValue;
@@ -51,6 +66,12 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
     private const int VisibleDepartureRows = 3;
     private const int DeparturesClipTopY = 0;
     private const int DeparturesClipBottomY = 46;
+
+    public TubeDeparturesApp(HttpClient httpClient)
+    {
+        _http = httpClient;
+        _http.Timeout = TimeSpan.FromSeconds(10);
+    }
 
     private class Departure
     {
@@ -129,24 +150,6 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         public string[]? Modes { get; set; }
     }
 
-    private static readonly Dictionary<string, Pixel> TubeLineColors = new(StringComparer.OrdinalIgnoreCase)
-    {
-        { "bakerloo",         new Pixel(156, 105, 56)  },
-        { "central",          new Pixel(220, 36,  35)  },
-        { "circle",           new Pixel(255, 206, 0)   },
-        { "district",         new Pixel(0,   114, 41)  },
-        { "hammersmith-city", new Pixel(215, 153, 175) },
-        { "jubilee",          new Pixel(161, 165, 167) },
-        { "metropolitan",     new Pixel(155, 0,   88)  },
-        { "northern",         new Pixel(90,  90,  90)  },
-        { "piccadilly",       new Pixel(0,   24,  168) },
-        { "victoria",         new Pixel(0,   160, 226) },
-        { "waterloo-city",    new Pixel(100, 200, 150) },
-        { "dlr",              new Pixel(0,   175, 173) },
-        { "elizabeth",        new Pixel(126, 91,  198) },
-        { "overground",       new Pixel(232, 106, 16)  },
-    };
-
     private static readonly Dictionary<string, string> LineAbbreviations = new(StringComparer.OrdinalIgnoreCase)
     {
         { "bakerloo",         "BL" },
@@ -165,142 +168,53 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         { "overground",       "OV" },
     };
 
-    public IEnumerable<AppSetting> GetSettings()
+    // stationSelect has options that change as the user types, so it is not a [Setting] property.
+    public override IEnumerable<AppSetting> GetSettings()
     {
-        return new[]
+        foreach (var setting in base.GetSettings())
         {
-            new AppSetting("stationSearch", "Station Search", "Type a station name (e.g. Baker Street).", AppSettingType.String, "", _stationSearch),
-            new AppSetting("stationSelect", "Station Select", "Choose a result to set the station automatically.", AppSettingType.Select, "", "", Options: _stationSearchOptions),
-            new AppSetting("stationId", "Station ID", "TfL Naptan ID (auto-filled when you select from Station Select).", AppSettingType.String, "", _stationId),
-            new AppSetting("platformFilter", "Platform Filter", "Filter by platform name (e.g. 'Eastbound'). Leave empty to show all platforms.", AppSettingType.String, "", _platformFilter),
-            new AppSetting("maxDepartures", "Max Departures", "Number of departures to cycle through", AppSettingType.Integer, 3, _maxDepartures, 1, 12),
-            new AppSetting("colorDeparturesByLine", "Colour Departures By Line", "When enabled, each departure row uses the line colour.", AppSettingType.Boolean, false, _colorDeparturesByLine),
-        };
+            yield return setting;
+            if (setting.Key == "stationSearch")
+            {
+                yield return new AppSetting("stationSelect", "Station Select", "Choose a result to set the station automatically.", AppSettingType.Select, "", "", Options: _stationSearchOptions);
+            }
+        }
     }
 
-    public void UpdateSetting(string key, object value)
+    public override void UpdateSetting(string key, object value)
+    {
+        if (key != "stationSelect")
+        {
+            base.UpdateSetting(key, value);
+            return;
+        }
+
+        var selected = value.ToString() ?? "";
+        var splitIndex = selected.IndexOf(" | ", StringComparison.Ordinal);
+        if (splitIndex > 0)
+        {
+            var selectedStationId = selected[..splitIndex].Trim();
+            if (!string.IsNullOrWhiteSpace(selectedStationId))
+            {
+                ApplyStationId(selectedStationId);
+            }
+        }
+    }
+
+    protected override void OnSettingChanged(string key)
     {
         switch (key)
         {
             case "stationSearch":
-                _stationSearch = value.ToString() ?? "";
-                _stationSearchDirty = true;
-                if (_stationSearch.Trim().Length < 2)
-                {
-                    _stationSearchOptions = new[] { "Type at least 2 chars" };
-                }
-                break;
-            case "stationSelect":
-                var selected = value.ToString() ?? "";
-                var splitIndex = selected.IndexOf(" | ", StringComparison.Ordinal);
-                if (splitIndex > 0)
-                {
-                    var selectedStationId = selected[..splitIndex].Trim();
-                    if (!string.IsNullOrWhiteSpace(selectedStationId))
-                    {
-                        ApplyStationId(selectedStationId);
-                    }
-                }
+                SearchStations();
                 break;
             case "stationId":
-                ApplyStationId(value.ToString() ?? "");
+                ApplyStationId(StationId);
                 break;
             case "platformFilter":
-                _platformFilter = value.ToString() ?? "";
-                _departures = Array.Empty<Departure>();
-                _lastRefresh = DateTime.MinValue;
-                break;
             case "maxDepartures":
-                _maxDepartures = Math.Clamp(CoerceIntSetting(value, _maxDepartures), 1, 12);
                 ResetDeparturePaging();
                 break;
-            case "colorDeparturesByLine":
-                _colorDeparturesByLine = CoerceBoolSetting(value, _colorDeparturesByLine);
-                break;
-        }
-    }
-
-    private static bool CoerceBoolSetting(object value, bool fallback)
-    {
-        try
-        {
-            if (value is JsonElement json)
-            {
-                if (json.ValueKind == JsonValueKind.True) return true;
-                if (json.ValueKind == JsonValueKind.False) return false;
-                if (json.ValueKind == JsonValueKind.String && bool.TryParse(json.GetString(), out var parsed))
-                {
-                    return parsed;
-                }
-
-                return fallback;
-            }
-
-            if (value is bool b)
-            {
-                return b;
-            }
-
-            if (value is string s)
-            {
-                if (bool.TryParse(s, out var parsed))
-                {
-                    return parsed;
-                }
-
-                if (int.TryParse(s, out var n))
-                {
-                    return n != 0;
-                }
-            }
-
-            return Convert.ToBoolean(value);
-        }
-        catch
-        {
-            return fallback;
-        }
-    }
-
-    private static int CoerceIntSetting(object value, int fallback)
-    {
-        try
-        {
-            if (value is JsonElement json)
-            {
-                if (json.ValueKind == JsonValueKind.Number && json.TryGetInt32(out var n))
-                {
-                    return n;
-                }
-
-                if (json.ValueKind == JsonValueKind.String && int.TryParse(json.GetString(), out var parsed))
-                {
-                    return parsed;
-                }
-
-                return fallback;
-            }
-
-            if (value is int i)
-            {
-                return i;
-            }
-
-            if (value is long l)
-            {
-                return (int)Math.Clamp(l, int.MinValue, int.MaxValue);
-            }
-
-            if (value is string s && int.TryParse(s, out var fromString))
-            {
-                return fromString;
-            }
-
-            return Convert.ToInt32(value);
-        }
-        catch
-        {
-            return fallback;
         }
     }
 
@@ -315,230 +229,128 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         var configuredStation = configuration["TubeDeparturesApp:StationId"];
         if (!string.IsNullOrEmpty(configuredStation))
         {
-            _stationId = configuredStation;
+            StationId = configuredStation;
         }
 
         var configuredPlatform = configuration["TubeDeparturesApp:PlatformFilter"];
         if (!string.IsNullOrEmpty(configuredPlatform))
         {
-            _platformFilter = configuredPlatform;
+            PlatformFilter = configuredPlatform;
         }
 
         if (int.TryParse(configuration["TubeDeparturesApp:MaxDepartures"], out var maxDep) && maxDep > 0)
         {
-            _maxDepartures = Math.Clamp(maxDep, 1, 12);
+            MaxDepartures = Math.Clamp(maxDep, 1, 12);
         }
 
         if (bool.TryParse(configuration["TubeDeparturesApp:ColorDeparturesByLine"], out var colorByLine))
         {
-            _colorDeparturesByLine = colorByLine;
+            ColorDeparturesByLine = colorByLine;
         }
 
-        StartBackgroundDataLoading();
+        RestartStationPolling();
 
         return base.OnActivatedAsync(dimensions, configuration, cancellationToken);
     }
 
-    private void StartBackgroundDataLoading()
+    /// <summary>
+    /// (Re)starts the polls that depend on the current station, stopping any previous ones.
+    /// </summary>
+    private void RestartStationPolling()
     {
-        RunInBackground(async ct =>
+        _stationPollCts?.Cancel();
+        _arrivals = null;
+        _lineStatuses = null;
+        _stationNameData = null;
+
+        var stationId = StationId;
+        if (string.IsNullOrWhiteSpace(stationId))
         {
-            var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            return;
+        }
 
-            try
-            {
-                while (!ct.IsCancellationRequested)
-                {
-                    try
-                    {
-                        if (!string.IsNullOrWhiteSpace(_stationId) &&
-                            (DateTime.Now - _lastRefresh >= _refreshInterval || _departures.Length == 0))
-                        {
-                            await FetchDeparturesAsync(httpClient, ct);
-                        }
+        var cts = new CancellationTokenSource();
+        _stationPollCts = cts;
 
-                        var lineIds = _stationLineIds;
-                        if (lineIds.Length > 0 &&
-                            (DateTime.Now - _lastLineStatusRefresh >= _lineStatusRefreshInterval || _stationLineStatuses.Length == 0))
-                        {
-                            await FetchLineStatusesAsync(httpClient, lineIds, ct);
-                        }
-
-                        if (_stationSearchDirty)
-                        {
-                            await FetchStationSearchAsync(httpClient, ct);
-                        }
-
-                        if (!_stationNameFetched && !string.IsNullOrWhiteSpace(_stationId))
-                        {
-                            await FetchStationNameAsync(httpClient, ct);
-                        }
-
-                        await Task.Delay(TimeSpan.FromSeconds(10), ct);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        break;
-                    }
-                    catch
-                    {
-                        _isLoading = false;
-                        await Task.Delay(TimeSpan.FromMinutes(1), ct);
-                    }
-                }
-            }
-            finally
-            {
-                httpClient.Dispose();
-            }
-        });
+        var arrivals = Poll(_refreshInterval, ct => FetchArrivalsAsync(stationId, ct), cts.Token);
+        _arrivals = arrivals;
+        _lineStatuses = Poll(_lineStatusRefreshInterval, ct => FetchLineStatusesAsync(arrivals, ct), cts.Token);
+        _stationNameData = Poll(_stationNameRefreshInterval, ct => FetchStationNameAsync(stationId, ct), cts.Token);
     }
 
-    private async Task FetchDeparturesAsync(HttpClient httpClient, CancellationToken cancellationToken)
+    private string WithAppKey(string url)
     {
-        _isLoading = true;
-
-        try
-        {
-            var apiUrl = $"https://api.tfl.gov.uk/StopPoint/{Uri.EscapeDataString(_stationId)}/Arrivals";
-            if (!string.IsNullOrEmpty(_appKey))
-            {
-                apiUrl += $"?app_key={Uri.EscapeDataString(_appKey)}";
-            }
-
-            var response = await httpClient.GetAsync(apiUrl, cancellationToken);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync(cancellationToken);
-                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                var arrivals = JsonSerializer.Deserialize<ArrivalData[]>(content, options) ?? Array.Empty<ArrivalData>();
-
-                IEnumerable<ArrivalData> filtered = arrivals;
-
-                if (!string.IsNullOrWhiteSpace(_platformFilter))
-                {
-                    filtered = filtered.Where(a =>
-                        a.PlatformName.Contains(_platformFilter, StringComparison.OrdinalIgnoreCase));
-                }
-
-                _departures = filtered
-                    .OrderBy(a => a.TimeToStation)
-                    .Take(_maxDepartures)
-                    .Select(a => new Departure
-                    {
-                        DestinationName = StripStationSuffix(string.IsNullOrWhiteSpace(a.Towards) ? a.DestinationName : a.Towards),
-                        TimeToStation = a.TimeToStation,
-                        PlatformName = a.PlatformName,
-                        LineName = a.LineName,
-                        LineId = a.LineId,
-                    })
-                    .ToArray();
-
-                // Collect all unique line IDs that serve this station (from unfiltered arrivals)
-                _stationLineIds = arrivals
-                    .Where(a => !string.IsNullOrWhiteSpace(a.LineId))
-                    .Select(a => a.LineId)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(id => id)
-                    .ToArray();
-
-                _lastRefresh = DateTime.Now;
-                ResetDeparturePaging();
-            }
-
-            _isLoading = false;
-        }
-        catch
-        {
-            _isLoading = false;
-            throw;
-        }
+        return string.IsNullOrEmpty(_appKey) ? url : $"{url}?app_key={Uri.EscapeDataString(_appKey)}";
     }
 
-    private async Task FetchLineStatusesAsync(HttpClient httpClient, string[] lineIds, CancellationToken cancellationToken)
+    private async Task<ArrivalData[]> FetchArrivalsAsync(string stationId, CancellationToken cancellationToken)
+    {
+        var apiUrl = WithAppKey($"https://api.tfl.gov.uk/StopPoint/{Uri.EscapeDataString(stationId)}/Arrivals");
+        return await _http.GetFromJsonAsync<ArrivalData[]>(apiUrl, cancellationToken) ?? Array.Empty<ArrivalData>();
+    }
+
+    private async Task<StationLineStatus[]> FetchLineStatusesAsync(ILiveData<ArrivalData[]> arrivals, CancellationToken cancellationToken)
+    {
+        // Which lines serve the station is only known once arrivals have loaded
+        string[] lineIds;
+        while ((lineIds = LineIdsOf(arrivals.Value)).Length == 0)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
+        }
+
+        var joinedIds = string.Join(",", lineIds.Select(Uri.EscapeDataString));
+        var apiUrl = WithAppKey($"https://api.tfl.gov.uk/Line/{joinedIds}/Status");
+        var lines = await _http.GetFromJsonAsync<TubeLineStatusResponse[]>(apiUrl, cancellationToken) ?? Array.Empty<TubeLineStatusResponse>();
+
+        return lines
+            .Select(l =>
+            {
+                var status = l.LineStatuses?.FirstOrDefault();
+                return new StationLineStatus(
+                    l.Id,
+                    l.Name,
+                    status?.StatusSeverity ?? 0,
+                    status?.StatusSeverityDescription ?? "Unknown"
+                );
+            })
+            .OrderBy(s => s.LineId)
+            .ToArray();
+    }
+
+    // All unique line IDs that serve this station (from unfiltered arrivals)
+    private static string[] LineIdsOf(ArrivalData[]? arrivals)
+    {
+        return (arrivals ?? Array.Empty<ArrivalData>())
+            .Where(a => !string.IsNullOrWhiteSpace(a.LineId))
+            .Select(a => a.LineId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(id => id)
+            .ToArray();
+    }
+
+    private async Task<string> FetchStationNameAsync(string stationId, CancellationToken cancellationToken)
+    {
+        var apiUrl = WithAppKey($"https://api.tfl.gov.uk/StopPoint/{Uri.EscapeDataString(stationId)}");
+        var data = await _http.GetFromJsonAsync<StopPointNameData>(apiUrl, cancellationToken);
+        return string.IsNullOrWhiteSpace(data?.CommonName) ? "" : StripStationSuffix(data.CommonName);
+    }
+
+    private void SearchStations()
+    {
+        var query = StationSearch.Trim();
+        if (query.Length < 2)
+        {
+            _stationSearchOptions = new[] { NoStationSearchHint };
+            return;
+        }
+
+        RunInBackground(ct => FetchStationSearchAsync(query, ct));
+    }
+
+    private async Task FetchStationSearchAsync(string query, CancellationToken cancellationToken)
     {
         try
         {
-            var joinedIds = string.Join(",", lineIds.Select(Uri.EscapeDataString));
-            var apiUrl = $"https://api.tfl.gov.uk/Line/{joinedIds}/Status";
-            if (!string.IsNullOrEmpty(_appKey))
-            {
-                apiUrl += $"?app_key={Uri.EscapeDataString(_appKey)}";
-            }
-
-            var response = await httpClient.GetAsync(apiUrl, cancellationToken);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync(cancellationToken);
-                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                var lines = JsonSerializer.Deserialize<TubeLineStatusResponse[]>(content, options) ?? Array.Empty<TubeLineStatusResponse>();
-
-                _stationLineStatuses = lines
-                    .Select(l =>
-                    {
-                        var status = l.LineStatuses?.FirstOrDefault();
-                        return new StationLineStatus(
-                            l.Id,
-                            l.Name,
-                            status?.StatusSeverity ?? 0,
-                            status?.StatusSeverityDescription ?? "Unknown"
-                        );
-                    })
-                    .OrderBy(s => s.LineId)
-                    .ToArray();
-
-                _lastLineStatusRefresh = DateTime.Now;
-            }
-        }
-        catch
-        {
-            // If line status fetch fails, keep existing data
-        }
-    }
-
-    private async Task FetchStationNameAsync(HttpClient httpClient, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var apiUrl = $"https://api.tfl.gov.uk/StopPoint/{Uri.EscapeDataString(_stationId)}";
-            if (!string.IsNullOrEmpty(_appKey))
-                apiUrl += $"?app_key={Uri.EscapeDataString(_appKey)}";
-
-            var response = await httpClient.GetAsync(apiUrl, cancellationToken);
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync(cancellationToken);
-                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                var data = JsonSerializer.Deserialize<StopPointNameData>(content, options);
-                if (!string.IsNullOrWhiteSpace(data?.CommonName))
-                    _stationName = StripStationSuffix(data.CommonName);
-            }
-        }
-        catch
-        {
-            // Silently fall back to empty — station name is decorative
-        }
-        finally
-        {
-            _stationNameFetched = true;
-        }
-    }
-
-    private async Task FetchStationSearchAsync(HttpClient httpClient, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var query = _stationSearch.Trim();
-            _stationSearchDirty = false;
-
-            if (query.Length < 2)
-            {
-                _stationSearchOptions = new[] { "Type at least 2 chars" };
-                return;
-            }
-
             if (string.Equals(query, _stationSearchLastQuery, StringComparison.OrdinalIgnoreCase) && _stationSearchOptions.Length > 0)
             {
                 return;
@@ -557,27 +369,34 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
 
             apiUrl += "?" + string.Join("&", queryArgs);
 
-            var response = await httpClient.GetAsync(apiUrl, cancellationToken);
+            string[] options;
+            var response = await _http.GetAsync(apiUrl, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                _stationSearchOptions = new[] { "No matches" };
-                return;
+                options = new[] { "No matches" };
+            }
+            else
+            {
+                var data = await response.Content.ReadFromJsonAsync<StopPointSearchResponse>(cancellationToken);
+                var matches = (data?.Matches ?? Array.Empty<StopPointSearchMatch>())
+                    .Where(m => !string.IsNullOrWhiteSpace(m.Id) && !string.IsNullOrWhiteSpace(m.Name))
+                    .Where(IsLikelyRailStop)
+                    .DistinctBy(m => m.Id)
+                    .Take(12)
+                    .Select(m => $"{m.Id} | {StripStationSuffix(m.Name)}")
+                    .ToArray();
+                options = matches.Length > 0 ? matches : new[] { "No matches" };
+                _stationSearchLastQuery = query;
             }
 
-            var content = await response.Content.ReadAsStringAsync(cancellationToken);
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var data = JsonSerializer.Deserialize<StopPointSearchResponse>(content, options);
-
-            var matches = (data?.Matches ?? Array.Empty<StopPointSearchMatch>())
-                .Where(m => !string.IsNullOrWhiteSpace(m.Id) && !string.IsNullOrWhiteSpace(m.Name))
-                .Where(IsLikelyRailStop)
-                .DistinctBy(m => m.Id)
-                .Take(12)
-                .Select(m => $"{m.Id} | {StripStationSuffix(m.Name)}")
-                .ToArray();
-
-            _stationSearchOptions = matches.Length > 0 ? matches : new[] { "No matches" };
-            _stationSearchLastQuery = query;
+            // The user may have kept typing while this was in flight; only the latest query may publish its results
+            if (string.Equals(query, StationSearch.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                _stationSearchOptions = options;
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
         catch
         {
@@ -603,15 +422,41 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
 
     private void ApplyStationId(string stationId)
     {
-        _stationId = stationId;
-        _departures = Array.Empty<Departure>();
-        _lastRefresh = DateTime.MinValue;
+        StationId = stationId;
         ResetDeparturePaging();
-        _stationName = "";
-        _stationNameFetched = false;
-        _stationLineIds = Array.Empty<string>();
-        _stationLineStatuses = Array.Empty<StationLineStatus>();
-        _lastLineStatusRefresh = DateTime.MinValue;
+        RestartStationPolling();
+    }
+
+    // Departures to show: platform filter and max count are applied here so changing them takes effect immediately
+    private Departure[] GetDepartures()
+    {
+        var arrivals = _arrivals?.Value;
+        if (arrivals == null)
+        {
+            return Array.Empty<Departure>();
+        }
+
+        IEnumerable<ArrivalData> filtered = arrivals;
+
+        var platformFilter = PlatformFilter;
+        if (!string.IsNullOrWhiteSpace(platformFilter))
+        {
+            filtered = filtered.Where(a =>
+                a.PlatformName.Contains(platformFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return filtered
+            .OrderBy(a => a.TimeToStation)
+            .Take(MaxDepartures)
+            .Select(a => new Departure
+            {
+                DestinationName = StripStationSuffix(string.IsNullOrWhiteSpace(a.Towards) ? a.DestinationName : a.Towards),
+                TimeToStation = a.TimeToStation,
+                PlatformName = a.PlatformName,
+                LineName = a.LineName,
+                LineId = a.LineId,
+            })
+            .ToArray();
     }
 
     private void ResetDeparturePaging()
@@ -636,7 +481,15 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
 
     public override void Update(TimeSpan deltaTime, CancellationToken cancellationToken)
     {
-        var maxCount = Math.Min(_maxDepartures, _departures.Length);
+        // Fresh data restarts paging from the first page
+        var updatedAt = _arrivals?.LastUpdated;
+        if (updatedAt != _arrivalsSeenAt)
+        {
+            _arrivalsSeenAt = updatedAt;
+            ResetDeparturePaging();
+        }
+
+        var maxCount = Math.Min(MaxDepartures, GetDepartures().Length);
         var totalPages = Math.Max(1, (int)Math.Ceiling(maxCount / (double)VisibleDepartureRows));
 
         if (totalPages <= 1)
@@ -675,26 +528,29 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
 
     public override void Render(FrameBuffer frame, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(_stationId))
+        if (string.IsNullOrWhiteSpace(StationId))
         {
             frame.DrawText(_font, 0, _font.BoundingBox.Y, _color, "No station");
             frame.DrawText(_font, 0, _font.BoundingBox.Y * 2, _color, "configured");
             return;
         }
 
-        if (_isLoading && _departures.Length == 0)
+        var departures = GetDepartures();
+        var arrivals = _arrivals;
+
+        if (departures.Length == 0 && (arrivals == null || (arrivals.Value == null && arrivals.Error == null)))
         {
             frame.DrawText(_font, 0, _font.BoundingBox.Y, _color, "Loading...");
             return;
         }
 
-        if (_departures.Length == 0)
+        if (departures.Length == 0)
         {
             frame.DrawText(_font, 0, _font.BoundingBox.Y, _color, "No departures");
             return;
         }
 
-        var maxCount = Math.Min(_maxDepartures, _departures.Length);
+        var maxCount = Math.Min(MaxDepartures, departures.Length);
         var totalPages = Math.Max(1, (int)Math.Ceiling(maxCount / (double)VisibleDepartureRows));
 
         if (_isPageTransitioning)
@@ -712,15 +568,15 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
                 ? fromOffset + pageHeight
                 : fromOffset - pageHeight;
 
-            DrawDeparturePage(frame, _transitionFromPage, maxCount, fromOffset);
-            DrawDeparturePage(frame, _transitionToPage, maxCount, toOffset);
+            DrawDeparturePage(frame, departures, _transitionFromPage, maxCount, fromOffset);
+            DrawDeparturePage(frame, departures, _transitionToPage, maxCount, toOffset);
         }
         else
         {
             var activePage = Math.Clamp(_departurePage, 0, totalPages - 1);
-            DrawDeparturePage(frame, activePage, maxCount, 0);
+            DrawDeparturePage(frame, departures, activePage, maxCount, 0);
         }
-        
+
         frame.DrawHorizontalLine(14 * 3 + 5, frame.Width, _color);
 
         var statusPage = _isPageTransitioning
@@ -730,14 +586,14 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         DrawLineStatusBar(frame, statusPage + 1, totalPages);
     }
 
-    private void DrawDeparturePage(FrameBuffer frame, int page, int maxCount, int yOffset)
+    private void DrawDeparturePage(FrameBuffer frame, Departure[] departures, int page, int maxCount, int yOffset)
     {
         if (page < 0)
         {
             return;
         }
 
-        var visibleDepartures = _departures
+        var visibleDepartures = departures
             .Take(maxCount)
             .Skip(page * VisibleDepartureRows)
             .Take(VisibleDepartureRows)
@@ -755,13 +611,13 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
 
     private Pixel GetDepartureRowColor(string? lineId)
     {
-        if (!_colorDeparturesByLine)
+        if (!ColorDeparturesByLine)
         {
             return _color;
         }
 
         var normalized = NormalizeLineId(lineId);
-        if (TubeLineColors.TryGetValue(normalized, out var lineColor))
+        if (TubeColors.TryGet(normalized, out var lineColor))
         {
             return lineColor;
         }
@@ -828,7 +684,7 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         // ExtraSmall (4x6, offsetY=-1): renders from y=56 to y=61 — same baseline.
         const int textBaseline = tileStartY + tileHeight - 1; // = 61
 
-        var statuses = _stationLineStatuses;
+        var statuses = _lineStatuses?.Value ?? Array.Empty<StationLineStatus>();
         int tileCount = statuses.Length;
 
         // ── Line-status tiles ─────────────────────────────────────────────────
@@ -837,19 +693,15 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
             var status = statuses[i];
             bool goodService = status.Severity >= 9;
 
-            var baseColor = TubeLineColors.TryGetValue(status.LineId, out var c) ? c : new Pixel(100, 100, 100);
+            var baseColor = TubeColors.TryGet(status.LineId, out var c) ? c : new Pixel(100, 100, 100);
 
             // Bright half-dim for good service, heavily dimmed for disruptions
-            Pixel tileColor = goodService
-                ? new Pixel((byte)(baseColor.R / 2), (byte)(baseColor.G / 2), (byte)(baseColor.B / 2))
-                : new Pixel((byte)(baseColor.R / 5), (byte)(baseColor.G / 5), (byte)(baseColor.B / 5));
+            Pixel tileColor = goodService ? baseColor / 2 : baseColor / 5;
 
             int x = startX + i * (tileWidth + tileGap);
 
             // Tile background
-            for (int dx = 0; dx < tileWidth; dx++)
-                for (int dy = 0; dy < tileHeight; dy++)
-                    frame.SetPixel(x + dx, tileStartY + dy, tileColor);
+            frame.FillRect(new Rectangle(x, tileStartY, tileWidth, tileHeight), tileColor);
 
             // 2-letter abbreviation centred in tile
             var abbrev = LineAbbreviations.TryGetValue(status.LineId, out var a)
@@ -887,7 +739,7 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         }
 
         // Station name: left of clock, right of tiles
-        var stationName = _stationName;
+        var stationName = _stationNameData?.Value ?? "";
         if (!string.IsNullOrWhiteSpace(stationName))
         {
             int nameStartX = tilesEndX + pad;
@@ -915,24 +767,12 @@ public class TubeDeparturesApp : MatrixAppBase, IConfigurableApp
         }
 
         string formatStationLength = $"-{26 - suffix.Length}";
-        
+
         string text = $"{departureNumber} {string.Format($"{{0,{formatStationLength}}}", station)}{suffix}";
-        DrawClippedText(frame, _font, 0, 14 * rowPosition + yOffset, textColor, text, DeparturesClipTopY, DeparturesClipBottomY);
-    }
 
-    private static void DrawClippedText(FrameBuffer frame, BdfFont font, int x, int y, Pixel color, string text, int clipTopY, int clipBottomY)
-    {
-        // TextExtensions maps font bitmap line -> framebuffer Y using this baseline transform.
-        var baselineOffset = y - font.BoundingBox.Y - font.BoundingBox.OffsetY;
-
-        var startLine = Math.Max(0, clipTopY - baselineOffset);
-        var endLineExclusive = clipBottomY - baselineOffset + 1;
-
-        if (endLineExclusive <= startLine)
-        {
-            return;
-        }
-
-        frame.DrawText(font, x, y, color, text, startLine, endLineExclusive);
+        // Rows scroll between pages, so clip them to the departures area (inclusive of the bottom row)
+        frame.PushClip(new Rectangle(0, DeparturesClipTopY, frame.Width, DeparturesClipBottomY - DeparturesClipTopY + 1));
+        frame.DrawText(_font, 0, 14 * rowPosition + yOffset, textColor, text);
+        frame.PopClip();
     }
 }

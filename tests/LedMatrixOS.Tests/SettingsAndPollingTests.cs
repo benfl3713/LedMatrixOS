@@ -181,7 +181,7 @@ public class PollingLiveDataTests
     {
         public override string Id => "poll";
         public override string Name => "Poll";
-        public ILiveData<int> Start(TimeSpan interval, Func<CancellationToken, Task<int>> fetch) => Poll(interval, fetch);
+        public ILiveData<int> Start(TimeSpan interval, Func<CancellationToken, Task<int>> fetch, CancellationToken stop = default) => Poll(interval, fetch, stop);
         public override void Render(FrameBuffer frame, CancellationToken cancellationToken) { }
     }
 
@@ -263,6 +263,26 @@ public class PollingLiveDataTests
         await Task.Delay(300);
         Assert.Equal(after, Volatile.Read(ref calls));
         Assert.False(data.IsLoading);
+    }
+
+    [Fact]
+    public async Task StopToken_EndsOnePollWithoutDeactivatingTheApp()
+    {
+        var app = new PollApp();
+        using var cts = new CancellationTokenSource();
+        int stoppedCalls = 0, otherCalls = 0;
+        app.Start(Interval, _ => Task.FromResult(Interlocked.Increment(ref stoppedCalls)), cts.Token);
+        app.Start(Interval, _ => Task.FromResult(Interlocked.Increment(ref otherCalls)));
+
+        await WaitFor(() => Volatile.Read(ref stoppedCalls) >= 2);
+        cts.Cancel();
+        await Task.Delay(200);
+        int stoppedAfter = Volatile.Read(ref stoppedCalls);
+        int otherBefore = Volatile.Read(ref otherCalls);
+
+        await WaitFor(() => Volatile.Read(ref otherCalls) >= otherBefore + 3);
+        Assert.Equal(stoppedAfter, Volatile.Read(ref stoppedCalls));
+        await app.OnDeactivatedAsync(CancellationToken.None);
     }
 
     [Fact]

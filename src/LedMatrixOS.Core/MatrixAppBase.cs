@@ -44,10 +44,18 @@ public abstract class MatrixAppBase : IMatrixApp
         _backgroundTasks.Add(task);
     }
 
-    protected ILiveData<T> Poll<T>(TimeSpan interval, Func<CancellationToken, Task<T>> fetch)
+    /// <summary>
+    /// Polls <paramref name="fetch"/> every <paramref name="interval"/> until the app is deactivated or
+    /// <paramref name="stop"/> is cancelled (use it to replace a poll whose inputs changed).
+    /// </summary>
+    protected ILiveData<T> Poll<T>(TimeSpan interval, Func<CancellationToken, Task<T>> fetch, CancellationToken stop = default)
     {
         var data = new PollingLiveData<T>(interval, fetch);
-        RunInBackground(data.RunAsync);
+        RunInBackground(async ct =>
+        {
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, stop);
+            await data.RunAsync(linked.Token).ConfigureAwait(false);
+        });
         return data;
     }
 
