@@ -1,55 +1,52 @@
-using System.Collections.Concurrent;
-using System.Net;
-using System.Text;
+using System.Diagnostics;
 using System.Text.Json;
 using LedMatrixOS.Apps;
+using LedMatrixOS.Apps.Tube;
 using LedMatrixOS.Core;
 using LedMatrixOS.Graphics.Text;
 using Microsoft.Extensions.Configuration;
 using Xunit;
+using Xunit.Abstractions;
+using static LedMatrixOS.Tests.TubeFixtures;
 
 namespace LedMatrixOS.Tests;
 
-public class TubeDeparturesAppTests
+public class TubeDeparturesAppTests(ITestOutputHelper output)
 {
-    private sealed class StubHandler : HttpMessageHandler
-    {
-        public ConcurrentQueue<string> Requests { get; } = new();
+    private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var url = request.RequestUri!.ToString();
-            Requests.Enqueue(url);
-            var body =
-                url.Contains("/Arrivals") ? """
-                    [
-                      {"destinationName":"Stanmore Underground Station","towards":"","timeToStation":30,"platformName":"Southbound - Platform 1","lineName":"Jubilee","lineId":"jubilee"},
-                      {"destinationName":"Aldgate Underground Station","towards":"Aldgate via Baker St","timeToStation":300,"platformName":"Eastbound - Platform 3","lineName":"Circle","lineId":"circle"}
-                    ]
-                    """
-                : url.Contains("/Line/") ? """
-                    [
-                      {"id":"jubilee","name":"Jubilee","lineStatuses":[{"statusSeverity":10,"statusSeverityDescription":"Good Service"}]},
-                      {"id":"circle","name":"Circle","lineStatuses":[{"statusSeverity":6,"statusSeverityDescription":"Severe Delays"}]}
-                    ]
-                    """
-                : url.Contains("/Search/") ? """
-                    {"matches":[{"id":"940GZZLUBST","name":"Baker Street Underground Station","modes":["tube"]},{"id":"bus1","name":"Baker Street Bus","modes":["bus"]}]}
-                    """
-                : """{"commonName":"Baker Street Underground Station"}""";
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(body, Encoding.UTF8, "application/json")
-            });
-        }
-    }
-
-    public TubeDeparturesAppTests()
+    private static TubeDeparturesApp NewApp(TflStubHandler? handler = null, string station = "940GZZLUBST")
     {
         Fonts.Load();
+        return new(new HttpClient(handler ?? new TflStubHandler())) { Time = new FakeTime(), StationId = station };
     }
 
-    private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
+    private static (TubeDeparturesApp App, AppStage Stage, MutableLive<TflArrival[]> Arrivals) Board(
+        TflArrival[]? arrivals = null, LineStatus[]? statuses = null, string name = "Baker Street", int warmMs = 1500, int max = 3)
+    {
+        var app = NewApp();
+        app.MaxDepartures = max;
+        var live = new MutableLive<TflArrival[]> { Value = arrivals ?? CommuteBoard() };
+        app.UseData(live, new MutableLive<LineStatus[]> { Value = statuses ?? StationLines() }, new MutableLive<string> { Value = name });
+        var stage = new AppStage(app);
+        stage.Step(33, warmMs / 33);
+        return (app, stage, live);
+    }
+
+    private static void Golden(AppStage stage, string name)
+    {
+        var frame = stage.Snapshot();
+        Preview(frame, name);
+        SnapshotHelper.AssertMatchesSnapshot(frame, name);
+    }
+
+    private static bool HasPixelsIn(FrameBuffer f, int x0, int y0, int x1, int y1)
+    {
+        for (int y = y0; y < y1; y++)
+            for (int x = x0; x < x1; x++)
+                if (f.GetPixel(x, y) != Pixel.Black) return true;
+        return false;
+    }
 
     private static async Task WaitFor(Func<bool> condition)
     {
@@ -61,32 +58,18 @@ public class TubeDeparturesAppTests
         }
     }
 
-    private static bool HasPixelsIn(FrameBuffer f, int x0, int y0, int x1, int y1)
-    {
-        for (int y = y0; y < y1; y++)
-            for (int x = x0; x < x1; x++)
-                if (f.GetPixel(x, y) != Pixel.Black) return true;
-        return false;
-    }
-
-    private static async Task<TubeDeparturesApp> ActivatedApp(StubHandler handler)
-    {
-        var app = new TubeDeparturesApp(new HttpClient(handler));
-        await app.OnActivatedAsync((64, 256), new ConfigurationBuilder().Build(), CancellationToken.None);
-        return app;
-    }
+    // ---- settings (behaviour preserved from the old app) ---------------------------------------------------------
 
     [Fact]
     public void Settings_KeepTheirKeysOrderAndTypes()
     {
-        var app = new TubeDeparturesApp(new HttpClient(new StubHandler()));
-        var settings = app.GetSettings().ToList();
+        var settings = NewApp().GetSettings().ToList();
 
         Assert.Equal(
-            new[] { "stationSearch", "stationSelect", "stationId", "platformFilter", "maxDepartures", "colorDeparturesByLine" },
+            new[] { "stationSearch", "stationSelect", "stationId", "platformFilter", "maxDepartures", "colorDeparturesByLine", "pageSeconds" },
             settings.Select(s => s.Key).ToArray());
         Assert.Equal(
-            new[] { AppSettingType.String, AppSettingType.Select, AppSettingType.String, AppSettingType.String, AppSettingType.Integer, AppSettingType.Boolean },
+            new[] { AppSettingType.String, AppSettingType.Select, AppSettingType.String, AppSettingType.String, AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Integer },
             settings.Select(s => s.Type).ToArray());
 
         var max = settings.Single(s => s.Key == "maxDepartures");
@@ -95,14 +78,15 @@ public class TubeDeparturesAppTests
         Assert.Equal(12, max.MaxValue);
         Assert.Equal(false, settings.Single(s => s.Key == "colorDeparturesByLine").CurrentValue);
         Assert.Equal(new[] { "Type at least 2 chars" }, settings.Single(s => s.Key == "stationSelect").Options);
+        Assert.Equal("tube-departures", NewApp().Id);
+        Assert.Equal("Tube Departures", NewApp().Name);
     }
 
     [Fact]
     public void UpdateSetting_AcceptsPersistedValueShapes()
     {
-        var app = new TubeDeparturesApp(new HttpClient(new StubHandler()));
+        var app = NewApp(station: "");
 
-        // Values as AppSettingsStorage would hand them back (plain CLR values) and as the API receives them (JsonElement)
         app.UpdateSetting("maxDepartures", 99);
         Assert.Equal(12, app.MaxDepartures);
         app.UpdateSetting("maxDepartures", Json("0"));
@@ -128,64 +112,64 @@ public class TubeDeparturesAppTests
         Assert.Equal("940GZZLUOXC", app.StationId);
     }
 
+    // ---- data against a stub TfL --------------------------------------------------------------------------------
+
     [Fact]
     public async Task Renders_NoStationMessage_ThenDataOnceFetched()
     {
-        var handler = new StubHandler();
-        var app = await ActivatedApp(handler);
+        var handler = new TflStubHandler();
+        var app = NewApp(handler, station: "");
+        await app.OnActivatedAsync((64, 256), new ConfigurationBuilder().Build(), CancellationToken.None);
+        var stage = new AppStage(app);
 
-        var frame = new FrameBuffer(256, 64);
-        app.Render(frame, CancellationToken.None);
-        Assert.False(SnapshotHelper.IsBlank(frame));
+        stage.Step(33, 20);
+        Assert.False(SnapshotHelper.IsBlank(stage.Render()));
         Assert.Empty(handler.Requests);
 
         app.UpdateSetting("stationId", "940GZZLUBST");
-        // The line status tiles (bottom left) only appear once arrivals and line statuses have both loaded (the corner pixel is never text)
+        // The line pills (bottom left) only appear once arrivals and line statuses have both loaded
         await WaitFor(() =>
         {
-            var f = new FrameBuffer(256, 64);
-            app.Render(f, CancellationToken.None);
-            return f.GetPixel(1, 49) != Pixel.Black;
+            stage.Step(33);
+            return handler.Requests.Any(r => r.Contains("/Line/")) && app.Board.Visible.Count == 2;
         });
 
         Assert.Contains(handler.Requests, r => r.Contains("/StopPoint/940GZZLUBST/Arrivals"));
         Assert.Contains(handler.Requests, r => r.Contains("/Line/circle,jubilee/Status"));
+        Assert.Equal("Stanmore", app.Board.Hero[0].Destination);
+        Assert.Equal("Aldgate via Baker St", app.Board.Visible[1].Destination);
         await app.OnDeactivatedAsync(CancellationToken.None);
     }
 
     [Fact]
     public async Task PlatformFilter_AppliesImmediatelyToFetchedArrivals()
     {
-        var handler = new StubHandler();
-        var app = await ActivatedApp(handler);
-        app.UpdateSetting("stationId", "940GZZLUBST");
-        await WaitFor(() => handler.Requests.Any(r => r.Contains("/Arrivals")));
-
-        FrameBuffer Rendered()
-        {
-            var f = new FrameBuffer(256, 64);
-            app.Render(f, CancellationToken.None);
-            return f;
-        }
-
-        // Wait for arrivals to land: the departures area (rows 0-46) shows more than the "Loading..." text
-        await WaitFor(() => HasPixelsIn(Rendered(), 200, 20, 256, 46));
+        var app = NewApp(new TflStubHandler());
+        app.UseData(new MutableLive<TflArrival[]> { Value = [
+            Arrival("1", "jubilee", "Stanmore", 30, "Southbound - Platform 1"),
+            Arrival("2", "circle", "Aldgate", 300, "Eastbound - Platform 3")] },
+            new MutableLive<LineStatus[]> { Value = [] }, new MutableLive<string> { Value = "Baker Street" });
+        var stage = new AppStage(app);
+        stage.Step(33, 10);
+        Assert.Equal(2, app.Board.Visible.Count);
 
         app.UpdateSetting("platformFilter", "nonexistent platform");
-        var none = Rendered();
-        Assert.False(HasPixelsIn(none, 200, 20, 256, 46)); // only the "No departures" message on the first row
-        Assert.True(HasPixelsIn(none, 0, 0, 120, 16));
+        stage.Step(33, 2);
+        Assert.Empty(app.Board.Visible);
 
         app.UpdateSetting("platformFilter", "Eastbound");
-        Assert.True(HasPixelsIn(Rendered(), 200, 0, 256, 16)); // the one matching departure
+        stage.Step(33, 2);
+        Assert.Single(app.Board.Visible);
+        Assert.Equal("Aldgate", app.Board.Hero[0].Destination);
+        Assert.Equal("3", app.Board.Hero[0].PlatformNumber);
         await app.OnDeactivatedAsync(CancellationToken.None);
     }
 
     [Fact]
     public async Task StationSearch_PublishesRailStopsAsIdPipeName()
     {
-        var handler = new StubHandler();
-        var app = await ActivatedApp(handler);
+        var app = NewApp(new TflStubHandler(), station: "");
+        await app.OnActivatedAsync((64, 256), new ConfigurationBuilder().Build(), CancellationToken.None);
 
         app.UpdateSetting("stationSearch", "b");
         Assert.Equal(new[] { "Type at least 2 chars" }, app.GetSettings().Single(s => s.Key == "stationSelect").Options);
@@ -194,5 +178,175 @@ public class TubeDeparturesAppTests
         await WaitFor(() => app.GetSettings().Single(s => s.Key == "stationSelect").Options!.Contains("940GZZLUBST | Baker Street"));
         Assert.Equal(new[] { "940GZZLUBST | Baker Street" }, app.GetSettings().Single(s => s.Key == "stationSelect").Options);
         await app.OnDeactivatedAsync(CancellationToken.None);
+    }
+
+    // ---- board behaviour -----------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Minutes_CountDownWithTheAppClock_AndDepartedTrainsDropOut()
+    {
+        var (app, stage, _) = Board(CommuteBoard(190), warmMs: 330);
+        var hero = app.Board.Hero[0];
+        Assert.Equal(3, hero.Minutes(app.Board.Now));
+
+        stage.Step(1000, 69);   // about 70 s later the 190 s train is at about 120 s
+        Assert.Equal(2, hero.Minutes(app.Board.Now));
+
+        stage.Step(1000, 190);  // long gone: lingers at DUE for a few seconds, then leaves and the next train is the hero
+        Assert.NotSame(hero, app.Board.Hero[0]);
+        Assert.DoesNotContain(hero, app.Board.Visible);
+    }
+
+    [Fact]
+    public void Trains_KeepTheirIdentityAcrossPolls_ByVehicleId()
+    {
+        var (app, stage, live) = Board();
+        var first = app.Board.Visible.ToArray();
+
+        // A fresh poll: the same vehicles, new estimates, one new train behind them
+        live.Value = [.. CommuteBoard(230), Arrival("606", "victoria", "Brixton", 1000)];
+        stage.Step(33, 3);
+        for (int i = 0; i < 3; i++) Assert.Same(first[i], app.Board.Visible[i]);
+        Assert.Equal(3, app.Board.Hero[0].Minutes(app.Board.Now));  // 230 s
+    }
+
+    [Fact]
+    public void Reshuffle_SlidesRowsUp_WhenTheHeroLeaves()
+    {
+        var (app, stage, live) = Board(max: 4);
+        var heroNode = app.Root!;
+        var before = stage.Snapshot();
+
+        live.Value = CommuteBoard(190).Skip(1).ToArray();   // the hero left
+        stage.Step(33, 6);
+        var mid = stage.Snapshot();
+        Assert.False(Stage.Same(before, mid));
+        Golden(stage, "tube_departures_reshuffle_mid");
+
+        stage.Step(33, 20);
+        var settled = stage.Snapshot();
+        Assert.False(Stage.Same(mid, settled));
+        Assert.NotNull(heroNode);
+        Golden(stage, "tube_departures_reshuffle_settled");
+    }
+
+    [Fact]
+    public void Pager_CyclesPagesOfFollowingTrains()
+    {
+        var (app, stage, _) = Board(max: 5, warmMs: 330);
+        Assert.Equal(2, app.RestPager!.PageCount);
+
+        int guard = 0;
+        while (!app.RestPager.IsTransitioning && guard++ < 1000) stage.Step(33);
+        Assert.True(app.RestPager.IsTransitioning);
+        stage.Step(33, 7);
+        Golden(stage, "tube_departures_page_transition");
+        stage.Step(33, 20);
+        Assert.Equal(1, app.RestPager.PageIndex);
+    }
+
+    [Fact]
+    public void Ticker_AlternatesStationNameWithDisruptions()
+    {
+        var (app, stage, _) = Board(warmMs: 330);
+        Assert.Equal("BAKER STREET", app.StripTicker!.Current);
+        stage.Step(1000, 13);
+        Assert.Contains("SEVERE DELAYS", app.StripTicker.Current);
+    }
+
+    // ---- goldens -------------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Golden_NormalBoard() => Golden(Board().Stage, "tube_departures_board");
+
+    [Fact]
+    public void Golden_DueTrain()
+    {
+        var (_, stage, _) = Board(CommuteBoard(40));
+        Golden(stage, "tube_departures_due");
+    }
+
+    [Fact]
+    public void Golden_ColourByLine()
+    {
+        var (app, stage, _) = Board(CommuteBoard(40));
+        app.ColorDeparturesByLine = true;
+        stage.Step(33, 3);
+        Golden(stage, "tube_departures_colour_by_line");
+    }
+
+    [Fact]
+    public void Golden_DisruptionPulse()
+    {
+        var (_, stage, _) = Board();
+        stage.Step(33, 1);
+        var a = stage.Snapshot();
+        stage.Step(33, 18);   // about half a pulse later
+        var b = stage.Snapshot();
+        Assert.False(Stage.Same(a, b));
+        SnapshotHelper.AssertMatchesSnapshot(a, "tube_departures_pulse_a");
+        Preview(a, "tube_departures_pulse_a");
+        SnapshotHelper.AssertMatchesSnapshot(b, "tube_departures_pulse_b");
+        Preview(b, "tube_departures_pulse_b");
+    }
+
+    [Fact]
+    public void Golden_StatesWithoutTrains()
+    {
+        var app = NewApp(station: "");
+        var none = new AppStage(app);
+        none.Step(33, 30);
+        Golden(none, "tube_departures_no_station");
+
+        var loading = NewApp();
+        loading.UseData(new MutableLive<TflArrival[]>(), new MutableLive<LineStatus[]>(), new MutableLive<string>());
+        var ls = new AppStage(loading);
+        ls.Step(33, 30);
+        Golden(ls, "tube_departures_loading");
+
+        var empty = NewApp();
+        empty.UseData(new MutableLive<TflArrival[]> { Value = [] }, new MutableLive<LineStatus[]> { Value = [] }, new MutableLive<string> { Value = "Baker Street" });
+        var es = new AppStage(empty);
+        es.Step(33, 30);
+        Golden(es, "tube_departures_no_trains");
+
+        var offline = NewApp();
+        offline.UseData(new MutableLive<TflArrival[]> { Error = new HttpRequestException("down") }, null, null);
+        var os = new AppStage(offline);
+        os.Step(33, 30);
+        Golden(os, "tube_departures_offline");
+    }
+
+    // ---- performance ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void SteadyState_DoesNotAllocate_AndIsFast()
+    {
+        var (app, stage, _) = Board(max: 5);
+        for (int i = 0; i < 400; i++) { stage.Step(33); stage.Render(); }   // through a page change, so pooled buffers exist
+
+        // A page change or a new ticker message builds nodes and glyph maps (events, not steady state); measure windows without one.
+        int measured = 0;
+        long least = long.MaxValue;
+        double ms = 0;
+        for (int window = 0; window < 12; window++)
+        {
+            string text = app.StripTicker!.Current;
+            int page = app.RestPager!.PageIndex;
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            var sw = Stopwatch.StartNew();
+            for (int i = 0; i < 60; i++) { stage.Step(33); stage.Render(); }
+            sw.Stop();
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            if (text != app.StripTicker.Current || page != app.RestPager.PageIndex || app.RestPager.IsTransitioning) continue;
+            measured++;
+            ms = sw.Elapsed.TotalMilliseconds / 60;
+            least = Math.Min(least, allocated);
+        }
+
+        output.WriteLine($"departures: {ms:F3} ms/frame (update+render per frame), {measured} steady windows");
+        Assert.True(measured >= 3);
+        // Runtime housekeeping (tiered JIT) can add a few KB to a window; the steady state itself must be allocation free.
+        Assert.True(least < 256, $"least allocation in a steady window: {least} bytes");
     }
 }
