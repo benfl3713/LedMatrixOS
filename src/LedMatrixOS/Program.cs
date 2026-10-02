@@ -82,6 +82,8 @@ app.UseCors();
 
 // Start render loop
 var engine = app.Services.GetRequiredService<RenderEngine>();
+var crashCard = new LedMatrixOS.Graphics.UI.CrashCard();
+engine.CrashRenderer = crashCard.Render;
 var appManager = app.Services.GetRequiredService<AppManager>();
 
 await appManager.ActivateAsync("home", CancellationToken.None);

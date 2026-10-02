@@ -33,10 +33,14 @@ public sealed class RenderEngine : IDisposable
     private bool _transitionStarted;
 
     // Throttled error logging
+    private readonly CrashGuard _crashGuard = new();
     private TimeSpan _lastErrorLog = TimeSpan.MinValue;
     private int _suppressedErrors;
 
     public TransitionRegistry Transitions { get; }
+
+    /// <summary>Draws the crash card shown in place of an app that threw (set by the host; Core has no fonts). Falls back to a plain red screen.</summary>
+    public Action<FrameBuffer, CrashInfo>? CrashRenderer { get; set; }
 
     /// <summary>Toasts, badges and alerts composited over whatever is running (after post-effects).</summary>
     public OverlayManager Overlays { get; }
@@ -101,6 +105,7 @@ public sealed class RenderEngine : IDisposable
     {
         // The render loop snapshots the last presented frame before drawing the new app.
         _transitionPending = true;
+        _crashGuard.Clear();
     }
 
     private async Task RunLoopAsync(CancellationToken cancellationToken)
@@ -139,7 +144,15 @@ public sealed class RenderEngine : IDisposable
                 }
 
                 var app = _apps.ActiveApp;
-                if (app != null)
+                if (app != null && _crashGuard.Active(now) is { } crash)
+                {
+                    _frame.Clear(Pixel.Black);
+                    if (CrashRenderer != null) CrashRenderer(_frame, crash);
+                    else _frame.Clear(new Pixel(120, 0, 0));
+                    _device.Present(_frame);
+                    _hasPresentedFrame = true;
+                }
+                else if (app != null)
                 {
                     try
                     {
@@ -187,6 +200,8 @@ public sealed class RenderEngine : IDisposable
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
                         // Keep the loop running, but don't flood the log at 60fps
+                        _activeTransition = null;
+                        _crashGuard.Record(app, ex, now);
                         LogFrameError(ex, app, now);
                     }
                 }
