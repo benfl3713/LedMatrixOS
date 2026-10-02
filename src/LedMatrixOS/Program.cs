@@ -2,6 +2,7 @@ using System.Text.Json;
 using LedMatrixOS;
 using LedMatrixOS.Apps;
 using LedMatrixOS.Core;
+using LedMatrixOS.Core.Transitions;
 using LedMatrixOS.Endpoints;
 using LedMatrixOS.Graphics.Text;
 using LedMatrixOS.Hardware.RpiLedMatrix;
@@ -60,7 +61,7 @@ builder.Services.AddSingleton<RenderEngine>(sp =>
     var apps = sp.GetRequiredService<AppManager>();
     var interruptService = sp.GetRequiredService<InterruptService>();
     foreach (var app in BuiltInApps.GetAll()) apps.Register(app);
-    return new RenderEngine(device, apps, interruptService);
+    return new RenderEngine(device, apps, interruptService, logger: sp.GetService<ILogger<RenderEngine>>());
 });
 
 var app = builder.Build();
@@ -148,6 +149,20 @@ app.MapPost("/api/settings/power/{enabled}", (bool enabled, IMatrixDevice device
 {
     device.IsEnabled = enabled;
     return Results.Ok(new { isEnabled = device.IsEnabled });
+});
+
+app.MapGet("/api/transitions", (RenderEngine eng) =>
+    Results.Ok(new
+    {
+        current = eng.TransitionName,
+        transitions = eng.Transitions.Names.Order().Append(TransitionRegistry.RandomName)
+    }));
+
+app.MapPost("/api/settings/transition/{name}", (string name, RenderEngine eng) =>
+{
+    if (!eng.Transitions.IsValidName(name)) return Results.NotFound($"Unknown transition '{name}'");
+    eng.TransitionName = name.ToLowerInvariant();
+    return Results.Ok(new { transition = eng.TransitionName });
 });
 
 // Simulator preview
