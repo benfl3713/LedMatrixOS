@@ -1,23 +1,31 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace LedMatrixOS.Core;
 
+/// <summary>Static description of a registered app, available without activating it.</summary>
+public sealed record AppInfo(string Id, string Name, bool HasSettings);
+
 public sealed class AppManager
 {
+    private readonly IServiceProvider _services;
     private readonly IConfiguration _configuration;
     private readonly int _height;
     private readonly int _width;
     private readonly Dictionary<string, Type> _appsById = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, AppInfo> _infoById = new(StringComparer.OrdinalIgnoreCase);
     private readonly AppSettingsStorage? _settingsStorage;
     private IMatrixApp? _activeApp;
 
     public IEnumerable<Type> Apps => _appsById.Values;
+    public IEnumerable<AppInfo> AppInfos => _infoById.Values;
     public IMatrixApp? ActiveApp => _activeApp;
 
     public event EventHandler<IMatrixApp>? AppActivated;
 
-    public AppManager(IConfiguration configuration, int height, int width, AppSettingsStorage? settingsStorage = null)
+    public AppManager(IServiceProvider services, IConfiguration configuration, int height, int width, AppSettingsStorage? settingsStorage = null)
     {
+        _services = services;
         _configuration = configuration;
         _height = height;
         _width = width;
@@ -29,13 +37,15 @@ public sealed class AppManager
         // validate if app implements IMatrixApp
         if (!typeof(IMatrixApp).IsAssignableFrom(app)) throw new ArgumentException("Type must implement IMatrixApp", nameof(app));
 
-        var instance = (IMatrixApp?)Activator.CreateInstance(app);
-        if (instance == null) throw new InvalidOperationException("Failed to create instance of app");
-
+        var instance = Create(app);
         var id = instance.Id;
 
         _appsById[id] = app;
+        _infoById[id] = new AppInfo(id, instance.Name, instance is IConfigurableApp);
     }
+
+    // Apps are built through DI so their constructors can take services (HttpClient factory, AudioDataService, ...)
+    private IMatrixApp Create(Type app) => (IMatrixApp)ActivatorUtilities.CreateInstance(_services, app);
 
     public async Task<bool> ActivateAsync(string id, CancellationToken cancellationToken)
     {
@@ -48,8 +58,7 @@ public sealed class AppManager
         }
 
         // Create the new app instance first
-        var nextApp = (IMatrixApp?)Activator.CreateInstance(next);
-        if (nextApp == null) return false;
+        var nextApp = Create(next);
         
         // Raise the AppActivated event BEFORE switching, so RenderEngine can capture the old frame
         AppActivated?.Invoke(this, nextApp);

@@ -7,15 +7,59 @@ namespace LedMatrixOS.Graphics.Text;
 
 public static class TextExtensions
 {
-    public static void DrawText(this FrameBuffer frame, BdfFont font, int x, int y, Pixel color, string text, int startLine = 0, int? endLine = null)
+    public static void DrawText(this FrameBuffer frame, BdfFont font, int x, int y, Pixel color, string text, int startLine = 0, int? endLine = null, bool shadow = true)
     {
         var map = font.GetMapOfString(text);
-        DrawText(frame, font, x, y, color, map, startLine, endLine);
+        DrawText(frame, font, x, y, color, map, startLine, endLine, shadow);
     }
 
-    private static void DrawText(FrameBuffer frame, BdfFont font, int x, int y, Pixel color, bool[,] map, int startLine = 0, int? endLine = null)
+    /// <summary>
+    /// Draws text with a style. <paramref name="x"/> is the left edge, centre or right edge depending on <paramref name="align"/>.
+    /// </summary>
+    public static void DrawText(this FrameBuffer frame, TextStyle style, int x, int y, string text, TextAlign align = TextAlign.Left)
     {
-        bool withShadow = true;
+        if (string.IsNullOrEmpty(text)) return;
+        int width = style.Font.MeasureText(text);
+        x = align switch
+        {
+            TextAlign.Center => x - width / 2,
+            TextAlign.Right => x - width,
+            _ => x,
+        };
+
+        var map = style.Font.GetMapOfString(text);
+        DrawText(frame, style.Font, x, y, style.Color, map, 0, null, style.Shadow, style.ShadowColor);
+    }
+
+    /// <summary>
+    /// Width in pixels of the text when drawn with this font.
+    /// </summary>
+    public static int MeasureText(this BdfFont font, string text)
+    {
+        if (string.IsNullOrEmpty(text)) return 0;
+        return font.GetMapOfString(text).GetLength(0);
+    }
+
+    /// <summary>
+    /// Shortens the text with a trailing ellipsis until it fits in <paramref name="maxWidth"/> pixels.
+    /// </summary>
+    public static string TruncateWithEllipsis(this BdfFont font, string text, int maxWidth, string ellipsis = "...")
+    {
+        if (font.MeasureText(text) <= maxWidth) return text;
+        if (font.MeasureText(ellipsis) > maxWidth) return string.Empty;
+
+        for (int length = text.Length - 1; length > 0; length--)
+        {
+            var candidate = text[..length].TrimEnd() + ellipsis;
+            if (font.MeasureText(candidate) <= maxWidth) return candidate;
+        }
+
+        return ellipsis;
+    }
+
+    private static void DrawText(FrameBuffer frame, BdfFont font, int x, int y, Pixel color, bool[,] map, int startLine = 0, int? endLine = null, bool withShadow = true, Pixel? shadowColor = null)
+    {
+        var shadow = shadowColor ?? Pixel.Black;
         var width = map.GetLength(0);
         var height = map.GetLength(1);
 
@@ -27,26 +71,15 @@ public static class TextExtensions
             // iterate through every bit
             for (int bit = 0; bit < width; bit++)
             {
+                if (!map[bit, line]) continue;
+
                 var charX = bit + x;
                 var charY = line + (y - font.BoundingBox.Y - font.BoundingBox.OffsetY);
 
-                if (map[bit, line] && charX >= 0 && charY >= 0 && charX <= 256 - 1 && charY <= 64 - 1)
-                {
-                    try
-                    {
-                        frame.SetPixel(charX, charY, color);
-
-                        if (withShadow && charX + 1 >= 0 && charY + 1 >= 0 && charX + 1 <= 256 - 1 && charY + 1 <= 64 - 1)
-                        {
-                            frame.SetPixel(charX + 1, charY + 1, Pixel.Black);
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine(e);
-                        throw;
-                    }
-                }
+                // Glyph pixels off the frame are skipped along with their shadow; SetPixel also honours the clip stack
+                if (charX < 0 || charY < 0 || charX >= frame.Width || charY >= frame.Height) continue;
+                frame.SetPixel(charX, charY, color);
+                if (withShadow) frame.SetPixel(charX + 1, charY + 1, shadow);
             }
         }
     }

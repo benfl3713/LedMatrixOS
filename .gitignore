@@ -5,3 +5,5 @@ bin/
 obj/
 
 .DS_Store
+
+*.actual.png
