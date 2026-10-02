@@ -60,3 +60,19 @@ public class CrashCardTests
         Assert.False(SnapshotHelper.IsBlank(frame));
     }
 }
+
+public class FontsTests
+{
+    [Fact]
+    public void Load_IsIdempotentAndSafeToCallConcurrently()
+    {
+        Fonts.Load();
+        var big = Fonts.Big;
+        var small = Fonts.Small;
+
+        Parallel.For(0, 16, _ => Fonts.Load());
+
+        Assert.Same(big, Fonts.Big);
+        Assert.Same(small, Fonts.Small);
+    }
+}
