@@ -1,277 +1,198 @@
+using System.Numerics;
+using LedMatrixOS.Apps.Clocks;
 using LedMatrixOS.Core;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Drawing;
-using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
+using LedMatrixOS.Core.Animation;
+using LedMatrixOS.Core.Settings;
+using LedMatrixOS.Graphics.Particles;
+using LedMatrixOS.Graphics.Text;
+using LedMatrixOS.Graphics.UI;
 
 namespace LedMatrixOS.Apps;
 
-public sealed class AnimatedClockApp : MatrixAppBase
+/// <summary>
+/// The showy clock, a piece of living light art. Glowing neon digits float over three flowing aurora ribbons; every second a
+/// ripple runs out from the colon and kicks the ribbons into a wave front, embers drift up from the floor, and when a digit
+/// changes the new one drops in with a bounce and a spray of sparks as it lands. The digits keep a white-hot core and a dark
+/// underlay so they stay readable whatever the waves are doing.
+/// </summary>
+public sealed class AnimatedClockApp : WidgetApp
 {
     public override string Id => "animated-clock";
     public override string Name => "Animated Clock";
 
-    private DateTime _lastTime = DateTime.Now;
-    private readonly Dictionary<int, float> _digitAnimations = new();
-    private readonly Dictionary<int, (int from, int to)> _digitTransitions = new();
-    
-    // 7-segment display patterns for digits 0-9
-    private readonly Dictionary<int, bool[]> _digitPatterns = new()
+    [Setting("Palette", Description = "Colour theme of the ribbons, embers and glow", Options = ["Aurora", "Lava", "Cyber", "Ocean", "Rainbow"])]
+    public string Palette { get; set; } = "Aurora";
+
+    [Setting("Show Seconds", Description = "Show small rolling seconds beside the time")]
+    public bool ShowSeconds { get; set; } = true;
+
+    [Setting("24-Hour Format", Description = "Use 24-hour format instead of 12-hour")]
+    public bool Show24Hour { get; set; } = true;
+
+    [Setting("Show Date", Description = "Show the weekday and date above the seconds")]
+    public bool ShowDate { get; set; } = true;
+
+    [Setting("Waves", Description = "Flowing ribbons that ripple on every second")]
+    public bool Waves { get; set; } = true;
+
+    [Setting("Embers And Sparks", Description = "Drifting embers and the spark burst when a digit lands")]
+    public bool Sparks { get; set; } = true;
+
+    private readonly AnimatedFx _fx = new();
+    private ClockState _state = null!;
+    private SparkBursts? _bursts;
+    private Emitter? _embers;
+    private WaveField? _waves;
+
+    protected override void OnSettingChanged(string key)
     {
-        { 0, new[] { true, true, true, false, true, true, true } },      // 0
-        { 1, new[] { false, false, true, false, false, true, false } }, // 1
-        { 2, new[] { true, false, true, true, true, false, true } },    // 2
-        { 3, new[] { true, false, true, true, false, true, true } },    // 3
-        { 4, new[] { false, true, true, true, false, true, false } },   // 4
-        { 5, new[] { true, true, false, true, false, true, true } },    // 5
-        { 6, new[] { true, true, false, true, true, true, true } },     // 6
-        { 7, new[] { true, false, true, false, false, true, false } },  // 7
-        { 8, new[] { true, true, true, true, true, true, true } },      // 8
-        { 9, new[] { true, true, true, true, false, true, true } }      // 9
-    };
-
-    public override void Update(TimeSpan deltaTime, CancellationToken cancellationToken)
-    {
-        var currentTime = DateTime.Now;
-        var timeString = currentTime.ToString("HHmmss");
-        var lastTimeString = _lastTime.ToString("HHmmss");
-
-        // Check for digit changes and start animations
-        for (int i = 0; i < timeString.Length; i++)
+        if (Root is null) return;
+        switch (key)
         {
-            var currentDigit = int.Parse(timeString[i].ToString());
-            var lastDigit = int.Parse(lastTimeString[i].ToString());
-
-            if (currentDigit != lastDigit)
-            {
-                _digitTransitions[i] = (lastDigit, currentDigit);
-                _digitAnimations[i] = 0.0f; // Start animation
-            }
-        }
-
-        // Update animation progress
-        var animationSpeed = 3.0f; // Animation duration in seconds
-        foreach (var key in _digitAnimations.Keys.ToList())
-        {
-            _digitAnimations[key] += (float)deltaTime.TotalSeconds * animationSpeed;
-            if (_digitAnimations[key] >= 1.0f)
-            {
-                _digitAnimations.Remove(key);
-                _digitTransitions.Remove(key);
-            }
-        }
-
-        _lastTime = currentTime;
-    }
-
-    public override void Render(FrameBuffer frame, CancellationToken cancellationToken)
-    {
-        using var image = new Image<Rgb24>(frame.Width, frame.Height);
-        
-        var timeString = DateTime.Now.ToString("HHmmss");
-        var digitWidth = 24;
-        var digitHeight = 40;
-        var digitSpacing = 30;
-        var colonWidth = 4;
-        
-        // Calculate starting position to center the clock
-        var totalWidth = 6 * digitWidth + 2 * colonWidth + 5 * 8; // 6 digits + 2 colons + spacing
-        var startX = (frame.Width - totalWidth) / 2;
-        var startY = (frame.Height - digitHeight) / 2;
-
-        image.Mutate(ctx =>
-        {
-            var currentX = startX;
-
-            for (int i = 0; i < timeString.Length; i++)
-            {
-                var digit = int.Parse(timeString[i].ToString());
-                
-                if (_digitAnimations.ContainsKey(i) && _digitTransitions.ContainsKey(i))
-                {
-                    // Draw morphing digit
-                    var transition = _digitTransitions[i];
-                    //var progress = EaseInOutCubic(_digitAnimations[i]);
-                    var progress = 0;
-                    DrawMorphingDigit(ctx, currentX, startY, transition.from, transition.to, progress, digitWidth, digitHeight);
-                }
-                else
-                {
-                    // Draw static digit
-                    DrawDigit(ctx, currentX, startY, digit, digitWidth, digitHeight, 1.0f);
-                }
-
-                currentX += digitSpacing;
-
-                // Draw colons after hours and minutes
-                if (i == 1 || i == 3)
-                {
-                    DrawColon(ctx, currentX, startY, digitHeight);
-                    currentX += colonWidth + 2;
-                }
-            }
-        });
-
-        frame.RenderImage(image);
-    }
-
-    private void DrawMorphingDigit(IImageProcessingContext ctx, int x, int y, int fromDigit, int toDigit, 
-        float progress, int width, int height)
-    {
-        var fromPattern = _digitPatterns[fromDigit];
-        var toPattern = _digitPatterns[toDigit];
-
-        for (int segment = 0; segment < 7; segment++)
-        {
-            var fromOn = fromPattern[segment];
-            var toOn = toPattern[segment];
-
-            float alpha;
-            Color color;
-
-            if (fromOn && toOn)
-            {
-                // Segment stays on - full brightness
-                alpha = 1.0f;
-                color = ImageSharpExtensions.FromHsv(200, 0.6f, 1.0f); // Green
-            }
-            else if (!fromOn && !toOn)
-            {
-                // Segment stays off - skip drawing
-                continue;
-            }
-            else if (fromOn && !toOn)
-            {
-                // Segment turning off - fade out
-                alpha = 1.0f - progress;
-                color = ImageSharpExtensions.FromHsv(0, 0.8f, 0.5f); // Red fading out
-            }
-            else if (!fromOn && toOn)
-            {
-                // Segment turning off - fade out
-                alpha = 1.0f - progress;
-                color = ImageSharpExtensions.FromHsv(60, 0.6f, 0.5f); // Yellow
-            }
-            else
-            {
-                // Segment turning on - fade in
-                alpha = progress;
-                color = ImageSharpExtensions.FromHsv(200, 0.6f, 1.0f); // Blue fading in
-            }
-
-            if (alpha > 0.05f) // Only draw if visible enough
-            {
-                var segmentColor = color;
-                DrawSegment(ctx, x, y, segment, width, height, segmentColor);
-            }
-        }
-    }
-
-    private void DrawDigit(IImageProcessingContext ctx, int x, int y, int digit, int width, int height, float brightness)
-    {
-        var pattern = _digitPatterns[digit];
-        var color = ImageSharpExtensions.FromHsv(200, 0.6f, brightness); // Cyan
-
-        for (int segment = 0; segment < 7; segment++)
-        {
-            if (pattern[segment])
-            {
-                DrawSegment(ctx, x, y, segment, width, height, color);
-            }
-        }
-    }
-
-    private void DrawSegment(IImageProcessingContext ctx, int x, int y, int segment, int width, int height, Color color)
-    {
-        var segmentThickness = 3;
-        var segmentLength = width - 4;
-        var halfHeight = height / 2;
-
-        switch (segment)
-        {
-            case 0: // Top horizontal
-                ctx.FillPolygon(color, new PointF[]
-                {
-                    new(x + 2, y),
-                    new(x + width - 2, y),
-                    new(x + width - 3, y + segmentThickness),
-                    new(x + 3, y + segmentThickness)
-                });
+            case "palette":
+                _fx.SetPalette(Palette);
+                Recolor();
                 break;
-            case 1: // Top left vertical
-                ctx.FillPolygon(color, new PointF[]
-                {
-                    new(x, y + 2),
-                    new(x + segmentThickness, y + 3),
-                    new(x + segmentThickness, y + halfHeight - 1),
-                    new(x, y + halfHeight)
-                });
+            case "show24Hour":
                 break;
-            case 2: // Top right vertical
-                ctx.FillPolygon(color, new PointF[]
-                {
-                    new(x + width - segmentThickness, y + 3),
-                    new(x + width, y + 2),
-                    new(x + width, y + halfHeight),
-                    new(x + width - segmentThickness, y + halfHeight - 1)
-                });
+            case "waves":
+                if (_waves is not null) _waves.Intensity = Waves ? 1f : 0f;
                 break;
-            case 3: // Middle horizontal
-                ctx.FillPolygon(color, new PointF[]
-                {
-                    new(x + 2, y + halfHeight - 1),
-                    new(x + width - 2, y + halfHeight - 1),
-                    new(x + width - 3, y + halfHeight + 1),
-                    new(x + 3, y + halfHeight + 1)
-                });
+            case "sparks":
+                if (_embers is not null) _embers.Enabled = Sparks;
                 break;
-            case 4: // Bottom left vertical
-                ctx.FillPolygon(color, new PointF[]
-                {
-                    new(x, y + halfHeight),
-                    new(x + segmentThickness, y + halfHeight + 1),
-                    new(x + segmentThickness, y + height - 3),
-                    new(x, y + height - 2)
-                });
-                break;
-            case 5: // Bottom right vertical
-                ctx.FillPolygon(color, new PointF[]
-                {
-                    new(x + width - segmentThickness, y + halfHeight + 1),
-                    new(x + width, y + halfHeight),
-                    new(x + width, y + height - 2),
-                    new(x + width - segmentThickness, y + height - 3)
-                });
-                break;
-            case 6: // Bottom horizontal
-                ctx.FillPolygon(color, new PointF[]
-                {
-                    new(x + 3, y + height - segmentThickness),
-                    new(x + width - 3, y + height - segmentThickness),
-                    new(x + width - 2, y + height),
-                    new(x + 2, y + height)
-                });
+            default:
+                Host.Root = Build();
                 break;
         }
     }
 
-    private void DrawColon(IImageProcessingContext ctx, int x, int y, int height)
+    private void Recolor()
     {
-        var dotSize = 2;
-        var color = ImageSharpExtensions.FromHsv(200, 0.6f, 1.0f);
-        
-        // Top dot
-        var topDot = new EllipsePolygon(x + 1, y + height / 3, dotSize);
-        ctx.Fill(color, topDot);
-        
-        // Bottom dot
-        var bottomDot = new EllipsePolygon(x + 1, y + 2 * height / 3, dotSize);
-        ctx.Fill(color, bottomDot);
+        _bursts?.Recolor();
+        if (_embers is null) return;
+        if (_fx.Rainbow)
+        {
+            _embers.Palette = [Pixel.FromHsv(10, .8f, 1), Pixel.FromHsv(70, .8f, 1), Pixel.FromHsv(150, .8f, 1), Pixel.FromHsv(210, .8f, 1), Pixel.FromHsv(290, .8f, 1)];
+        }
+        else
+        {
+            _embers.Palette = null;
+            var p = _fx.Palette;
+            _embers.Gradient = [Pixel.Lerp(p.G0, Pixel.White, 0.55f), p.G0, p.G1, p.G2];
+        }
     }
 
-    private float EaseInOutCubic(float t)
+    protected override Node Build()
     {
-        return t < 0.5f ? 4 * t * t * t : 1 - (float)Math.Pow(-2 * t + 2, 3) / 2;
+        _fx.SetPalette(Palette);
+        _state = new ClockState(Time);
+        _state.Refresh();
+        _fx.Time = (float)_state.SecondsOfDay;
+        var st = _state;
+
+        var atlas = GlyphAtlas.Get(25, 44, 6f, 3);
+        var small = GlyphAtlas.Get(12, 19, 3.4f, 2);
+
+        var embersSystem = new ParticleSystem(256, 64, 140, new Random(5));
+        _embers = new Emitter
+        {
+            X = 0, Y = 62, Width = 255, Height = 2,
+            Rate = 11f,
+            LifetimeMin = 2.2f, LifetimeMax = 4.2f,
+            SpeedMin = 5f, SpeedMax = 16f,
+            Angle = -90f, Spread = 70f,
+            GravityY = -3f,
+            AlphaStart = 0.95f, AlphaEnd = 0f,
+            Enabled = Sparks,
+        };
+        embersSystem.Add(_embers);
+        var burstSystem = new ParticleSystem(256, 64, 200, new Random(9));
+        _bursts = new SparkBursts(burstSystem, _fx);
+        Recolor();
+        for (int i = 0; i < 70; i++) embersSystem.Update(0.05f); // already glowing on the first frame
+
+        NeonDigit Big(Func<int> src, int index, bool sparks = true)
+        {
+            var d = new NeonDigit(atlas, src, _fx, st, index) { Roll = DigitRoll.Drop, RollDuration = TimeSpan.FromMilliseconds(620) };
+            d.StartEntrance(TimeSpan.FromMilliseconds(100 + index * 120));
+            if (sparks) d.Changed = digit => { if (Sparks) _bursts?.Queue(digit.ScreenBounds, 0.2f); };
+            return d;
+        }
+
+        NeonDigit Tiny(Func<int> src, int index)
+        {
+            var d = new NeonDigit(small, src, _fx, st, index + 4) { Roll = DigitRoll.Drop, RollDuration = TimeSpan.FromMilliseconds(420), BobAmount = 0.8f };
+            d.StartEntrance(TimeSpan.FromMilliseconds(600 + index * 100));
+            return d;
+        }
+
+        int clockWidth = 4 * atlas.Stride + 14;
+        int total = clockWidth + (ShowSeconds ? 6 + 2 * small.Stride : 0);
+        int left = (256 - total) / 2;
+
+        var row = new Stack(Orientation.Horizontal)
+        {
+            Margin = new Thickness(left, 7, 0, 0),
+            Height = atlas.Rows,
+            HAlign = Align.Start,
+            CrossAlign = Align.Center,
+            Children =
+            {
+                Big(() => Show24Hour ? st.Hour / 10 : (st.Hour12 >= 10 ? 1 : -1), 0),
+                Big(() => (Show24Hour ? st.Hour : st.Hour12) % 10, 1),
+                new ColonNode(st, () => _fx.Glow(0.4f).WithBrightness(1.15f), atlas.Rows, 3.2f),
+                Big(() => st.Minute / 10, 2),
+                Big(() => st.Minute % 10, 3),
+            },
+        };
+
+        _waves = new WaveField(_state, _fx) { Intensity = Waves ? 1f : 0f };
+        var root = new Panel
+        {
+            new ClockStateNode(_state),
+            new FxDriver(_state, _fx),
+            _waves,
+            new ParticleLayer(embersSystem),
+            new BurstDriver(_bursts),
+            row,
+        };
+
+        if (ShowSeconds)
+        {
+            var secs = new Stack(Orientation.Horizontal)
+            {
+                Margin = new Thickness(left + clockWidth + 6, 31, 0, 0),
+                HAlign = Align.Start,
+                VAlign = Align.Start,
+                Children = { Tiny(() => st.Second / 10, 0), Tiny(() => st.Second % 10, 1) },
+            };
+            root.Add(secs);
+        }
+
+        if (ShowDate)
+        {
+            int dx = ShowSeconds ? left + clockWidth + 8 : left + clockWidth - 40;
+            var date = new Label(() => st.LongDateText)
+            {
+                Margin = new Thickness(dx, ShowSeconds ? 18 : 3, 0, 0),
+                Style = new TextStyle(Fonts.ExtraSmall, new Pixel(235, 240, 255)),
+            };
+            if (Show24Hour == false && ShowSeconds)
+            {
+                // The 12-hour marker sits just under the date.
+                root.Add(new Label(() => st.IsPm ? "PM" : "AM")
+                {
+                    Margin = new Thickness(dx, 25, 0, 0),
+                    Style = new TextStyle(Fonts.ExtraSmall, new Pixel(255, 210, 120)),
+                });
+            }
+            date.Position = new Vector2(0, -30);
+            date.AnimatePosition(Vector2.Zero, TimeSpan.FromMilliseconds(900), Easing.OutBack);
+            root.Add(date);
+        }
+
+        root.Add(new ParticleLayer(burstSystem));
+        return root;
     }
 }

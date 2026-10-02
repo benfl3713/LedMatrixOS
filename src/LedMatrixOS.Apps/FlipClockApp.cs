@@ -1,224 +1,166 @@
+using LedMatrixOS.Apps.Clocks;
 using LedMatrixOS.Core;
-using LedMatrixOS.Graphics;
-using Microsoft.Extensions.Configuration;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
-using SixLabors.Fonts;
+using LedMatrixOS.Core.Settings;
+using LedMatrixOS.Graphics.Text;
+using LedMatrixOS.Graphics.UI;
 
 namespace LedMatrixOS.Apps;
 
 /// <summary>
-/// A clock app that uses flip card animations to display time
+/// A retro split-flap clock. Big charcoal flip cards with cream numerals show hours and minutes, smaller cards show the seconds,
+/// and an AM/PM flap and weekday / day / month flaps sit alongside. Every change is a physically convincing flip: the top flap
+/// falls forward and darkens, the new bottom flap swings down with a little bounce, and a shadow sweeps the lower half.
 /// </summary>
-public sealed class FlipClockApp : MatrixAppBase, IConfigurableApp
+public sealed class FlipClockApp : WidgetApp
 {
     public override string Id => "flip-clock";
     public override string Name => "Flip Clock";
 
-    private FlipNumberDisplay? _hoursDisplay;
-    private FlipNumberDisplay? _minutesDisplay;
-    private FlipNumberDisplay? _secondsDisplay;
-    private Font? _font;
-    private DateTime _lastTime;
-    private bool _showSeconds = true;
-    private bool _show24Hour = true;
-    private string _textColor = "White";
-    private string _backgroundColor = "Black";
+    [Setting("Show Seconds", Description = "Display seconds with flip animation")]
+    public bool ShowSeconds { get; set; } = true;
 
-    public override async Task OnActivatedAsync((int height, int width) dimensions, IConfiguration configuration, CancellationToken cancellationToken)
+    [Setting("24-Hour Format", Description = "Use 24-hour format instead of 12-hour")]
+    public bool Show24Hour { get; set; } = true;
+
+    [Setting("Text Color", Description = "Color of the flip cards text", Options = ["White", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta", "Amber", "Orange"])]
+    public string TextColor { get; set; } = "White";
+
+    [Setting("Background Color", Description = "Color of the flip cards background", Options = ["Black", "DarkBlue", "DarkGray", "White"])]
+    public string BackgroundColor { get; set; } = "Black";
+
+    [Setting("Show Date", Description = "Show weekday, day and month flaps")]
+    public bool ShowDate { get; set; } = true;
+
+    [Setting("Show AM/PM", Description = "Show an AM/PM flap in 12-hour mode")]
+    public bool ShowAmPm { get; set; } = true;
+
+    private readonly List<FlipCard> _cards = new();
+    private ClockState _state = null!;
+
+    protected override void OnSettingChanged(string key)
     {
-        await base.OnActivatedAsync(dimensions, configuration, cancellationToken);
-        
-        // Initialize flip displays
-        _hoursDisplay = new FlipNumberDisplay(2);
-        _minutesDisplay = new FlipNumberDisplay(2);
-        _secondsDisplay = new FlipNumberDisplay(2);
-        
-        // Load font - much larger for 256x64 display
-        try
-        {
-            _font = SystemFonts.CreateFont("Nimbus Sans", 32, FontStyle.Bold);
-        }
-        catch (Exception e)
-        {
-            var fontFamily = SystemFonts.Get("Arial");
-            _font = fontFamily.CreateFont(32, FontStyle.Bold);
-        }
-        
-        _lastTime = DateTime.Now;
-        
-        // Set initial time without animation
-        UpdateTimeDisplays(false);
-    }
-
-    public override void Update(TimeSpan deltaTime, CancellationToken cancellationToken)
-    {
-        var currentTime = DateTime.Now;
-        
-        // Check if time has changed
-        if (_showSeconds)
-        {
-            if (currentTime.Second != _lastTime.Second)
-            {
-                UpdateTimeDisplays(true);
-                _lastTime = currentTime;
-            }
-        }
-        else
-        {
-            if (currentTime.Minute != _lastTime.Minute)
-            {
-                UpdateTimeDisplays(true);
-                _lastTime = currentTime;
-            }
-        }
-        
-        // Update animations
-        _hoursDisplay?.Update(deltaTime, 0.4f);
-        _minutesDisplay?.Update(deltaTime, 0.4f);
-        _secondsDisplay?.Update(deltaTime, 0.4f);
-    }
-
-    public override void Render(FrameBuffer frame, CancellationToken cancellationToken)
-    {
-        if (_font == null || _hoursDisplay == null || _minutesDisplay == null || _secondsDisplay == null)
-            return;
-
-        using var image = new Image<Rgb24>(frame.Width, frame.Height);
-        
-        image.Mutate(ctx =>
-        {
-            // Clear background
-            ctx.Fill(GetBackgroundColor());
-            
-            var textColor = GetTextColor();
-            var bgColor = GetBackgroundColor();
-            
-            // Card dimensions - much larger for 256x64 display
-            int cardWidth = _showSeconds ? 28 : 38;  // Smaller cards if showing seconds
-            int cardHeight = 50;
-            int spacing = 4;
-            int colonWidth = 8;
-            
-            // Calculate positions
-            int totalWidth = _showSeconds 
-                ? 6 * cardWidth + 5 * spacing + 2 * colonWidth  // HH:MM:SS
-                : 4 * cardWidth + 3 * spacing + colonWidth;      // HH:MM
-            
-            int startX = (frame.Width - totalWidth) / 2;
-            int startY = (frame.Height - cardHeight) / 2;
-            
-            // Render hours
-            _hoursDisplay.Render(ctx, startX, startY, cardWidth, cardHeight, spacing, _font, textColor, bgColor);
-            
-            // Draw colon after hours
-            int colonX = startX + 2 * cardWidth + 2 * spacing;
-            DrawColon(ctx, colonX, startY, cardHeight, textColor);
-            
-            // Render minutes
-            int minutesX = colonX + colonWidth + spacing;
-            _minutesDisplay.Render(ctx, minutesX, startY, cardWidth, cardHeight, spacing, _font, textColor, bgColor);
-            
-            if (_showSeconds)
-            {
-                // Draw colon after minutes
-                int colonX2 = minutesX + 2 * cardWidth + 2 * spacing;
-                DrawColon(ctx, colonX2, startY, cardHeight, textColor);
-                
-                // Render seconds
-                int secondsX = colonX2 + colonWidth + spacing;
-                _secondsDisplay.Render(ctx, secondsX, startY, cardWidth, cardHeight, spacing, _font, textColor, bgColor);
-            }
-        });
-        
-        frame.RenderImage(image);
-    }
-
-    private void UpdateTimeDisplays(bool animate)
-    {
-        var time = DateTime.Now;
-        int hours = _show24Hour ? time.Hour : (time.Hour % 12 == 0 ? 12 : time.Hour % 12);
-        
-        _hoursDisplay?.SetNumber(hours, animate);
-        _minutesDisplay?.SetNumber(time.Minute, animate);
-        _secondsDisplay?.SetNumber(time.Second, animate);
-    }
-
-    private void DrawColon(IImageProcessingContext ctx, int x, int y, int height, Color color)
-    {
-        int dotSize = 5;
-        int dotSpacing = height / 3;
-        
-        // Top dot
-        ctx.Fill(color, new RectangleF(x, y + dotSpacing - dotSize / 2, dotSize, dotSize));
-        
-        // Bottom dot
-        ctx.Fill(color, new RectangleF(x, y + 2 * dotSpacing - dotSize / 2, dotSize, dotSize));
-    }
-
-    private Color GetTextColor()
-    {
-        return _textColor switch
-        {
-            "Red" => Color.Red,
-            "Green" => Color.Green,
-            "Blue" => Color.Blue,
-            "Yellow" => Color.Yellow,
-            "Cyan" => Color.Cyan,
-            "Magenta" => Color.Magenta,
-            _ => Color.White
-        };
-    }
-
-    private Color GetBackgroundColor()
-    {
-        return _backgroundColor switch
-        {
-            "Red" => Color.Red,
-            "Green" => Color.Green,
-            "Blue" => Color.Blue,
-            "Yellow" => Color.Yellow,
-            "Cyan" => Color.Cyan,
-            "Magenta" => Color.Magenta,
-            "White" => Color.White,
-            "DarkBlue" => Color.DarkBlue,
-            "DarkGray" => Color.DarkGray,
-            _ => Color.Black
-        };
-    }
-
-    public IEnumerable<AppSetting> GetSettings()
-    {
-        return new[]
-        {
-            new AppSetting("showSeconds", "Show Seconds", "Display seconds with flip animation", AppSettingType.Boolean, true, _showSeconds),
-            new AppSetting("show24Hour", "24-Hour Format", "Use 24-hour format instead of 12-hour", AppSettingType.Boolean, true, _show24Hour),
-            new AppSetting("textColor", "Text Color", "Color of the flip cards text", AppSettingType.Select, "White", _textColor, 
-                Options: new[] { "White", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta" }),
-            new AppSetting("backgroundColor", "Background Color", "Color of the flip cards background", AppSettingType.Select, "Black", _backgroundColor, 
-                Options: new[] { "Black", "DarkBlue", "DarkGray", "White" })
-        };
-    }
-
-    public void UpdateSetting(string key, object value)
-    {
+        if (Root is null) return;
         switch (key)
         {
-            case "showSeconds":
-                _showSeconds = Convert.ToBoolean(value);
+            case "textColor":
+            case "backgroundColor":
+                var style = FlipStyle.From(BackgroundColor, TextColor);
+                foreach (var c in _cards) c.Style = style;
                 break;
             case "show24Hour":
-                _show24Hour = Convert.ToBoolean(value);
-                UpdateTimeDisplays(false);
+                if (ShowAmPm) Host.Root = Build();
                 break;
-            case "textColor":
-                _textColor = value.ToString() ?? "White";
-                break;
-            case "backgroundColor":
-                _backgroundColor = value.ToString() ?? "Black";
+            default:
+                Host.Root = Build();
                 break;
         }
+    }
+
+    protected override Node Build()
+    {
+        _cards.Clear();
+        _state = new ClockState(Time);
+        _state.Refresh();
+        var st = _state;
+        var style = FlipStyle.From(BackgroundColor, TextColor);
+
+        const int bigW = 34, bigH = 56, secW = 22, secH = 36, dateH = 14;
+        var bigDigits = FaceSet.Digits(GlyphAtlas.Get(22, 38, 6f, 0), bigW, bigH);
+        var secDigits = FaceSet.Digits(GlyphAtlas.Get(13, 24, 3.8f, 0), secW, secH);
+
+        int order = 0;
+        FlipCard Card(FaceSet faces, Func<int> src)
+        {
+            var c = new FlipCard(faces, src, style);
+            c.StartEntrance(TimeSpan.FromMilliseconds(150 + order++ * 90));
+            _cards.Add(c);
+            return c;
+        }
+
+        bool ampm = !Show24Hour && ShowAmPm;
+        bool sidebar = ShowSeconds || ShowDate || ampm;
+        int groupW = 4 * bigW + 4 + 12;
+        int sideW = 66;
+        int total = groupW + (sidebar ? 6 + sideW : 0);
+        int left = (256 - total) / 2;
+
+        var main = new Stack(Orientation.Horizontal, gap: 2)
+        {
+            Margin = new Thickness(left, 4, 0, 0),
+            HAlign = Align.Start,
+            CrossAlign = Align.Center,
+            Height = bigH + 3,
+        };
+        main.Add(Card(bigDigits, () => Show24Hour ? st.Hour / 10 : (st.Hour12 >= 10 ? 1 : 10)));
+        main.Add(Card(bigDigits, () => (Show24Hour ? st.Hour : st.Hour12) % 10));
+        main.Add(new ColonNode(st, () => style.Glyph, bigH, 2.4f, pad: 2) { Pulse = 0.8f, Width = 12 });
+        main.Add(Card(bigDigits, () => st.Minute / 10));
+        main.Add(Card(bigDigits, () => st.Minute % 10));
+
+        var root = new Panel
+        {
+            new ClockStateNode(_state),
+            new FlipBackdrop(),
+            main,
+        };
+
+        if (sidebar)
+        {
+            int sx = left + groupW + 6;
+            int y = 4;
+            if (ShowSeconds)
+            {
+                var secs = new Stack(Orientation.Horizontal, gap: 2)
+                {
+                    Margin = new Thickness(sx, y, 0, 0),
+                    HAlign = Align.Start,
+                    VAlign = Align.Start,
+                };
+                secs.Add(Card(secDigits, () => st.Second / 10));
+                secs.Add(Card(secDigits, () => st.Second % 10));
+                root.Add(secs);
+                if (ampm)
+                {
+                    var ap = new FlipCard(FaceSet.Texts(["AM", "PM"], Fonts.Small, 18, dateH), () => st.IsPm ? 1 : 0, style);
+                    ap.StartEntrance(TimeSpan.FromMilliseconds(150 + order++ * 90));
+                    _cards.Add(ap);
+                    ap.Margin = new Thickness(sx + 2 * secW + 4, y, 0, 0);
+                    ap.HAlign = Align.Start;
+                    ap.VAlign = Align.Start;
+                    root.Add(ap);
+                }
+                y += secH + 6;
+            }
+            else if (ampm)
+            {
+                var ap = new FlipCard(FaceSet.Texts(["AM", "PM"], Fonts.Small, 22, dateH), () => st.IsPm ? 1 : 0, style);
+                ap.StartEntrance(TimeSpan.FromMilliseconds(150 + order++ * 90));
+                _cards.Add(ap);
+                ap.Margin = new Thickness(sx, 14, 0, 0);
+                ap.HAlign = Align.Start;
+                ap.VAlign = Align.Start;
+                root.Add(ap);
+            }
+
+            if (ShowDate)
+            {
+                int dy = ShowSeconds ? 64 - dateH - 3 - 1 : 32 + (ampm ? 4 : -dateH / 2);
+                var days = FaceSet.Texts(ClockState.DayShort, Fonts.Small, 22, dateH);
+                var nums = FaceSet.Texts(Enumerable.Range(1, 31).Select(i => ClockState.TwoDigits(i)).ToArray(), Fonts.Small, 16, dateH);
+                var months = FaceSet.Texts(ClockState.MonthShort, Fonts.Small, 22, dateH);
+                var row = new Stack(Orientation.Horizontal, gap: 2)
+                {
+                    Margin = new Thickness(sx, dy, 0, 0),
+                    HAlign = Align.Start,
+                    VAlign = Align.Start,
+                };
+                row.Add(Card(days, () => (int)st.DayOfWeek));
+                row.Add(Card(nums, () => st.Day - 1));
+                row.Add(Card(months, () => st.Month - 1));
+                root.Add(row);
+            }
+        }
+
+        return root;
     }
 }
