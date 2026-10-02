@@ -1,59 +1,38 @@
-using LedMatrixOS.Core;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Drawing;
-using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
+using LedMatrixOS.Apps.Visuals;
+using LedMatrixOS.Core.Settings;
+using LedMatrixOS.Graphics.UI;
 
 namespace LedMatrixOS.Apps;
 
-public sealed class RainbowSpiralApp : MatrixAppBase
+/// <summary>
+/// Hypnotic demoscene shader: counter-rotating log-spiral vortices over a drifting plasma that warps their arms, a cyclic colour
+/// palette with a complementary hue in the gaps, glowing cores, comets that trail along the spiral, and a bloom pass.
+/// </summary>
+public sealed class RainbowSpiralApp : WidgetApp
 {
     public override string Id => "rainbow-spiral";
     public override string Name => "Rainbow Spiral";
 
-    private double _animationTime;
-    private readonly int _spiralSegments = 60;
+    [Setting("Speed", Description = "Animation speed", Min = 1, Max = 10)]
+    public int Speed { get; set; } = 5;
 
-    public override void Update(TimeSpan deltaTime, CancellationToken cancellationToken)
-    {
-        _animationTime += deltaTime.TotalSeconds;
-    }
+    [Setting("Arms", Description = "Number of spiral arms", Min = 1, Max = 8)]
+    public int Arms { get; set; } = 3;
 
-    public override void Render(FrameBuffer frame, CancellationToken cancellationToken)
-    {
-        using var image = new Image<Rgb24>(frame.Width, frame.Height);
-        
-        var centerX = frame.Width / 2f;
-        var centerY = frame.Height / 2f;
-        var maxRadius = Math.Min(frame.Width, frame.Height) / 2f - 2;
+    [Setting("Style", Description = "Visual style", Options = ["Twin Vortex", "Vortex", "Plasma", "Tunnel"])]
+    public string Style { get; set; } = "Twin Vortex";
 
-        image.Mutate(ctx =>
-        {
-            // Create spiral points
-            var points = new PointF[_spiralSegments];
-            for (int i = 0; i < _spiralSegments; i++)
-            {
-                var angle = (i / (float)_spiralSegments) * Math.PI * 6 + _animationTime; // 3 full rotations
-                var radius = (i / (float)_spiralSegments) * maxRadius;
-                
-                points[i] = new PointF(
-                    centerX + (float)(Math.Cos(angle) * radius),
-                    centerY + (float)(Math.Sin(angle) * radius)
-                );
-            }
+    [Setting("Palette", Description = "Colour palette", Options = ["Rainbow", "Neon", "Sunset", "Ocean", "Aurora"])]
+    public string Palette { get; set; } = "Rainbow";
 
-            // Draw spiral with rainbow colors
-            for (int i = 0; i < points.Length - 1; i++)
-            {
-                var hue = (i / (float)_spiralSegments + (float)_animationTime * 0.2f) % 1.0f;
-                var color = ImageSharpExtensions.FromHsv(hue * 360, 1.0f, 1.0f);
-                var pen = Pens.Solid(color, 2);
-                
-                ctx.DrawLine(pen, points[i], points[i + 1]);
-            }
-        });
+    [Setting("Comets", Description = "Glowing comets that trail along the spiral")]
+    public bool Comets { get; set; } = true;
 
-        frame.RenderImage(image);
-    }
+    [Setting("Glow", Description = "Bloom around the brightest areas (turn off on slow hardware)")]
+    public bool Glow { get; set; } = true;
+
+    /// <summary>Fixes the random sequence (tests); null picks a random seed per activation.</summary>
+    public int? Seed { get; set; }
+
+    protected override Node Build() => new Panel { Children = { new SpiralVisual(this, Seed ?? Random.Shared.Next()) } };
 }
