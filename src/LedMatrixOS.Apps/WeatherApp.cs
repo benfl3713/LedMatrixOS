@@ -120,7 +120,7 @@ public sealed class WeatherApp : WidgetApp
         (18, new Pixel(200, 245, 110)), (24, new Pixel(255, 215, 70)), (30, new Pixel(255, 140, 40)), (36, new Pixel(255, 70, 50)),
     ];
 
-    private static Pixel TempColor(double temp, bool fahrenheit)
+    internal static Pixel TempColor(double temp, bool fahrenheit)
     {
         double c = fahrenheit ? (temp - 32) * 5 / 9 : temp;
         if (c <= stops[0].T) return stops[0].C;
@@ -183,7 +183,7 @@ public sealed class WeatherApp : WidgetApp
 
         _pagerNode = new Pager(1, TimeSpan.FromSeconds(PageSeconds), new SlideTransition(MoveDirection.Up))
         {
-            WeatherPages.Now(Snap, LocalNow, Sky), WeatherPages.Hours(Snap, Sky), WeatherPages.Days(Snap, Sky),
+            WeatherPages.Now(Snap, LocalNow, Sky), WeatherPages.Hours(Snap, Sky), WeatherPages.Rain(Snap, Sky), WeatherPages.Days(Snap, Sky),
         };
         _pager = _pagerNode;
         _skeleton = new Skeleton(Sky, () => _state == State.Loading);
