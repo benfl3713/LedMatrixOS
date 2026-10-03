@@ -25,8 +25,9 @@ public sealed class AlertOverlay : OverlayBase
         Pixel? bgColor = null,
         Pixel? borderColor = null,
         bool drawBorder = true,
-        int priority = 200)
-        : base("alert", priority, new Rectangle(0, 0, 256, 64))
+        int priority = 200,
+        string id = "alert")
+        : base(id, priority, new Rectangle(0, 0, 256, 64))
     {
         _bgColor = bgColor ?? Pixel.Black;
         _borderColor = borderColor ?? Pixel.White;
@@ -35,6 +36,8 @@ public sealed class AlertOverlay : OverlayBase
         Duration = duration;
         TransitionDuration = TimeSpan.FromMilliseconds(200);
     }
+
+    public override string Kind => "alert";
 
     public override void Render(FrameBuffer frame, FrameContext context)
     {

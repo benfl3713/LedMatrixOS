@@ -17,6 +17,8 @@ public sealed class BadgeOverlay : OverlayBase
         _pulsing = pulsing;
     }
 
+    public override string Kind => "badge";
+
     public override void Render(FrameBuffer frame, FrameContext context)
     {
         var color = _color;

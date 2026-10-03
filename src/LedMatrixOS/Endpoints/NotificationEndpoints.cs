@@ -1,42 +1,34 @@
-using LedMatrixOS.Apps.Interrupts;
 using LedMatrixOS.Core;
-using LedMatrixOS.Graphics.Text;
+using LedMatrixOS.Graphics.UI;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 
 namespace LedMatrixOS.Endpoints;
 
+/// <summary>
+/// Notifications are alert overlays (see <see cref="LedMatrixOS.Core.Overlays.AlertOverlay"/>), so they composite over
+/// the running app and show up in GET /api/overlays instead of taking over the whole render loop.
+/// </summary>
 public static class NotificationEndpoints
 {
     public static void MapNotificationEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost(
             "/api/notifications",
-            ([FromServices] InterruptService interruptService) =>
+            ([FromServices] RenderEngine engine) =>
             {
-                var now = DateTime.Now;
-                interruptService.RequestInterrupt(
-                    new InterruptRequest(
-                        RenderRed,
-                        () => { return DateTime.Now > now.AddSeconds(5); }));
+                engine.Overlays.Add(AlertFactory.Flash(engine.Overlays.Width, engine.Overlays.Height, TimeSpan.FromSeconds(5)));
             });
 
         endpoints.MapPost(
             "/api/notifications/message",
-            ([FromServices] InterruptService interruptService, [FromServices] IOptions<AppConfig> appConfig, [FromBody] MessageRequest message) =>
+            ([FromServices] RenderEngine engine, [FromBody] MessageRequest message) =>
             {
-                var font = Fonts.Big.Scale(3);
-                var render = new InterruptMessageRender(message.Message, (int)Math.Round(256d / font.BoundingBox.X, MidpointRounding.ToZero), font, message.Color ?? new Pixel(150, 0, 255));
-                interruptService.RequestInterrupt(
-                    new InterruptRequest(
-                        render.Render,
-                        render.HasFinished));
+                engine.Overlays.Add(AlertFactory.Message(
+                    message.Message,
+                    message.Color ?? new Pixel(150, 0, 255),
+                    engine.Overlays.Width,
+                    engine.Overlays.Height));
             });
-    }
-
-    public static void RenderRed(FrameBuffer frame)
-    {
-        frame.Clear(new Pixel(200, 0, 0));
     }
 
     private record MessageRequest(string Message, Pixel? Color = null);

@@ -29,6 +29,8 @@ public sealed class ToastOverlay : OverlayBase
         TransitionDuration = TimeSpan.FromMilliseconds(150);
     }
 
+    public override string Kind => "toast";
+
     public override void Render(FrameBuffer frame, FrameContext context)
     {
         // Draw background

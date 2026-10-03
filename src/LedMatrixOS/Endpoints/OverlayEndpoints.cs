@@ -31,7 +31,7 @@ public static class OverlayEndpoints
                 TimeSpan.FromSeconds(Math.Clamp(req.Seconds ?? 4, 1, 60)),
                 (frame, _) => text.Draw(frame, Math.Max(0, (width - text.Width) / 2), 1, fg),
                 bg,
-                new Rectangle(0, 0, width, height));
+                new Rectangle(0, 0, width, height)) { Text = req.Message };
             engine.Overlays.Add(toast);
             return Results.Ok(new { id = toast.Id });
         });
@@ -48,6 +48,9 @@ public static class OverlayEndpoints
                 req.Pulsing ?? true));
             return Results.Ok(new { id = req.Id });
         });
+
+        endpoints.MapGet("/api/overlays", ([FromServices] RenderEngine engine) =>
+            Results.Ok(new { overlays = engine.Overlays.List() }));
 
         endpoints.MapDelete("/api/overlays/{id}", ([FromServices] RenderEngine engine, string id) =>
             engine.Overlays.Dismiss(id) ? Results.Ok() : Results.NotFound());
