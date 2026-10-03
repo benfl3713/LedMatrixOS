@@ -47,6 +47,9 @@ public class Pager : Container, IEnumerable<Node>
 
     public ITransition Transition { get; set; }
 
+    /// <summary>True (the default) wraps from the last page back to the first; false stops on the last page, for one-shot sequences.</summary>
+    public bool Loop { get; set; } = true;
+
     /// <summary>Applied to the transition's progress.</summary>
     public Func<float, float> Easing { get; set; }
 
@@ -113,7 +116,7 @@ public class Pager : Container, IEnumerable<Node>
             _transitionTime += ctx.Delta;
             if (_transitionTime >= Transition.Duration) FinishTransition();
         }
-        else if (PageCount > 1)
+        else if (PageCount > 1 && (Loop || _pageIndex < PageCount - 1))
         {
             _idle += ctx.Delta;
             if (_idle >= Interval)
