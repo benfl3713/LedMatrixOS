@@ -34,7 +34,11 @@ public class TubeDeparturesApp : WidgetApp
     [Setting("Platform Filter", Description = "Filter by platform name (e.g. 'Eastbound'). Leave empty to show all platforms.")]
     public string PlatformFilter { get; set; } = "";
 
-    [Setting("Max Departures", Description = "Number of departures to cycle through", Min = 1, Max = 12)]
+    [Setting("Board Style", Description = "Split: a column per direction with the next trains of each. Platform: classic amber platform sign. Hero: the next train big, the rest paged below.",
+        Options = ["Split", "Platform", "Hero"])]
+    public string BoardStyle { get; set; } = "Split";
+
+    [Setting("Max Departures", Description = "Hero: number of departures to cycle through. Split: trains per direction column (at most 3 fit). Platform: always 5 rows.", Min = 1, Max = 12)]
     public int MaxDepartures { get; set; } = 3;
 
     [Setting("Colour Departures By Line", Description = "When enabled, each departure uses its line colour for text and a stronger glow.")]
@@ -59,6 +63,8 @@ public class TubeDeparturesApp : WidgetApp
     private readonly TflStopPicker _picker;
 
     private Node? _board, _strip;
+    private Node? _heroBody, _splitBody, _platformBody, _splitDivider, _splitSecond, _stripNormal, _stripPlatform;
+    private Ticker? _platformTicker;
     private Node? _rest;
     private Pager? _pager;
     private StateScreen? _state;
@@ -92,12 +98,17 @@ public class TubeDeparturesApp : WidgetApp
         _rest = _pager;
 
         _state = new StateScreen(Fonts.Big, Fonts.Small);
-        _board = new Stack(Orientation.Vertical, gap: 1) { HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { hero, _pager } };
+        _heroBody = new Stack(Orientation.Vertical, gap: 1) { HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { hero, _pager } };
+        _splitBody = BuildSplit(styles, byLine);
+        _platformBody = BuildPlatform(styles, byLine);
+        _board = new Panel { HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { _heroBody, _splitBody, _platformBody } };
         _ticker = new Ticker(styles.Strip, styles.TinyAmber, () => _stationName?.Value, () => _lineStatuses?.Value);
+        _platformTicker = new Ticker(styles.TinyAmber, styles.TinyAmber, () => _stationName?.Value, () => _lineStatuses?.Value);
 
-        _strip = new Panel
+        _stripNormal = new Panel
         {
-            Height = 12,
+            HAlign = Align.Stretch,
+            VAlign = Align.Stretch,
             Children =
             {
                 new Block(new Pixel(14, 14, 20)),
@@ -116,21 +127,103 @@ public class TubeDeparturesApp : WidgetApp
             },
         };
 
+        _stripPlatform = new Panel
+        {
+            HAlign = Align.Stretch,
+            VAlign = Align.Stretch,
+            Visible = false,
+            Children =
+            {
+                new Block(TubeGfx.Amber.WithBrightness(0.3f), height: 1) { VAlign = Align.Start },
+                new Stack(Orientation.Horizontal, gap: 3)
+                {
+                    HAlign = Align.Stretch,
+                    CrossAlign = Align.Center,
+                    Padding = new Thickness(6, 1, 6, 0),
+                    Children = { _platformTicker, new Clock("HH:mm", Time) { Style = styles.SmallAmber } },
+                },
+            },
+        };
+
+        _strip = new Panel { Height = 12, Children = { _stripNormal, _stripPlatform } };
+
         return new Dock { Bottom = _strip, Fill = new Panel { _board, _state } };
     }
+
+    /// <summary>Two direction columns, each headed by its direction and listing that direction's next trains.</summary>
+    private Node BuildSplit(BoardStyles styles, Func<bool> byLine)
+    {
+        Node Column(int index)
+        {
+            var header = new Panel
+            {
+                Height = 10,
+                HAlign = Align.Stretch,
+                Children =
+                {
+                    new Block(new Pixel(22, 22, 30)),
+                    new Label(() => _model.ColumnLabel(index) is { Length: > 0 } label ? label : "Next trains")
+                        { Style = styles.TinyAmber, VAlign = Align.Center, Margin = new Thickness(5, 0, 0, 0) },
+                },
+            };
+            var rows = new ListView<Departure>(() => _model.Column(index),
+                d => new ScrollSlot(new CompactRow(d, _model, styles, byLine, countdownWidth: 34, platformWidth: 11), CompactRow.RowHeight), d => d.Key)
+                { HAlign = Align.Stretch, VAlign = Align.Stretch, Grow = 1, ClipChildren = true, EnterOffset = 0, EnterDuration = 350.Ms(), ExitDuration = 350.Ms() };
+            return new Stack(Orientation.Vertical) { Grow = 1, HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { header, rows } };
+        }
+
+        _splitSecond = Column(1);
+        _splitDivider = new Block(new Pixel(40, 40, 52), width: 1);
+        return new Stack(Orientation.Horizontal) { HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { Column(0), _splitDivider, _splitSecond } };
+    }
+
+    /// <summary>The platform sign: column captions, then amber rows on black.</summary>
+    private Node BuildPlatform(BoardStyles styles, Func<bool> byLine)
+    {
+        var caption = new TextStyle(Fonts.QuiteSmall, TubeGfx.Amber.WithBrightness(0.5f), Shadow: false);
+        var header = new Panel
+        {
+            Height = 10,
+            HAlign = Align.Stretch,
+            Children =
+            {
+                new Label("PLAT") { Style = caption, VAlign = Align.Center, Margin = new Thickness(6, 0, 0, 0) },
+                new Label("DESTINATION") { Style = caption, VAlign = Align.Center, Margin = new Thickness(30, 0, 0, 0) },
+                new Label("MINS") { Style = caption, VAlign = Align.Center, HAlign = Align.End, Margin = new Thickness(0, 0, 8, 0) },
+                new Block(TubeGfx.Amber.WithBrightness(0.3f), height: 1) { VAlign = Align.End },
+            },
+        };
+        var rows = new ListView<Departure>(() => _model.Visible, d => new ScrollSlot(new PlatformRow(d, _model, styles, byLine), PlatformRow.RowHeight), d => d.Key)
+            { HAlign = Align.Stretch, VAlign = Align.Stretch, Grow = 1, ClipChildren = true, EnterOffset = 0, EnterDuration = 350.Ms(), ExitDuration = 350.Ms(), Margin = new Thickness(0, 2, 0, 0) };
+        return new Stack(Orientation.Vertical) { HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { header, rows } };
+    }
+
+    private enum Style { Split, Platform, Hero }
+
+    private Style CurrentStyle => BoardStyle switch { "Hero" => Style.Hero, "Platform" => Style.Platform, _ => Style.Split };
 
     // ---- per frame ----------------------------------------------------------------------------------------------------------------
 
     public override void Update(FrameContext context, CancellationToken cancellationToken)
     {
         _ = Host;   // builds the tree on the first frame
-        _model.Refresh(context.Time, _arrivals?.Value, PlatformFilter, MaxDepartures);
+        var style = CurrentStyle;
+        int max = style == Style.Platform ? 5 : MaxDepartures;
+        _model.Refresh(context.Time, _arrivals?.Value, PlatformFilter, max, perDirection: style == Style.Split);
+
+        _heroBody!.Visible = style == Style.Hero;
+        _splitBody!.Visible = style == Style.Split;
+        _platformBody!.Visible = style == Style.Platform;
+        _splitSecond!.Visible = _splitDivider!.Visible = _model.ColumnCount > 1;
+        _stripNormal!.Visible = style != Style.Platform;
+        _stripPlatform!.Visible = style == Style.Platform;
 
         bool hasTrains = _model.Visible.Count > 0;
         _state!.State = StateFor(hasTrains);
         _state.Detail = _stationName?.Value is { Length: > 0 } name ? name : "";
         _state.Visible = !hasTrains;
         _ticker!.Tick(context.Time);
+        _platformTicker!.Tick(context.Time);
 
         base.Update(context, cancellationToken);
 

@@ -22,10 +22,11 @@ public class TubeDeparturesAppTests(ITestOutputHelper output)
     }
 
     private static (TubeDeparturesApp App, AppStage Stage, MutableLive<TflArrival[]> Arrivals) Board(
-        TflArrival[]? arrivals = null, LineStatus[]? statuses = null, string name = "Baker Street", int warmMs = 1500, int max = 3)
+        TflArrival[]? arrivals = null, LineStatus[]? statuses = null, string name = "Baker Street", int warmMs = 1500, int max = 3, string style = "Hero")
     {
         var app = NewApp();
         app.MaxDepartures = max;
+        app.BoardStyle = style;
         var live = new MutableLive<TflArrival[]> { Value = arrivals ?? CommuteBoard() };
         app.UseData(live, new MutableLive<LineStatus[]> { Value = statuses ?? StationLines() }, new MutableLive<string> { Value = name });
         var stage = new AppStage(app);
@@ -66,13 +67,15 @@ public class TubeDeparturesAppTests(ITestOutputHelper output)
         var settings = NewApp().GetSettings().ToList();
 
         Assert.Equal(
-            new[] { "stationSearch", "stationSelect", "stationId", "platformFilter", "maxDepartures", "colorDeparturesByLine", "pageSeconds" },
+            new[] { "stationSearch", "stationSelect", "stationId", "platformFilter", "boardStyle", "maxDepartures", "colorDeparturesByLine", "pageSeconds" },
             settings.Select(s => s.Key).ToArray());
         Assert.Equal(
-            new[] { AppSettingType.String, AppSettingType.Select, AppSettingType.String, AppSettingType.String, AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Integer },
+            new[] { AppSettingType.String, AppSettingType.Select, AppSettingType.String, AppSettingType.String, AppSettingType.Select, AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Integer },
             settings.Select(s => s.Type).ToArray());
 
         var max = settings.Single(s => s.Key == "maxDepartures");
+        Assert.Equal("Split", settings.Single(s => s.Key == "boardStyle").CurrentValue);
+        Assert.Equal(new[] { "Split", "Platform", "Hero" }, settings.Single(s => s.Key == "boardStyle").Options);
         Assert.Equal(3, max.CurrentValue);
         Assert.Equal(1, max.MinValue);
         Assert.Equal(12, max.MaxValue);
@@ -315,6 +318,142 @@ public class TubeDeparturesAppTests(ITestOutputHelper output)
         var os = new AppStage(offline);
         os.Step(33, 30);
         Golden(os, "tube_departures_offline");
+    }
+
+    // ---- board styles --------------------------------------------------------------------------------------------
+
+    private static TflArrival[] OneDirection() =>
+    [
+        Arrival("101", "victoria", "Brixton", 190, "Southbound - Platform 2"),
+        Arrival("303", "victoria", "Brixton", 500, "Southbound - Platform 2"),
+        Arrival("505", "victoria", "Brixton", 840, "Southbound - Platform 2"),
+    ];
+
+    private static TflArrival[] NoDirection() =>
+    [
+        Arrival("101", "victoria", "Brixton", 190, ""),
+        Arrival("202", "victoria", "Walthamstow Central", 340, ""),
+        Arrival("303", "victoria", "Brixton", 500, ""),
+        Arrival("404", "victoria", "Walthamstow Central", 660, ""),
+    ];
+
+    [Fact]
+    public void Direction_IsTheTextBeforeThePlatform()
+    {
+        Assert.Equal("Northbound", Departure.DirectionOf("Northbound - Platform 1"));
+        Assert.Equal("Eastbound", Departure.DirectionOf("Eastbound"));
+        Assert.Equal("", Departure.DirectionOf("Platform 3"));
+        Assert.Equal("", Departure.DirectionOf(""));
+    }
+
+    [Fact]
+    public void Split_GroupsByDirection_ThreePerColumn()
+    {
+        var (app, _, _) = Board(style: "Split");
+        Assert.Equal(2, app.Board.ColumnCount);
+        Assert.Equal("Northbound", app.Board.ColumnLabel(0));
+        Assert.Equal("Southbound", app.Board.ColumnLabel(1));
+        Assert.Equal(2, app.Board.Column(0).Count);
+        Assert.Equal(3, app.Board.Column(1).Count);
+        Assert.Equal(5, app.Board.Visible.Count);
+
+        var (one, _, _) = Board(OneDirection(), style: "Split");
+        Assert.Equal(1, one.Board.ColumnCount);
+        var (none, _, _) = Board(NoDirection(), style: "Split");
+        Assert.Equal(1, none.Board.ColumnCount);
+        Assert.Equal("", none.Board.ColumnLabel(0));
+        Assert.Equal(3, none.Board.Column(0).Count);   // Max Departures is per column
+    }
+
+    [Fact]
+    public void Golden_Split()
+    {
+        var (_, stage, _) = Board(style: "Split");
+        Golden(stage, "tube_departures_split");
+    }
+
+    [Fact]
+    public void Golden_SplitDue()
+    {
+        var (_, stage, _) = Board(CommuteBoard(40), style: "Split");
+        Golden(stage, "tube_departures_split_due");
+    }
+
+    [Fact]
+    public void Golden_SplitOneDirection()
+    {
+        var (_, stage, _) = Board(OneDirection(), style: "Split");
+        Golden(stage, "tube_departures_split_one_direction");
+    }
+
+    [Fact]
+    public void Golden_SplitNoDirection()
+    {
+        var (_, stage, _) = Board(NoDirection(), style: "Split");
+        Golden(stage, "tube_departures_split_no_direction");
+    }
+
+    [Fact]
+    public void Golden_SplitColourByLine()
+    {
+        var (app, stage, _) = Board(CommuteBoard(40), style: "Split");
+        app.ColorDeparturesByLine = true;
+        stage.Step(33, 3);
+        Golden(stage, "tube_departures_split_colour_by_line");
+    }
+
+    [Fact]
+    public void Golden_Platform()
+    {
+        var (_, stage, _) = Board(CommuteBoard(), style: "Platform");
+        Golden(stage, "tube_departures_platform");
+    }
+
+    [Fact]
+    public void Golden_PlatformDue()
+    {
+        var (_, stage, _) = Board(CommuteBoard(40), style: "Platform");
+        Golden(stage, "tube_departures_platform_due");
+    }
+
+    [Fact]
+    public void Style_CanBeSwitchedAtRuntime()
+    {
+        var (app, stage, _) = Board(style: "Split");
+        var split = stage.Snapshot();
+        app.UpdateSetting("boardStyle", "Platform");
+        stage.Step(33, 20);
+        var platform = stage.Snapshot();
+        Assert.False(Stage.Same(split, platform));
+        app.UpdateSetting("boardStyle", "Hero");
+        stage.Step(33, 20);
+        Assert.False(Stage.Same(platform, stage.Snapshot()));
+    }
+
+    [Theory]
+    [InlineData("Split")]
+    [InlineData("Platform")]
+    public void NewStyles_DoNotAllocateInSteadyState(string style)
+    {
+        var (app, stage, _) = Board(max: 5, style: style);
+        for (int i = 0; i < 400; i++) { stage.Step(33); stage.Render(); }
+
+        int measured = 0;
+        long least = long.MaxValue;
+        for (int window = 0; window < 12; window++)
+        {
+            string text = app.StripTicker!.Current;
+            int page = app.RestPager!.PageIndex;
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 60; i++) { stage.Step(33); stage.Render(); }
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            if (text != app.StripTicker.Current || page != app.RestPager.PageIndex || app.RestPager.IsTransitioning) continue;
+            measured++;
+            least = Math.Min(least, allocated);
+        }
+
+        Assert.True(measured >= 3);
+        Assert.True(least < 256, $"{style}: least allocation in a steady window: {least} bytes");
     }
 
     // ---- performance ---------------------------------------------------------------------------------------------

@@ -15,6 +15,9 @@ internal sealed partial class Departure
     public string Destination = "";
     public string PlatformNumber = "";
     public string PlatformFilterText = "";
+
+    /// <summary>The direction of travel from the platform name ("Northbound" from "Northbound - Platform 1"); empty when there is none.</summary>
+    public string Direction = "";
     public Pixel Color;
 
     /// <summary>Seconds to arrival as TfL reported them at <see cref="SeenAt"/>.</summary>
@@ -32,6 +35,17 @@ internal sealed partial class Departure
 
     [GeneratedRegex(@"platform\s+(\w{1,2})", RegexOptions.IgnoreCase)]
     private static partial Regex PlatformRegex();
+
+    /// <summary>The text before " - Platform" (or before the dash), unless that part is itself just the platform.</summary>
+    public static string DirectionOf(string platformName)
+    {
+        var text = (platformName ?? "").Trim();
+        int dash = text.IndexOf(" - ", StringComparison.Ordinal);
+        if (dash >= 0) text = text[..dash].Trim();
+        if (text.StartsWith("platform", StringComparison.OrdinalIgnoreCase)) return "";
+        if (text.Length == 0 || text.Equals("n/a", StringComparison.OrdinalIgnoreCase)) return "";
+        return text;
+    }
 
     public static string PlatformNumberOf(string platformName)
     {
@@ -57,6 +71,9 @@ internal sealed class DepartureBoardModel
 
     public const int RowsPerPage = 2;
 
+    /// <summary>Trains shown per direction column when grouping by direction.</summary>
+    public const int ColumnRows = 3;
+
     private readonly Dictionary<string, Departure> _pool = new();
     private readonly List<Departure> _sorted = new();
     private readonly List<Departure> _scratch = new();
@@ -68,6 +85,11 @@ internal sealed class DepartureBoardModel
     private Departure[] _hero = [];
     private PageToken[] _tokens = [];
     private Departure[][] _pages = [];
+    private bool _perDirection;
+    private Departure[][] _columns = [];
+    private string[] _labels = [];
+    private readonly List<string> _dirNames = new();
+    private readonly List<int> _dirCounts = new();
 
     public TimeSpan Now { get; private set; }
 
@@ -88,6 +110,15 @@ internal sealed class DepartureBoardModel
     /// <summary>One token per page of the remaining trains.</summary>
     public IReadOnlyList<PageToken> Pages => _tokens;
 
+    /// <summary>Number of direction columns (0 to 2) when the board was refreshed per direction.</summary>
+    public int ColumnCount => _columns.Length;
+
+    /// <summary>The next trains of one direction column, in time order.</summary>
+    public IReadOnlyList<Departure> Column(int index) => index >= 0 && index < _columns.Length ? _columns[index] : [];
+
+    /// <summary>The direction of a column ("" for trains with no direction).</summary>
+    public string ColumnLabel(int index) => index >= 0 && index < _labels.Length ? _labels[index] : "";
+
     public IReadOnlyList<Departure> Page(int index) => index >= 0 && index < _pages.Length ? _pages[index] : [];
 
     public void Reset()
@@ -99,10 +130,16 @@ internal sealed class DepartureBoardModel
         _hero = [];
         _tokens = [];
         _pages = [];
+        _columns = [];
+        _labels = [];
     }
 
     /// <summary>Re-derives the board. Returns true when the visible trains changed.</summary>
-    public bool Refresh(TimeSpan now, TflArrival[]? arrivals, string platformFilter, int max)
+    /// <param name="perDirection">
+    /// When true <paramref name="max"/> (capped at <see cref="ColumnRows"/>) applies to each direction rather than to the whole board, and
+    /// <see cref="Column"/> holds the trains of the (up to two) busiest directions.
+    /// </param>
+    public bool Refresh(TimeSpan now, TflArrival[]? arrivals, string platformFilter, int max, bool perDirection = false)
     {
         Now = now;
         bool dirty = false;
@@ -115,6 +152,12 @@ internal sealed class DepartureBoardModel
         }
 
         platformFilter = platformFilter?.Trim() ?? "";
+        if (perDirection != _perDirection)
+        {
+            _perDirection = perDirection;
+            dirty = true;
+        }
+
         if (platformFilter != _filter || max != _max)
         {
             _filter = platformFilter;
@@ -124,17 +167,39 @@ internal sealed class DepartureBoardModel
         }
 
         _scratch.Clear();
+        _dirNames.Clear();
+        _dirCounts.Clear();
+        int perColumn = Math.Min(max, ColumnRows);
         foreach (var d in _sorted)
         {
             if (d.RemainingSeconds(now) < -LingerSeconds) continue;
             if (!PassesFilter(d)) continue;
-            _scratch.Add(d);
-            if (_scratch.Count >= max) break;
+            if (perDirection)
+            {
+                int g = DirectionIndex(d.Direction);
+                if (_dirCounts[g] >= perColumn) continue;
+                _dirCounts[g]++;
+                _scratch.Add(d);
+            }
+            else
+            {
+                _scratch.Add(d);
+                if (_scratch.Count >= max) break;
+            }
         }
 
         if (!dirty && SameAsVisible()) return false;
         Publish();
         return true;
+    }
+
+    private int DirectionIndex(string direction)
+    {
+        for (int i = 0; i < _dirNames.Count; i++)
+            if (string.Equals(_dirNames[i], direction, StringComparison.OrdinalIgnoreCase)) return i;
+        _dirNames.Add(direction);
+        _dirCounts.Add(0);
+        return _dirNames.Count - 1;
     }
 
     private bool PassesFilter(Departure d)
@@ -167,7 +232,33 @@ internal sealed class DepartureBoardModel
             pages[p] = _visible.Skip(1 + p * RowsPerPage).Take(RowsPerPage).ToArray();
         _pages = pages;
 
+        PublishColumns();
+
         if (_tokens.Length != pageCount) _tokens = Enumerable.Range(0, pageCount).Select(i => new PageToken(i)).ToArray();
+    }
+
+    // The two directions with the earliest trains, ordered by name so a direction keeps its side of the board.
+    private void PublishColumns()
+    {
+        if (!_perDirection)
+        {
+            _columns = [];
+            _labels = [];
+            return;
+        }
+
+        var names = new List<string>();
+        foreach (var d in _visible)
+        {
+            if (!names.Exists(n => string.Equals(n, d.Direction, StringComparison.OrdinalIgnoreCase))) names.Add(d.Direction);
+            if (names.Count == 2) break;
+        }
+        names.Sort(StringComparer.OrdinalIgnoreCase);
+
+        _labels = names.ToArray();
+        _columns = names
+            .Select(n => _visible.Where(d => string.Equals(d.Direction, n, StringComparison.OrdinalIgnoreCase)).Take(ColumnRows).ToArray())
+            .ToArray();
     }
 
     private void Ingest(TflArrival[] arrivals, TimeSpan now)
@@ -188,6 +279,7 @@ internal sealed class DepartureBoardModel
             d.Destination = TflApi.StripStationSuffix(PickDestination(a));
             d.PlatformNumber = Departure.PlatformNumberOf(a.PlatformName);
             d.PlatformFilterText = a.PlatformName;
+            d.Direction = Departure.DirectionOf(a.PlatformName);
             d.Color = TubeColors.Display(a.LineId);
             d.TimeToStation = a.TimeToStation;
             d.SeenAt = now;
