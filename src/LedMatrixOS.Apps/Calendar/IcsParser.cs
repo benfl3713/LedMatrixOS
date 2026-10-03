@@ -6,7 +6,8 @@ internal sealed record CalEvent(string Title, DateTimeOffset Start, DateTimeOffs
 
 /// <summary>
 /// A small iCalendar reader: VEVENTs with UTC, TZID and floating times, all-day dates, escaping and folded lines, and simple recurrence
-/// (DAILY/WEEKLY with BYDAY/MONTHLY/YEARLY, INTERVAL, COUNT, UNTIL, EXDATE). Overridden instances (RECURRENCE-ID) are not special-cased.
+/// (DAILY/WEEKLY with BYDAY/MONTHLY/YEARLY, INTERVAL, COUNT, UNTIL, EXDATE). An instance with a RECURRENCE-ID (moved, edited or cancelled)
+/// replaces the generated occurrence it names; the override then stands on its own, or vanishes when it is cancelled.
 /// </summary>
 internal static class IcsParser
 {
@@ -14,23 +15,50 @@ internal static class IcsParser
 
     public static List<CalEvent> Parse(string ics, DateTimeOffset from, DateTimeOffset to, TimeZoneInfo localZone)
     {
-        var events = new List<CalEvent>();
+        var vevents = new List<List<Prop>>();
         List<Prop>? current = null;
         foreach (var prop in ReadProps(ics))
         {
             if (prop.Name == "BEGIN" && prop.Value == "VEVENT") current = new List<Prop>();
             else if (prop.Name == "END" && prop.Value == "VEVENT" && current != null)
             {
-                try { Expand(current, from, to, localZone, events); }
-                catch (Exception ex) when (ex is FormatException or ArgumentException or TimeZoneNotFoundException) { /* skip a malformed event */ }
+                vevents.Add(current);
                 current = null;
             }
             else current?.Add(prop);
         }
 
+        // Pass 1: the occurrences that RECURRENCE-ID instances replace, per UID (cancelled ones included: that is how a cancellation is expressed)
+        var replaced = new Dictionary<string, HashSet<long>>();
+        foreach (var props in vevents)
+        {
+            var recurrenceId = props.FirstOrDefault(p => p.Name == "RECURRENCE-ID");
+            if (recurrenceId is null) continue;
+            try
+            {
+                var (wall, zone, _) = ParseTime(recurrenceId, localZone);
+                string uid = props.FirstOrDefault(p => p.Name == "UID")?.Value.Trim() ?? "";
+                if (!replaced.TryGetValue(uid, out var set)) replaced[uid] = set = new HashSet<long>();
+                set.Add(InstantKey(wall, zone));
+            }
+            catch (Exception ex) when (ex is FormatException or ArgumentException or TimeZoneNotFoundException) { /* ignore a malformed id */ }
+        }
+
+        var events = new List<CalEvent>();
+        foreach (var props in vevents)
+        {
+            string uid = props.FirstOrDefault(p => p.Name == "UID")?.Value.Trim() ?? "";
+            bool isOverride = props.Any(p => p.Name == "RECURRENCE-ID");
+            try { Expand(props, from, to, localZone, events, !isOverride && replaced.TryGetValue(uid, out var skip) ? skip : null); }
+            catch (Exception ex) when (ex is FormatException or ArgumentException or TimeZoneNotFoundException) { /* skip a malformed event */ }
+        }
+
         events.Sort((a, b) => a.Start != b.Start ? a.Start.CompareTo(b.Start) : a.End.CompareTo(b.End));
         return events;
     }
+
+    /// <summary>The instant a wall-clock time in a zone denotes, as a comparable number (all-day dates use the local zone's midnight).</summary>
+    private static long InstantKey(DateTime wall, TimeZoneInfo zone) => new DateTimeOffset(wall, zone.GetUtcOffset(wall)).UtcTicks;
 
     private static IEnumerable<Prop> ReadProps(string ics)
     {
@@ -70,7 +98,7 @@ internal static class IcsParser
 
     private static string Unescape(string s) => s.Replace("\\n", " ").Replace("\\N", " ").Replace("\\,", ",").Replace("\\;", ";").Replace("\\\\", "\\");
 
-    private static void Expand(List<Prop> props, DateTimeOffset from, DateTimeOffset to, TimeZoneInfo localZone, List<CalEvent> output)
+    private static void Expand(List<Prop> props, DateTimeOffset from, DateTimeOffset to, TimeZoneInfo localZone, List<CalEvent> output, HashSet<long>? overridden)
     {
         var start = props.FirstOrDefault(p => p.Name == "DTSTART");
         if (start is null) return;
@@ -92,7 +120,16 @@ internal static class IcsParser
         }
 
         var rule = rrule.Split(';').Select(p => p.Split('=', 2)).Where(p => p.Length == 2).ToDictionary(p => p[0].ToUpperInvariant(), p => p[1]);
-        var excluded = props.Where(p => p.Name == "EXDATE").SelectMany(p => p.Value.Split(',')).Select(v => v.Length >= 8 ? v[..8] : v).ToHashSet();
+        // EXDATE values and RECURRENCE-ID overrides both remove generated occurrences, compared as instants so zones may differ
+        var excluded = new HashSet<long>(overridden ?? []);
+        var excludedDays = new HashSet<DateTime>();   // a date-only EXDATE on a timed series removes that whole day's occurrence
+        foreach (var exdate in props.Where(p => p.Name == "EXDATE"))
+            foreach (var value in exdate.Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            {
+                var (exWall, exZone, exAllDay) = ParseTime(new Prop("EXDATE", exdate.Parameters, value), localZone);
+                if (exAllDay && !allDay) excludedDays.Add(exWall.Date);
+                else excluded.Add(InstantKey(exWall, exZone));
+            }
         string freq = rule.GetValueOrDefault("FREQ", "");
         int interval = rule.TryGetValue("INTERVAL", out var iv) && int.TryParse(iv, out var n) && n > 0 ? n : 1;
         int? count = rule.TryGetValue("COUNT", out var cv) && int.TryParse(cv, out var c) ? c : null;
@@ -111,7 +148,7 @@ internal static class IcsParser
             var wall = day + startWall.TimeOfDay;
             if (until != null && wall > until) break;
             if (count != null && ++produced > count) break;
-            if (excluded.Contains(day.ToString("yyyyMMdd", CultureInfo.InvariantCulture))) continue;
+            if (excluded.Contains(InstantKey(wall, zone)) || excludedDays.Contains(day)) continue;
             Add(wall, zone, length, allDay, title, location, from, to, localZone, output);
         }
     }
