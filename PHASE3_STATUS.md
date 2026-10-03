@@ -1,3 +1,5 @@
+> Historical: Phase 3 of the v1 roadmap is complete. Open work now lives in [docs/ROADMAP.md](docs/ROADMAP.md).
+
 # Phase 3 Status: An Everyday OS (9 → 10)
 
 ## Completed
@@ -63,7 +65,6 @@ Already delivered by the Phase 2 `WeatherApp` rewrite (Open-Meteo, location and 
 - Settings: Station ID (falls back to `Commute:StationId`, then `TubeDeparturesApp:StationId`), Platform Filter, Walk Minutes, Location, Units.
 - 25 tests including 7 goldens (reviewed by eye) and a zero-allocation steady-state test.
 - `src/LedMatrixOS/schedule.example.json` shows a weekday-morning commute playlist plus a night-dim rule; copy it next to the executable as `schedule.json`.
-- Limitation: there is no station search in this app yet. Use Tube Departures to find the Naptan ID.
 
 ### Phase 3.3c: Home Assistant tiles ✅
 - `HomeAssistantTilesApp` (`id: ha-tiles`): up to four labelled tiles per page (numbers, on/off, N/A), paged with a fade. Entities are set as `sensor.x|Label, light.y`.
@@ -106,7 +107,7 @@ The `ScheduleService` should be:
 3. Queried by `RenderEngine` each frame to determine active app
 4. Used by `AppManager` to apply settings overrides from playlists
 
-**Config example (`schedules.json`):**
+**Config example (`schedule.json`):**
 ```json
 {
   "playlists": [
@@ -198,8 +199,8 @@ Each can merge independently once complete.
 ## Summary
 Phase 3 establishes the "everyday OS" persona:
 - ✅ Apps run on schedules and playlists (weekday commute, weekend ambient, night dim)
-- 🔄 Notifications layer without full takeovers (toasts, badges, alerts)
-- ⏳ Flagship apps that matter: departures, weather, commute, calendar
+- ✅ Notifications layer without full takeovers (toasts, badges, alerts)
+- ✅ Flagship apps that matter: departures, weather, commute, calendar
 - ⏳ Platform feels polished: fast previews, galleries, resilience
 
-With Phase 3.1 done (7 tests passing), the foundation is solid for 3.2–3.4.
+With Phases 3.1–3.3 done, Phase 3.4 (platform polish) remains.

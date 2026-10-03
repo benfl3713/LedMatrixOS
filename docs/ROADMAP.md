@@ -1,140 +1,171 @@
-# LedMatrixOS: Roadmap from 7 to 10
+# LedMatrixOS: Roadmap v2
 
 ## Context
 
-LedMatrixOS works: a solid render loop, a simulator, REST control, per-app settings, interrupts, a Flutter app and Home Assistant. The weak spot is **writing apps**. Each app is hand-built pixel by pixel and re-implements the same plumbing:
-
-- `TubeDeparturesApp.cs` is 938 lines. About half of it is plumbing rather than tube logic: its own paging state machine (7 fields), a cubic-bezier easing solver, clipped text maths, `CoerceInt/BoolSetting`, an `HttpClient` polling loop and magic layout constants (`14 * rowPosition`, `tileStartY = 49`).
-- There are **two rendering worlds**. Raw `FrameBuffer` + BDF fonts (crisp, fast) sits beside ImageSharp `Image<Rgb24>` (anti-aliased, alpha). `HomePageApp` creates a new image every frame and calls `ctx.Fill` **once per pixel** (16k calls) for its gradient, which is very slow on a Pi.
-- `FrameBuffer` has no alpha blending, clipping or fill helpers. `SimpleGraphics` has just two functions. `TextExtensions` hard-codes `256`/`64` and always draws a shadow.
-- Animation is ad hoc. Apps mix `DateTime.Now` with `deltaTime`. The only app-switch transition is a slide, and `ApplyTransition` allocates a new frame on every frame.
-- Apps are created with `Activator.CreateInstance`, so they get no DI and no shared `HttpClient`. The Equalizer has to be special-cased in `Program.cs`.
-- For everyday use there's no scheduling: nothing shows the commute at 7:30 on weekdays. `WeatherApp` uses **simulated data**. Interrupts take over the whole screen.
-
-**Goal:** make apps quick and fun to write (a declarative, animated, layout-aware toolkit) and make the device useful by itself day to day (schedules, a commute dashboard, overlays). Every phase ships on its own, and existing apps keep working throughout.
+The v1 roadmap (`docs/ROADMAP.md`, "7 to 10") is done: widget framework, animation, transitions, scheduler, overlays, real weather, commute, calendar, HA tiles, WebSocket preview. The parts of the platform users see haven't kept up:
+- **Display apps:** several look dated or waste the panel. Tube Departures shows only 2 following trains with ~15px unused and ignores direction. Spotify is still the legacy ImageSharp app: it decodes artwork every frame, has no empty state and no goldens. Tube Status overflows on "All London rail". Calendar and HA tiles hand-place pixels and bypass `Pager`. Home has no data. Four clock apps overlap.
+- **Flutter app:** one 526-line `HomePage` god-object with errors silently swallowed. The finished live preview widget is never shown. Brightness is 0–100 on a 0–255 API. Colour settings are text boxes, and only the active app can be configured. There is no schedule, transitions or overlay management, and the only test is a broken template test.
+- **Server gaps blocking the clients:** no schedule write API, app settings rejected (400) unless the app is active, `/api/notifications*` still take over the full screen, schedule `Condition`s are stubbed.
 
 ---
 
-## Phase 1: Foundations (7 → 8): "stop pushing pixels"
+## Phase 0: Housekeeping
+- Merge the `cleanup-helpers` and `transport-apps` branches to `main` through PRs.
+- Factor the duplicated station-search, line-id and line-status code shared by Departures, Commute and Bus into one `TflStopPicker` helper in `src/LedMatrixOS.Apps/Tube/`.
+- Delete the empty `PongApp.cs` and the dead Spotify fields.
 
-### 1.1 Proper canvas API (`LedMatrixOS.Graphics`)
-- **Color**: move HSV out of `Apps/ImageSharpExtensions.cs` and `ColorExtensions.cs` into Core `Pixel`. Add `Pixel.FromHsv`, `Lerp`, `WithBrightness(f)`, `Blend(src, alpha)`, a hex parser and named palettes (with the TfL colours moved out of `TubeDeparturesApp`).
-- **FrameBuffer**: add `BlendPixel(x, y, color, alpha)`, `Fill(rect, color)`, `CopyFrom(other, dx, dy)`, `Span` row access and a **clip stack** (`PushClip(rect)` / `PopClip()`) that `SetPixel` respects. This replaces `DrawClippedText`.
-- **Primitives** (`SimpleGraphics` → `Canvas` extension methods): Bresenham lines (the current `DrawLine` fills a rectangle, which is wrong for diagonals), rect/rounded-rect outline and fill, circle/ellipse, linear and radial gradients, and progress bars.
-- **Text**: `MeasureText`, alignment (left/centre/right), an optional shadow, an ellipsis truncation helper and a `TextStyle` record (font, colour, shadow). Remove the hard-coded 256/64.
-- **Sprites/icons**: `Sprite` loaded from small PNGs/GIFs (ImageSharp at load time only), with frame-sequence playback. Add a starter icon pack (weather, tube roundel, music, bell).
-- **ImageSharp bridge**: `frame.DrawImage(image, x, y)` with alpha, and a cached reusable `Image` per app so nothing allocates per frame. Fix `HomePageApp` to use it.
+## Phase 1: Server API the clients need (`src/LedMatrixOS`, `Core/Scheduling`)
+- **Schedule CRUD:**
+  - `GET` stays; add `PUT /api/schedule` (validate, write `schedule.json`, reload).
+  - Add `GET /api/schedule/status` (active rule, playlist position, next change).
+  - Reuse `ScheduleRunner.cs` and the scheduling models.
+- **Settings for any app:** allow `GET/POST /api/apps/{id}/settings` on inactive apps by keeping app instances settings-addressable in `AppManager` (persisted via `AppSettingsStorage`).
+- **Overlays:**
+  - Add `GET /api/overlays`, listing active overlays so the phone can dismiss them.
+  - Map `/api/notifications*` onto `Overlays` alerts instead of `InterruptService`, keeping request shapes.
+- **Context triggers:**
+  - Implement schedule `Condition`s: `spotify_playing`, `line_disrupted:<line>`, `bus_due:<stop>`, `ha_state:<entity>=<v>`.
+  - Use an `IAttentionSource` that apps and services can implement, so the Tube and Bus apps can bump themselves to the front.
+- Update the HA integration (`coordinator.py`, `services.yaml`) for new endpoints.
 
-### 1.2 App plumbing (`LedMatrixOS.Core`)
-- **DI for apps**: `AppManager` creates apps with `ActivatorUtilities.CreateInstance(serviceProvider, type)`. Apps can then inject `IHttpClientFactory`, `AudioDataService`, `ILogger<T>` and options. This removes the Equalizer special case in `Program.cs`.
-- **Typed settings**: replace the hand-written `GetSettings` and `UpdateSetting` switches with attribute-driven settings, e.g. `[Setting("Max Departures", Min=1, Max=12)] public int MaxDepartures { get; set; } = 3;`. A single `SettingsBinder` handles reflection and `JsonElement` coercion. `IConfigurableApp` keeps working for old apps.
-- **Data polling helper**: `Poll<T>(interval, fetch)` on `MatrixAppBase` returns an `ILiveData<T>` with `Value`, `IsLoading`, `Error`, `LastUpdated` and a `Changed` event. It replaces the `volatile` fields and while-loops copy-pasted across Tube, Weather and Spotify.
-- **Engine time**: give apps a `FrameContext` (`Time`, `Delta`, `FrameIndex`) so animation never reads `DateTime.Now` directly. This also makes rendering deterministic for tests.
+## Phase 2: Display refresh (existing apps)
+Each item ships with updated or new goldens and a zero-allocation test.
+1. **Tube Departures redesign:** a `Board Style` setting.
+   - **Split** (default): two direction columns (e.g. Northbound | Southbound), each with its next 3 trains as compact rows. That is 6 trains visible, with no unused rows.
+   - **Platform** (classic LU dot-matrix): amber on black, "1 Brixton 3 min" rows and a scrolling bottom line.
+   - **Hero** keeps today's look.
+   - Direction is grouped from `platformName` in `DepartureBoardModel`.
+2. **Spotify rewrite as a `WidgetApp`:**
+   - Decode and resize the artwork once per track and cache it as a `Sprite`.
+   - Layout: title marquee, artist, progress bar and a palette from the art.
+   - Real visualiser from `AudioDataService` when audio is streaming.
+   - "Nothing playing" state and an injected `HttpClient`.
+   - Goldens via a fake data source.
+3. **Tube Status:**
+   - Fix the "All London rail" overflow with a two-row tile layout when there are more than 14 lines.
+   - Disruption cards show the reason as a marquee.
+4. **Smart Home screen:** optional data chips on `HomePageApp`: weather, next event, worst line status and next bus. They reuse the existing data sources and cycle in a corner `Pager`.
+5. **Weather:**
+   - "Rain next hour" `Sparkline` and an hourly temperature `BarChart` page, using `Graphics/UI/Charts.cs`.
+   - Reuse the weather chip in Commute.
+6. **Calendar:** move to layout widgets, add a "Today" timeline page (event bars on an hour axis), and support RECURRENCE-ID overrides.
+7. **HA Tiles:**
+   - Use the shared `Pager`.
+   - Add icon and on/off glyph tile kinds.
+   - Add an optional 24h history `Sparkline` (HA history API).
+8. **Clocks consolidation:** fold Clock, AnimatedClock and FlipClock into one `Clock` app with a `Style` select. The old ids stay as aliases so schedules keep working.
 
-### 1.3 Test harness
-- Add a `tests/LedMatrixOS.Tests` xUnit project with **snapshot tests**: render an app or widget at a fixed `FrameContext` to PNG with the existing simulator encoder and compare it with a golden file. This is the safety net for everything after it.
+## Phase 3: New apps (transport and daily life)
+- **Rail Departures:** National Rail board with a "last train home" alert overlay.
+  - **No live integration yet.** Data comes from an `IRailDepartureSource` interface whose only implementation is `HardcodedRailSource`: fixed sample services, with times computed relative to `WidgetApp.Time` so the board looks live.
+  - The user will add the real API integration later, behind the same interface. Do not add Huxley, RTT or any other provider.
+- **Cycle Hub:** Santander BikePoint docks (bikes and e-bikes free) plus a wind and rain `Sparkline` and a ride-or-Tube verdict.
+- **Journey Planner "Leave by":** TfL Journey Planner to saved destinations, showing the best route as line pills, the duration and a leave countdown. Auto-shown by a schedule rule.
+- **Plane Spotter:** keyless OpenSky lookup within a radius of the configured lat/lon. Shows callsign, route, altitude `RollingNumber` and heading arrow, with a sweep animation for new aircraft.
+- **Reminders and Bin Day:** from the Calendar feed or a rules list. A colour-coded bin and countdown take over the evening before.
+- **Morning Briefing:** a composite that pages weather, first event, commute status and bins once, then hands back to the playlist.
 
----
+## Phase 4: Flutter app rewrite (in place, Android/iOS)
+**Architecture:**
+- Riverpod for state and go_router with a bottom nav.
+- Feature folders (`lib/features/{now,apps,schedule,notify,settings}`) plus a typed `api/` client with timeouts and error results.
+- Material 3 dynamic colour with a proper light and dark theme.
 
-## Phase 2: Animation & UI framework (8 → 9): "make it pop"
+**Screens:**
+- **Now:**
+  - The live `/ws/preview` is the hero (reuse the parsing in `widgets/live_preview_widget.dart`).
+  - Current app card, quick-switch strip, power, and brightness as 0–255 shown as a percentage.
+  - Transition picker (`/api/transitions`).
+- **Apps:**
+  - Grid with search, and a settings sheet that works for any app (Phase 1) and refreshes live.
+  - Colour picker for Color settings.
+  - Station and stop pickers that drive the existing Search/Select settings.
+- **Schedule:** week view of rules (day mask, time range, priority, brightness), a playlist editor with reorder, durations and transitions, "active now" status, and a save via `PUT /api/schedule`.
+- **Notify:**
+  - Toast, badge and alert composer (text, colours, duration, position) with saved presets.
+  - Active-overlay list with dismiss.
+- **Settings:** device URL and health/uptime (`/api/health`), and the audio-stream card for the equalizer.
 
-### 2.1 Animation core (`LedMatrixOS.Core/Animation`)
-- **`Easing`**: the standard set (quad, cubic, back, elastic, bounce, `CubicBezier(p1x, p1y, p2x, p2y)`). The bezier solver moves out of `TubeDeparturesApp.EvaluateBezierProgress`.
-- **`Tween<T>`**: a value that animates to a target, with `Lerp` support for float, int, `Pixel` and `Point`. Usage: `_y.To(14, 400.ms(), Easing.OutBack)`.
-- **`Timeline`**: sequence, parallel, delay, repeat and yoyo, with callbacks. Usage: `Timeline.Sequence(fadeIn, Delay(8s), slideOut).Loop()`.
-- **`Animator`**: one per app, ticked by the engine, so apps never manage timestamps themselves.
+**Quality:**
+- Surface every API error as a snackbar.
+- Widget tests per screen against a fake API, plus api client unit tests.
+- Delete the template test.
 
-### 2.2 Retained-mode widget layer (`LedMatrixOS.Graphics/UI`)
-This is the main change: apps describe a **tree of widgets** instead of drawing pixels.
-- **`Node`** base: `Position`, `Size`, `Opacity`, `Visible`, `ClipChildren`, and `Animate(...)` on any of them.
-- **Layout**: `Stack` (vertical/horizontal, gap, padding), `Grid`, `Dock` (top/bottom/fill) and anchors. This removes the magic Y constants.
-- **Widgets**: `Label`, `MarqueeLabel` (replaces both `ScrollOverflowText*` helpers), `RollingNumber` (an odometer/flip digit that animates when the value changes), `Icon`/`AnimatedSprite`, `ProgressBar`, `Badge`/`Pill` (tube line tiles), `Divider`, `Clock`, and `Pager`/`Carousel` (auto-cycles pages with a chosen transition, replacing the departures paging code).
-- **`ListView<T>` with keyed diffing**: when bound data changes, rows that moved slide to their new place, new rows fade or slide in and removed rows collapse out. This is what makes a departures board feel alive: a train arriving slides away and the next one moves up.
-- **`WidgetApp`** base class: override `Build()` once and bind to `ILiveData`. The framework handles update, layout and render.
+## Phase 5: Stretch
+- Declarative JSON screens (widget tree plus bindings), creatable from the phone.
+- `QrCode` node and Party Mode.
+- Widget and transition gallery page in `wwwroot`.
+- Platform gaps: `Panel` absolute positioning, transparent `Pager` transitions, a writable `FrameBuffer` span API.
 
-Target shape for the rewritten departures app (~150 lines instead of 938):
-```csharp
-protected override Node Build() =>
-  new Dock {
-    Fill   = new Pager(pageSize: 3, interval: 8.s(), transition: Transitions.SlideUp(Easing.OutCubic))
-               .Bind(_departures, d => new DepartureRow(d)),   // keyed by vehicle id
-    Bottom = new Stack(Horizontal, gap: 1) {
-               new ListView<LineStatus>(_statuses, s => new Pill(s.Abbrev, s.Color, pulse: !s.Good)),
-               new MarqueeLabel(_stationName).Grow(),
-               new Clock("HH:mm") }
-  };
-```
-
-### 2.3 Transitions & effects
-- An **`ITransition`** interface used everywhere: app switches, `Pager`, interrupts. It ships with slide (4 directions), fade/crossfade, wipe, dissolve/pixel-scatter, iris, "matrix rain" and "LED split-flap". `RenderEngine` gets a `TransitionRegistry`, keeps preallocated buffers (no per-frame `new FrameBuffer`) and picks a transition per app or at random.
-- **Particle system**: emitters with lifetime, velocity, gravity and colour-over-life. Used for confetti on notifications, sparkles and weather (rain/snow on the weather screen). `FireApp`, `MatrixRainApp` and the `HomePageApp` particles can move onto it.
-- **Post-effects** as an optional per-app stack: bloom/glow, colour-grade (night tint), CRT scanline and global fade. These run as a pass over the finished frame in `RenderEngine`.
-
----
-
-## Phase 3: An everyday OS (9 → 10): "it knows what I need"
-
-### 3.1 Scheduler & playlists (`LedMatrixOS.Core/Scheduling`)
-- **Playlists**: an ordered list of `(appId, duration, settings override, transition)`. They rotate automatically, e.g. Clock 30s → Weather 15s → Spotify while playing.
-- **Schedule rules**: `Mon–Fri 07:15–08:45 → "Commute" playlist`, `23:00–07:00 → dim + clock only`, and `weekends → ambient`. Stored in a JSON file next to `app-settings.json` and editable via REST.
-- **Conditional/contextual triggers**: "Spotify is playing → show Spotify", or "line disrupted → bump the Tube status app to the front". Apps can expose `bool WantsAttention`.
-- **Brightness schedule / auto-dim**, plus sunrise/sunset from the weather data.
-
-### 3.2 Overlay layer (rework interrupts)
-- Interrupts become **layers composited over the running app**, not full takeovers: toasts (slide-in banner), corner badges and full-screen alerts. Each has a priority, a duration and animated enter/exit through `ITransition`.
-- Keep the existing `/api/notifications*` endpoints and map them onto the new layer. Add `/api/notifications/toast` with an icon, colour and sound-free "attention" animation (flash border).
-
-### 3.3 Flagship everyday apps
-- **Commute dashboard** (composite): next 2–3 departures with a "leave in X min" countdown (configurable walking time; turns amber then red), line status pills, current weather and rain chance, and the time.
-- **Real weather**: replace the simulation with Open-Meteo (free, no key). Use animated icons and particle rain/snow.
-- **Calendar/next event** (ICS URL), **Home Assistant sensor tiles** (reverse direction: show HA entities on the matrix) and an **upcoming bin day / reminders** tile.
-
-### 3.4 Platform polish
-- **Live preview over WebSocket** (pushes frames instead of polling `GET /preview` PNGs) for the web UI and Flutter. Add an app/widget **gallery page** in `wwwroot` that previews every transition and widget.
-- **Resilience**: per-app error boundary (render a "⚠ app crashed" card and log, instead of silently swallowing in the `catch` at `RenderEngine.cs:131`), a frame-time HUD toggle and `/api/health`.
-- Read the display size from config instead of hard-coding it in `Program.cs`.
-- **Stretch goal: declarative screens.** JSON/YAML-defined widget trees with data bindings (`http` JSON path, HA entity) so new simple screens need no C#, and can be created from the phone app.
-
----
-
-## Suggested order & milestones
+## Suggested order
 
 | # | Milestone | Proves it with |
 |---|---|---|
-| 1 | Canvas API + Pixel colour helpers + clip stack | `TubeDeparturesApp` drops `DrawClippedText` and colour maths |
-| 2 | DI for apps + `Poll<T>` + typed settings | Tube apps lose the polling loop and Coerce helpers |
-| 3 | Snapshot test project | Goldens for Clock and TubeDepartures |
-| 4 | Easing/Tween/Timeline | Departures paging uses `Timeline` |
-| 5 | Widget tree + layout + `WidgetApp` | Full departures rewrite in ~150 lines |
-| 6 | `ListView` keyed diffing + `RollingNumber` | Trains slide up as they depart, minutes "roll" |
-| 7 | `ITransition` registry + allocation-free engine | Fade/wipe/dissolve between apps |
-| 8 | Scheduler + playlists | Weekday mornings auto-switch to commute |
-| 9 | Overlay toasts | HA/phone notifications slide in over any app |
-| 10 | Commute dashboard + real weather | The everyday "10" |
+| 1 | Phase 0 + schedule/settings/overlay APIs | Flutter can edit an inactive app and the schedule |
+| 2 | Tube Departures redesign | 6 trains visible, split by direction |
+| 3 | Spotify rewrite | Goldens exist; no per-frame decode |
+| 4 | Flutter Now + Apps screens | Live preview on the phone |
+| 5 | Flutter Schedule + Notify | Edit a rule, send a toast from the phone |
+| 6 | Weather/Calendar/HA/Status/Home refresh | Charts on real data |
+| 7 | New apps (Rail, Cycle, Journey, Bins, Planes, Briefing) | Each with goldens + zero-alloc test |
+| 8 | Context triggers | Disruption bumps Tube Status automatically |
 
-Milestones 1–3 are prerequisites. After that, 4–7 (fun) and 8–10 (everyday) can run in parallel.
+Milestone 1 unblocks the Flutter work, which then runs in parallel with the display work.
+
+## How to execute
+
+These keep costs low. The main (Opus) session **orchestrates and reviews only**. Cheaper subagents (`Agent` tool with `model`) do the token-heavy reading and writing.
+
+**Who does what:**
+| Work | Agent | Model |
+|---|---|---|
+| Codebase searches, "where is X", API/endpoint inventories | `Explore` | `haiku` |
+| Implementing one roadmap item (code, tests, goldens) | `general-purpose`, `isolation: "worktree"` | `sonnet` |
+| Mechanical edits: docs, registry lines, renames, HA/Flutter client endpoint stubs, deleting dead code | `general-purpose` | `haiku` |
+| Design-heavy layout work (Departures redesign, Flutter shell/architecture) | `general-purpose`, worktree | `sonnet`. The orchestrator reviews the first render before the agent continues. |
+| Final review of each milestone diff | orchestrator, or `/code-review low` | — |
+
+**Rules for the orchestrator:**
+1. Give each agent **one roadmap item** and a self-contained brief:
+   - the goal
+   - the exact files to touch and the patterns to copy (e.g. "copy `BusArrivalsApp.cs` + `BusArrivalsAppTests.cs`")
+   - the constraints from AGENTS.md: allocation-free rendering, no `DateTime.Now`, secrets config-only, register in `Apps.cs`
+   - the done criteria: `dotnet test` green, new goldens written with `UPDATE_SNAPSHOTS=1`
+   - "report back only a ≤150-word summary + list of changed files", so results don't flood the main context
+2. **Don't re-read what agents produced** beyond:
+   - `git diff --stat`
+   - the new golden PNGs, which the orchestrator views itself (visual judgement must not be delegated)
+   - spot reads of anything that looks wrong
+3. **Parallelism:**
+   - Run independent items concurrently, at most 3 agents, each in its own worktree.
+   - Items that touch the same hot files (`Apps.cs`, `Tube/TflApi.cs`, `Program.cs`, `flutter_app/lib/api/`) must be sequential, or `Apps.cs` registration is left to the orchestrator at merge time.
+4. **Fixes:**
+   - Continue the same agent with `SendMessage` instead of spawning a new one; it keeps its context.
+   - Escalate to the orchestrator only after two failed attempts.
+5. **Delivery:**
+   - One branch and PR per milestone (`main` requires PRs).
+   - The orchestrator merges the agent worktrees, runs the full `dotnet test` (and `flutter test` for Phase 4) once, then commits.
+6. **Flutter:** an agent can run `flutter analyze` and `flutter test` but can't see the UI. The orchestrator checks screens by running the app or screenshotting widget-test goldens before sign-off.
 
 ## Critical files
 
-- `src/LedMatrixOS.Core/`: `FrameBuffer.cs`, `Pixel.cs`, `MatrixAppBase.cs`, `AppManager.cs`, `RenderEngine.cs`, `InterruptService.cs`; new `Animation/`, `Scheduling/`, `Data/`
-- `src/LedMatrixOS.Graphics/`: `SimpleGraphics.cs` → `Canvas`, `Text/TextExtensions.cs`; new `UI/`, `Transitions/`, `Particles/`, `Sprites/`
-- `src/LedMatrixOS/Program.cs`: DI wiring, scheduler/playlist/overlay endpoints, WebSocket preview
-- `src/LedMatrixOS.Apps/TubeDeparturesApp.cs`: the reference migration
-- Clients to update when endpoints are added: `flutter_app/lib/api_service.dart`, `homeassistant/custom_components/ledmatrix_controller/coordinator.py`
-
-## Existing code to reuse rather than rewrite
-
-- Bezier easing: `TubeDeparturesApp.EvaluateBezierProgress`/`CubicBezier` → `Easing.CubicBezier`
-- HSV: `Apps/ImageSharpExtensions.FromHsv` → `Pixel.FromHsv`
-- Scrolling text logic: `Apps/Common/ScrollOverflowTextForFrameBuffer.cs` → `MarqueeLabel`
-- Flip digit visuals: `Graphics/FlipNumberCard.cs` → `RollingNumber` flip style
-- Background task lifecycle: `MatrixAppBase.RunInBackground` → underpins `Poll<T>`
-- Settings persistence: `AppSettingsStorage`, unchanged; the typed binder feeds it
+- `src/LedMatrixOS/Program.cs`
+- `src/LedMatrixOS/Endpoints/`
+- `src/LedMatrixOS/ScheduleRunner.cs`
+- `src/LedMatrixOS.Core/Scheduling/`
+- `src/LedMatrixOS.Core/Overlays/`
+- `src/LedMatrixOS.Core/AppManager.cs`
+- `src/LedMatrixOS.Apps/TubeDeparturesApp.cs`
+- `src/LedMatrixOS.Apps/Tube/DepartureBoardModel.cs`
+- `src/LedMatrixOS.Apps/SpotifyApp.cs`
+- `src/LedMatrixOS.Apps/Apps.cs`
+- `src/LedMatrixOS.Graphics/UI/Charts.cs`
+- `flutter_app/lib/`
+- `homeassistant/custom_components/ledmatrix_controller/`
 
 ## Verification
 
 - `dotnet build` from the repo root after each milestone.
-- `dotnet test tests/LedMatrixOS.Tests` for snapshot goldens. Deterministic `FrameContext` time means animation mid-points can be snapshotted (e.g. a transition at t=0.5).
-- Simulator: `cd src/LedMatrixOS && dotnet run --environment Development`, then open http://localhost:5005 and check visually in the browser pane. Switch apps with `POST /api/apps/{id}` to see transitions, and fire `POST /api/notifications/message` to check overlays.
-- Performance budget: the frame-time HUD must show the render staying under ~8 ms per frame at 60 fps in the simulator, with no per-frame allocations (check with `dotnet-counters` GC count). Confirm on the Pi before merging the engine changes.
-- Scheduler: unit tests with an injected clock (`TimeProvider`) covering weekday/weekend and midnight-crossing rules.
+- `dotnet test` with goldens reviewed visually. Regenerate intentionally with `UPDATE_SNAPSHOTS=1`, and check the PNGs before committing. Use `LED_PREVIEW_DIR` to write enlarged previews.
+- Simulator: `cd src/LedMatrixOS && dotnet run --environment Development`, then open http://localhost:5005 and check visually.
+- Flutter: `flutter analyze` and `flutter test` for Phase 4.

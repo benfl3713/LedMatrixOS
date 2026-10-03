@@ -14,7 +14,7 @@ LedMatrixOS: software that drives a **256x64 P5 RGB LED matrix** from a **Raspbe
 | `tests/LedMatrixOS.Tests/` | xUnit tests, including golden-image snapshots (`Snapshots/*.png`) and zero-allocation checks per app. Run `dotnet test`. | **High** |
 | `flutter_app/`
 | `homeassistant/` | Python Home Assistant custom integration (`custom_components/ledmatrix_controller`) exposing light/select/number/sensor entities over the REST API. Only touch for Home Assistant work. | Low |
-| `docs/` | Images used by the README (`preview.png`). Nothing to edit normally. | Ignore |
+| `docs/` | Roadmaps: `ROADMAP.md` (current v2 roadmap) and `ROADMAP_v1.md` (archived v1). Images used by the README (`preview.png`). | Low |
 | `.github/` | `CODEOWNERS` only. | Ignore |
 
 Root files: `LedMatrixOS.sln` (solution, includes only the `src/` projects), `Directory.Build.props` (shared settings: net10.0, nullable, implicit usings, LangVersion preview), `README.md` (user-facing docs, partly stale, see Gotchas).
