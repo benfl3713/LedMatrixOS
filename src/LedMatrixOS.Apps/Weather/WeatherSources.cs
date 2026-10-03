@@ -91,7 +91,7 @@ public sealed class OpenMeteoWeatherSource(HttpClient http) : IWeatherSource
 }
 
 /// <summary>Deterministic stand-in: the same input always gives the same forecast. Used by tests and for offline demos (config Weather:Source = Fake).</summary>
-public sealed class FakeWeatherSource(int code = 0, bool isDay = true, double tempC = 21, string location = "London", Func<bool>? fail = null) : IWeatherSource
+public sealed class FakeWeatherSource(int code = 0, bool isDay = true, double tempC = 21, string location = "London", Func<bool>? fail = null, bool dry = false) : IWeatherSource
 {
     public static readonly DateTime Epoch = new(2026, 1, 2, 13, 0, 0);
 
@@ -105,7 +105,7 @@ public sealed class FakeWeatherSource(int code = 0, bool isDay = true, double te
         {
             var t = Epoch.AddHours(i);
             int hc = i % 5 == 4 ? 61 : i % 3 == 2 ? 3 : i > 8 ? 2 : code;
-            hours.Add(new HourlyPoint(t, Conv(tempC + 3 * Math.Sin(i / 3.0)), hc, t.Hour is >= 7 and < 19, i % 5 == 4 ? 60 : i * 3 % 40));
+            hours.Add(new HourlyPoint(t, Conv(tempC + 3 * Math.Sin(i / 3.0)), hc, t.Hour is >= 7 and < 19, dry ? (i % 4 == 0 ? 10 : 0) : i % 5 == 4 ? 60 : i * 3 % 40));
         }
 
         int[] dayCodes = [code, 61, 2, 71];

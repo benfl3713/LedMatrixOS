@@ -85,7 +85,7 @@ internal sealed class PageDots : Node
     public PageDots(Pager pager)
     {
         _pager = pager;
-        Width = 14;
+        Width = 19;
         Height = 4;
     }
 
@@ -187,7 +187,57 @@ internal sealed class WindArrow : Node
     }
 }
 
-/// <summary>Builds the three forecast pages of the info panel from a bound snapshot.</summary>
+/// <summary>Value series pulled from a snapshot for the chart pages.</summary>
+internal static class WeatherSeries
+{
+    /// <summary>Peaks at or below this percentage count as a dry spell.</summary>
+    public const int DryThreshold = 20;
+
+    public static float[] RainChance(WeatherSnapshot s) => Extract(s, h => h.PrecipChance);
+
+    public static float[] Temps(WeatherSnapshot s) => Extract(s, h => (float)h.Temp);
+
+    /// <summary>The highest chance in the next hours and the first hour it occurs.</summary>
+    public static (int Percent, DateTime At) Peak(WeatherSnapshot s)
+    {
+        int best = -1;
+        var at = default(DateTime);
+        foreach (var h in s.Hourly)
+            if (h.PrecipChance > best) { best = h.PrecipChance; at = h.LocalTime; }
+        return (Math.Max(best, 0), at);
+    }
+
+    private static float[] Extract(WeatherSnapshot s, Func<HourlyPoint, float> pick)
+    {
+        var a = new float[s.Hourly.Count];
+        for (int i = 0; i < a.Length; i++) a[i] = pick(s.Hourly[i]);
+        return a;
+    }
+}
+
+/// <summary>Builds a chart's value list once per snapshot, so frames just hand back the cached list.</summary>
+internal sealed class SeriesCache(Func<WeatherSnapshot?> snap, Func<WeatherSnapshot, float[]> build)
+{
+    private static readonly float[] Empty = [];
+    private WeatherSnapshot? _for;
+    private float[] _values = Empty;
+
+    public Action<float[]>? OnBuilt { get; set; }
+
+    public IReadOnlyList<float> Get()
+    {
+        var s = snap();
+        if (!ReferenceEquals(s, _for))
+        {
+            _for = s;
+            _values = s is null ? Empty : build(s);
+            OnBuilt?.Invoke(_values);
+        }
+        return _values;
+    }
+}
+
+/// <summary>Builds the forecast pages of the info panel from a bound snapshot.</summary>
 internal static class WeatherPages
 {
     private static readonly string[] Compass = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
@@ -219,9 +269,64 @@ internal static class WeatherPages
 
     public static Node Hours(Func<WeatherSnapshot?> snap, Func<(Pixel, Pixel)> sky)
     {
-        var cols = new Grid("*", "*,*,*,*");
-        for (int c = 0; c < 4; c++) cols.Add(HourColumn(snap, (c + 1) * 3), 0, c);
-        return Page("NEXT HOURS", sky, cols);
+        var temps = new SeriesCache(snap, WeatherSeries.Temps);
+        Func<int, float, Pixel> color = (_, v) => WeatherApp.TempColor(v, snap()?.Fahrenheit ?? false);
+        var chart = new BarChart
+        {
+            Source = temps.Get,
+            HighlightIndex = 0,
+            HighlightColor = Pixel.White,
+            ColorOf = color,
+            Gap = 1,
+            Baseline = false,
+            Grow = 1,
+            Margin = new Thickness(0, 1, 0, 1),
+        };
+        temps.OnBuilt = v =>
+        {
+            chart.Min = v.Length == 0 ? 0 : MathF.Floor(v.Min()) - 4f;
+            chart.Max = v.Length == 0 ? 1 : MathF.Ceiling(v.Max());
+        };
+
+        var first = new Memo<WeatherSnapshot?>(snap, s => s is { Hourly.Count: > 0 } ? s.Hourly[0].LocalTime.ToString("HH:mm") : "");
+        var last = new Memo<WeatherSnapshot?>(snap, s => s is { Hourly.Count: > 0 } ? s.Hourly[^1].LocalTime.ToString("HH:mm") : "");
+        var labelStyle = new TextStyle(Fonts.ExtraSmall, new Pixel(185, 200, 232), Shadow: false);
+        var labels = new Dock
+        {
+            HAlign = Align.Stretch,
+            Margin = new Thickness(0, 0, 0, 2),
+            Left = new Label(first.Get) { Style = labelStyle },
+            Right = new Label(last.Get) { Style = labelStyle },
+        };
+
+        return Page("NEXT HOURS", sky, new Dock
+        {
+            HAlign = Align.Stretch,
+            VAlign = Align.Stretch,
+            Grow = 1,
+            Bottom = labels,
+            Fill = chart,
+        });
+    }
+
+    public static Node Rain(Func<WeatherSnapshot?> snap, Func<(Pixel, Pixel)> sky)
+    {
+        var chances = new SeriesCache(snap, WeatherSeries.RainChance);
+        var line = new Pixel(60, 150, 255);
+        var chart = new Sparkline { Source = chances.Get, Min = 0, Max = 100, Line = line, FillBrightness = 0.3f, ShowLatest = false, Grow = 1, Margin = new Thickness(0, 1, 0, 0) };
+        var caption = new Memo<WeatherSnapshot?>(snap, s =>
+        {
+            if (s is null) return "";
+            var (peak, at) = WeatherSeries.Peak(s);
+            return peak <= WeatherSeries.DryThreshold ? "DRY" : "PEAK " + peak + "% " + at.ToString("HH:mm");
+        });
+        return Page("RAIN NEXT 12H", sky, new Stack(Orientation.Vertical, gap: 2)
+        {
+            HAlign = Align.Stretch,
+            VAlign = Align.Stretch,
+            Grow = 1,
+            Children = { chart, new Label(caption.Get) { Style = new TextStyle(Fonts.Small, Cool) } },
+        });
     }
 
     public static Node Days(Func<WeatherSnapshot?> snap, Func<(Pixel, Pixel)> sky)
