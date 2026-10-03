@@ -75,7 +75,18 @@ public static class OverlayEndpoints
         endpoints.MapGet("/api/schedule", ([FromServices] ScheduleService schedule) =>
         {
             lock (schedule.Gate)
-                return Results.Ok(new { appId = schedule.GetActiveAppId(), brightness = schedule.GetActiveBrightnessOverride() });
+            {
+                // The active app and brightness stay at the top level for older clients; the document itself (the same shape PUT accepts)
+                // is included so an editor can load what is on the device before changing it.
+                var document = schedule.Export();
+                return Results.Ok(new
+                {
+                    appId = schedule.GetActiveAppId(),
+                    brightness = schedule.GetActiveBrightnessOverride(),
+                    playlists = document.Playlists,
+                    rules = document.Rules,
+                });
+            }
         });
 
         endpoints.MapPut("/api/schedule", async (HttpRequest request, [FromServices] ScheduleService schedule, [FromServices] AppManager apps, [FromServices] RenderEngine engine) =>
