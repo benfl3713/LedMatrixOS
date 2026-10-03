@@ -143,6 +143,7 @@ internal static class BriefingNodes
         right.Add(new WeatherGlyph(() => (m.WeatherKind, m.WeatherDay), 28));
         right.Add(new Label(() => m.TempText) { Style = Big(Text) });
         p.Add(right);
+        p.Add(new Updater { Tick = () => { if (right.Visible != m.HasWeather) right.Visible = m.HasWeather; } });
     }
 
     private static void WeatherCard(Panel p, BriefingModel m, Pixel accent)

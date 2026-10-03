@@ -156,8 +156,8 @@ internal sealed class BriefingModel
     private void RefreshWeather(in BriefingInputs i)
     {
         var w = i.Weather;
-        HasWeather = w is not null;
         _weatherOk = i.ShowWeather && w is not null;
+        HasWeather = _weatherOk;
         if (w is null) return;
 
         WeatherKind = w.Kind;
