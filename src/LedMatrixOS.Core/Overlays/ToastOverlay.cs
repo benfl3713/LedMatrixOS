@@ -20,8 +20,9 @@ public sealed class ToastOverlay : OverlayBase
         TimeSpan duration,
         Action<FrameBuffer, FrameContext> renderContent,
         Pixel? bgColor = null,
-        Rectangle? bounds = null)
-        : base("toast", priority: 100, bounds: bounds ?? new Rectangle(0, 0, 256, 8))
+        Rectangle? bounds = null,
+        string id = "toast")
+        : base(id, priority: 100, bounds: bounds ?? new Rectangle(0, 0, 256, 8))
     {
         _bgColor = bgColor ?? Pixel.White;
         _renderContent = renderContent ?? ((_, _) => { });

@@ -104,11 +104,14 @@ internal sealed class RailBoardModel
     /// Minutes until the flagged last train leaves, when it is still ahead (null otherwise). Ignores the platform filter and the maximum,
     /// so the last train is never hidden by either.
     /// </summary>
-    public double? LastTrainMinutes(DateTimeOffset now)
+    public double? LastTrainMinutes(DateTimeOffset now) => LastTrain(now)?.Minutes;
+
+    /// <summary>The flagged last train still ahead (its key identifies the service, so a change of service can be told apart), or null.</summary>
+    public (string Key, string Destination, double Minutes)? LastTrain(DateTimeOffset now)
     {
         foreach (var row in _all)
             if (row.Service.IsLastTrain && row.State != RailStatus.Cancelled && row.DepartsAt > now)
-                return (row.DepartsAt - now).TotalMinutes;
+                return (row.Service.Key, row.Service.Destination, (row.DepartsAt - now).TotalMinutes);
         return null;
     }
 

@@ -6,7 +6,7 @@ namespace LedMatrixOS.Core.Overlays;
 /// Manages the active overlays: priority queue, lifetime, rendering, and clipping.
 /// Overlays are rendered in reverse priority order (lower priority first, so higher priority appears on top).
 /// </summary>
-public sealed class OverlayManager
+public sealed class OverlayManager : IOverlayService
 {
     private readonly List<IOverlay> _overlays = new();
     private readonly object _gate = new();

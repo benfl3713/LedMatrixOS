@@ -72,7 +72,9 @@ builder.Services.AddSingleton<RenderEngine>(sp =>
     var apps = sp.GetRequiredService<AppManager>();
     var interruptService = sp.GetRequiredService<InterruptService>();
     foreach (var app in BuiltInApps.GetAll()) apps.Register(app);
-    return new RenderEngine(device, apps, interruptService, logger: sp.GetService<ILogger<RenderEngine>>());
+    var renderEngine = new RenderEngine(device, apps, interruptService, logger: sp.GetService<ILogger<RenderEngine>>());
+    apps.Overlays = renderEngine.Overlays;
+    return renderEngine;
 });
 
 var app = builder.Build();

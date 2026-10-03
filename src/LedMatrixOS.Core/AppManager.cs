@@ -1,3 +1,4 @@
+using LedMatrixOS.Core.Overlays;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -26,6 +27,9 @@ public sealed class AppManager
     public IEnumerable<Type> Apps => _appsById.Values;
     public IEnumerable<AppInfo> AppInfos => _infoById.Values;
     public IMatrixApp? ActiveApp => _activeApp;
+
+    /// <summary>Handed to apps on activation so they can raise overlays (the engine's overlay manager).</summary>
+    public IOverlayService? Overlays { get; set; }
 
     public event EventHandler<IMatrixApp>? AppActivated;
 
@@ -65,6 +69,7 @@ public sealed class AppManager
 
         // Create the new app instance first
         var nextApp = Create(next);
+        if (nextApp is MatrixAppBase overlayAware) overlayAware.OverlayService = Overlays;
         
         // Raise the AppActivated event BEFORE switching, so RenderEngine can capture the old frame
         AppActivated?.Invoke(this, nextApp);
