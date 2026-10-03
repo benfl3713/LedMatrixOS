@@ -81,8 +81,10 @@ public sealed class ScheduleService
     public ScheduleStatus GetStatus()
     {
         var appId = GetActiveAppId();
-        var now = _timeProvider.GetUtcNow();
-        var local = _timeProvider.GetLocalNow().DateTime;
+        // One reading of the clock: two separate reads differ by a few ticks, which would put the next change just before the real boundary.
+        var localNow = _timeProvider.GetLocalNow();
+        var now = localNow.ToUniversalTime();
+        var local = localNow.DateTime;
         var rule = FindRule(local);
 
         PlaylistConfig? playlist = null;

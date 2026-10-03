@@ -122,6 +122,22 @@ public sealed class ScheduleDocumentTests
     }
 
     [Fact]
+    public void Status_NextChange_IsExactlyOnTheBoundary_EvenWhenTheClockMovesBetweenReads()
+    {
+        var clock = new TickingClock(new DateTimeOffset(2025, 1, 20, 6, 30, 15, TimeSpan.Zero));
+        var sched = new ScheduleService(clock);
+        sched.Replace(ScheduleDocument.TryParse("""
+        { "playlists": [ { "name": "p", "entries": [ { "appId": "clock", "durationMs": 1000 } ] } ],
+          "rules": [ { "playlistId": "p", "startTime": "07:00", "endTime": "23:00" } ] }
+        """, out _)!);
+
+        var s = sched.GetStatus();
+
+        Assert.Equal(new DateTimeOffset(2025, 1, 20, 7, 0, 0, TimeSpan.Zero), s.NextChange);
+        Assert.Equal("rule", s.NextChangeReason);
+    }
+
+    [Fact]
     public void Status_NoRules_IsEmpty()
     {
         var s = new ScheduleService().GetStatus();
@@ -137,5 +153,14 @@ internal sealed class TestClock : TimeProvider
     public TestClock(DateTimeOffset start) => _now = start;
     public void Advance(TimeSpan d) => _now += d;
     public override DateTimeOffset GetUtcNow() => _now;
+    public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
+}
+
+/// <summary>A clock that moves forward one tick every time it is read, like a real one.</summary>
+internal sealed class TickingClock : TimeProvider
+{
+    private DateTimeOffset _now;
+    public TickingClock(DateTimeOffset start) => _now = start;
+    public override DateTimeOffset GetUtcNow() => _now = _now.AddTicks(1);
     public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
 }
