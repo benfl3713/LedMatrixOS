@@ -114,6 +114,8 @@ public class TubeDeparturesApp : WidgetApp
                 new Block(new Pixel(14, 14, 20)),
                 new Stack(Orientation.Horizontal, gap: 3)
                 {
+                    HAlign = Align.Stretch,
+                    VAlign = Align.Stretch,
                     CrossAlign = Align.Center,
                     Padding = new Thickness(2, 1, 3, 1),
                     Children =
