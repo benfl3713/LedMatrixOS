@@ -38,7 +38,7 @@ class LedMatrixApi {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     } else if (response.statusCode == 400) {
-      return null; // App not active
+      return null;
     } else {
       throw Exception('Failed to load app settings: ${response.statusCode}');
     }
@@ -124,6 +124,38 @@ class LedMatrixApi {
   Future<bool> reloadSchedule() async {
     final response = await http.post(Uri.parse('$baseUrl/api/schedule/reload'));
     return response.statusCode == 200;
+  }
+
+  Future<Map<String, dynamic>> getScheduleStatus() async {
+    final response = await http.get(Uri.parse('$baseUrl/api/schedule/status'));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to load schedule status: ${response.statusCode}');
+  }
+
+  /// Replaces schedule.json. Returns the list of validation errors (empty on success).
+  Future<List<String>> putSchedule(Map<String, dynamic> schedule) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/schedule'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(schedule),
+    );
+    if (response.statusCode == 200) return [];
+    if (response.statusCode == 400) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      return (body['errors'] as List).map((e) => e.toString()).toList();
+    }
+    throw Exception('Failed to save schedule: ${response.statusCode}');
+  }
+
+  Future<List<Map<String, dynamic>>> getOverlays() async {
+    final response = await http.get(Uri.parse('$baseUrl/api/overlays'));
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      return (body['overlays'] as List).cast<Map<String, dynamic>>();
+    }
+    throw Exception('Failed to load overlays: ${response.statusCode}');
   }
 
   Future<Map<String, dynamic>> getHealth() async {

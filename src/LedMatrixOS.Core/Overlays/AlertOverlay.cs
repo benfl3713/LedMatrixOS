@@ -14,6 +14,8 @@ public sealed class AlertOverlay : OverlayBase
     private readonly bool _drawBorder;
     private readonly Action<FrameBuffer, FrameContext> _renderContent;
 
+    public override string Kind => "alert";
+
     /// <summary>
     /// Create an alert overlay.
     /// renderContent: callback to draw the alert content (message, icon, etc.).

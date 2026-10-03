@@ -9,6 +9,7 @@ public abstract class OverlayBase : IOverlay
 {
     private float _opacity = 0f;
     private TimeSpan _elapsedTime = TimeSpan.Zero;
+    private TimeSpan? _exitStart;
 
     public string Id { get; }
     public int Priority { get; set; }
@@ -32,6 +33,17 @@ public abstract class OverlayBase : IOverlay
 
     public bool ShouldDismiss => IsExiting && _opacity <= 0;
 
+    /// <summary>Short type name reported by the overlay list API ("toast", "badge", "alert").</summary>
+    public virtual string Kind => "overlay";
+
+    /// <summary>Human readable text the overlay shows, when it has any (reported by the overlay list API).</summary>
+    public string? Text { get; set; }
+
+    /// <summary>Time left before auto-dismissal, or null if the overlay stays until dismissed.</summary>
+    public TimeSpan? Remaining => Duration > TimeSpan.Zero && !IsExiting
+        ? (Duration - _elapsedTime > TimeSpan.Zero ? Duration - _elapsedTime : TimeSpan.Zero)
+        : null;
+
     public OverlayBase(string id, int priority, Rectangle bounds)
     {
         Id = id;
@@ -49,12 +61,13 @@ public abstract class OverlayBase : IOverlay
         if (!IsExiting && Duration > TimeSpan.Zero && _elapsedTime >= Duration)
         {
             IsExiting = true;
+            _exitStart ??= Duration;
         }
 
         // Update opacity during transitions
         if (IsExiting)
         {
-            _opacity = Math.Max(0, 1 - (float)(_elapsedTime.TotalMilliseconds - Duration.TotalMilliseconds) / (float)TransitionDuration.TotalMilliseconds);
+            _opacity = Math.Max(0, 1 - (float)(_elapsedTime.TotalMilliseconds - (_exitStart ?? _elapsedTime).TotalMilliseconds) / (float)TransitionDuration.TotalMilliseconds);
         }
         else if (_elapsedTime < TransitionDuration)
         {
@@ -72,6 +85,7 @@ public abstract class OverlayBase : IOverlay
     public void Dismiss()
     {
         IsExiting = true;
+        _exitStart ??= _elapsedTime;
     }
 
     public abstract void Render(FrameBuffer frame, FrameContext context);
