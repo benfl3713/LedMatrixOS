@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using System.Net;
 using LedMatrixOS.Apps.Attention;
 using LedMatrixOS.Core.Scheduling;
@@ -225,6 +226,72 @@ public class AttentionSourceTests
         using var unconfigured = new SpotifyPlayingSource(() => (false, false, null), null, new FakeTime());
         unconfigured.SetReferenced([null]);
         Assert.False(unconfigured.IsRunning);
+    }
+
+    // ---- bin_day --------------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void BinDay_IsTrueFromTheEveningBeforeUntilTheEndOfCollectionDay()
+    {
+        var clock = new FakeTime();
+        var source = new BinDayDueSource(() => ("Black|#333|Mon|1|2026-10-05", null), clock);
+
+        clock.Now = new DateTimeOffset(2026, 10, 4, 16, 59, 0, TimeSpan.Zero);
+        Assert.False(source.IsActive(null));
+        clock.Now = clock.Now.AddMinutes(1);
+        Assert.True(source.IsActive(null));
+        clock.Now = new DateTimeOffset(2026, 10, 5, 23, 59, 0, TimeSpan.Zero);
+        Assert.True(source.IsActive(null));
+        clock.Now = clock.Now.AddMinutes(1);
+        Assert.False(source.IsActive(null));
+    }
+
+    [Fact]
+    public void BinDay_UsesTheConfiguredEveningHour_AndFollowsChangedRules()
+    {
+        var clock = new FakeTime { Now = new DateTimeOffset(2026, 10, 4, 19, 0, 0, TimeSpan.Zero) };
+        var bins = "Black|#333|Mon|1|2026-10-05";
+        int? hour = 20;
+        var source = new BinDayDueSource(() => (bins, hour), clock);
+
+        Assert.False(source.IsActive(null));
+        hour = 18;
+        Assert.True(source.IsActive(null));
+        bins = "Garden|#333|Wed|1|2026-10-07";
+        Assert.False(source.IsActive(null));
+        bins = null;
+        Assert.False(source.IsActive(null));
+    }
+
+    [Fact]
+    public void BinDay_ReadsPersistedAppSettings_FallingBackToConfiguration()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "bin-day-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            var storage = new LedMatrixOS.Core.AppSettingsStorage(path);
+            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["BinDay:Bins"] = "Config|#111|Mon|1|2026-10-05",
+            }).Build();
+            var clock = new FakeTime { Now = new DateTimeOffset(2026, 10, 4, 18, 0, 0, TimeSpan.Zero) };
+            var source = new BinDayDueSource(storage, config, clock);
+
+            Assert.True(source.IsActive(null));                                   // configuration fallback: Monday
+
+            storage.UpdateAppSetting(BinDayDueSource.AppId, "bins", "Saved|#222|Wed|1|2026-10-07");
+            Assert.False(source.IsActive(null));                                  // persisted settings win
+            storage.UpdateAppSetting(BinDayDueSource.AppId, "bins", "Saved|#222|Mon|1|2026-10-05");
+            storage.UpdateAppSetting(BinDayDueSource.AppId, "eveningHour", 19);
+            Assert.False(source.IsActive(null));
+            storage.UpdateAppSetting(BinDayDueSource.AppId, "eveningHour", 18.0);
+            Assert.True(source.IsActive(null));
+
+            source.SetReferenced([null]);
+            Assert.True(source.IsReferenced);
+            Assert.Equal("bin_day", source.Kind);
+        }
+        finally { File.Delete(path); }
     }
 
     // ---- coordinator + schedule -----------------------------------------------------------------------------------

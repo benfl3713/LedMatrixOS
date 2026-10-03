@@ -13,6 +13,7 @@ public sealed class AttentionConditionTests
 
     [Theory]
     [InlineData("spotify_playing", "spotify_playing", null)]
+    [InlineData("bin_day", "bin_day", null)]
     [InlineData("line_disrupted:victoria", "line_disrupted", "victoria")]
     [InlineData("bus_due:490000077E", "bus_due", "490000077E")]
     [InlineData("ha_state:light.lamp=on", "ha_state", "light.lamp=on")]
@@ -28,6 +29,7 @@ public sealed class AttentionConditionTests
     [InlineData("")]
     [InlineData("event_starting")]
     [InlineData("spotify_playing:x")]
+    [InlineData("bin_day:x")]
     [InlineData("line_disrupted")]
     [InlineData("bus_due:")]
     [InlineData("ha_state:light.lamp")]
