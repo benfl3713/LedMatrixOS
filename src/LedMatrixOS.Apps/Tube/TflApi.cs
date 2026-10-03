@@ -132,6 +132,29 @@ internal sealed class TflApi(HttpClient http)
             Count("NbBikes"), Count("NbEmptyDocks"), Count("NbStandardBikes"), Count("NbEBikes"));
     }
 
+    /// <summary>
+    /// Journey Planner results from <paramref name="from"/> to <paramref name="to"/> (postcode, "lat,lon" or Naptan id), leaving at <paramref name="when"/>.
+    /// Never throws for network or HTTP problems (they come back as Offline); only cancellation propagates.
+    /// </summary>
+    public async Task<Journey.JourneyResult> GetJourneysAsync(string from, string to, DateTime when, string modes, CancellationToken ct)
+    {
+        static string Escape(string s) => Uri.EscapeDataString(s.Trim()).Replace("%2C", ",");
+        var query = $"date={when:yyyyMMdd}&time={when:HHmm}&timeIs=Departing&journeyPreference=LeastTime";
+        if (!string.IsNullOrWhiteSpace(modes)) query += $"&mode={modes}";
+        var url = WithKey($"{Root}/Journey/JourneyResults/{Escape(from)}/to/{Escape(to)}", query);
+
+        try
+        {
+            using var response = await http.GetAsync(url, ct);
+            var body = response.IsSuccessStatusCode ? await response.Content.ReadAsStringAsync(ct) : null;
+            return Journey.JourneyParser.Parse(response.StatusCode, body);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            return Journey.JourneyResult.Of(Journey.JourneyStatus.Offline);
+        }
+    }
+
     /// <summary>Docking stations matching <paramref name="query"/> as "id | name" strings, or a single message such as "No matches".</summary>
     public async Task<(string[] Options, bool Succeeded)> SearchBikePointsAsync(string query, CancellationToken ct)
     {
