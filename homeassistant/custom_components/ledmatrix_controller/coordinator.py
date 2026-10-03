@@ -49,18 +49,39 @@ class LedMatrixCoordinator(DataUpdateCoordinator):
                     if response.status != 200:
                         raise UpdateFailed(f"Error fetching settings: {response.status}")
                     settings = await response.json()
-                
+
                 # Get apps list
                 apps_url = f"{self.base_url}/apps"
                 async with self.session.get(apps_url) as response:
                     if response.status != 200:
                         raise UpdateFailed(f"Error fetching apps: {response.status}")
                     apps_data = await response.json()
-                
+
+                # Get schedule status (tolerate 404 for older servers)
+                schedule_status = None
+                schedule_url = f"{self.base_url}/schedule/status"
+                async with self.session.get(schedule_url) as response:
+                    if response.status == 200:
+                        schedule_status = await response.json()
+                    elif response.status != 404:
+                        _LOGGER.warning(f"Error fetching schedule status: {response.status}")
+
+                # Get overlays (tolerate 404 for older servers)
+                overlays = None
+                overlays_url = f"{self.base_url}/overlays"
+                async with self.session.get(overlays_url) as response:
+                    if response.status == 200:
+                        overlays_data = await response.json()
+                        overlays = overlays_data.get("overlays", [])
+                    elif response.status != 404:
+                        _LOGGER.warning(f"Error fetching overlays: {response.status}")
+
                 return {
                     "settings": settings,
                     "apps": apps_data.get("apps", []),
                     "active_app": apps_data.get("activeApp"),
+                    "schedule_status": schedule_status,
+                    "overlays": overlays,
                 }
         except asyncio.TimeoutError as err:
             raise UpdateFailed(f"Timeout communicating with API") from err
@@ -145,4 +166,29 @@ class LedMatrixCoordinator(DataUpdateCoordinator):
                 return response.status == 200
         except aiohttp.ClientError as err:
             _LOGGER.error("Error reloading schedule: %s", err)
+            return False
+
+    async def show_alert(self, message: str, color: str | None = None) -> bool:
+        """Show an alert overlay."""
+        payload: dict[str, Any] = {"message": message}
+        if color:
+            payload["color"] = color
+        return await self._post_json("notifications/message", payload)
+
+    async def flash_screen(self) -> bool:
+        """Flash the screen."""
+        try:
+            async with self.session.post(f"{self.base_url}/notifications") as response:
+                return response.status == 200
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error flashing screen: %s", err)
+            return False
+
+    async def clear_overlays(self) -> bool:
+        """Clear all overlays."""
+        try:
+            async with self.session.delete(f"{self.base_url}/overlays") as response:
+                return response.status == 200
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error clearing overlays: %s", err)
             return False
