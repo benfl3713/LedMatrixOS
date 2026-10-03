@@ -15,7 +15,17 @@ class AudioStreamService {
   static const int chunkDurationMs = 100; // Send audio every 100ms
   static const int sampleCount = 512; // Number of samples to send
 
-  AudioStreamService({required this.baseUrl});
+  /// Called with a message whenever sending or capturing fails (throttled to the first failure in a row).
+  final void Function(String message)? onError;
+  bool _reportedFailure = false;
+
+  AudioStreamService({required this.baseUrl, this.onError});
+
+  void _fail(String message) {
+    if (_reportedFailure) return;
+    _reportedFailure = true;
+    onError?.call(message);
+  }
 
   /// Check if microphone permission is granted
   Future<bool> checkPermission() async {
@@ -60,8 +70,7 @@ class AudioStreamService {
       }
       return false;
     } catch (e) {
-      print('Error starting audio stream: $e');
-      return false;
+      throw Exception('Error starting audio stream: $e');
     }
   }
 
@@ -88,12 +97,10 @@ class AudioStreamService {
       // This simulates what real FFT would produce
       final samples = _generateFrequencyBands(normalizedAmplitude);
 
-      print(samples);
-
       // Send to server
       await _sendAudioData(samples);
     } catch (e) {
-      print('Error capturing/sending audio: $e');
+      _fail('Error capturing audio: $e');
     }
   }
 
@@ -158,12 +165,12 @@ class AudioStreamService {
           .timeout(const Duration(seconds: 2));
 
       if (response.statusCode != 200) {
-        print(
-            'Failed to send audio data: ${response.statusCode} - ${response.body}');
+        _fail('Failed to send audio data: HTTP ${response.statusCode}');
+      } else {
+        _reportedFailure = false;
       }
     } catch (e) {
-      print('Error sending audio data: $e');
-      // Don't throw - just log and continue streaming
+      _fail('Error sending audio data: $e');
     }
   }
 
@@ -181,7 +188,7 @@ class AudioStreamService {
         return jsonDecode(response.body);
       }
     } catch (e) {
-      print('Error checking server status: $e');
+      throw Exception('Error checking server status: $e');
     }
     return null;
   }
