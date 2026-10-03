@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'models.dart';
+import 'schedule_models.dart';
 import 'result.dart';
 
 /// The device REST API. Every call returns a [Result]; nothing throws.
@@ -20,6 +21,22 @@ abstract class LedApi {
   Future<Result<TransitionList>> getTransitions();
   Future<Result<void>> setTransition(String name);
   Future<Result<Health>> getHealth();
+
+  /// The stored schedule, or null when the device does not expose the document on `GET /api/schedule`.
+  Future<Result<ScheduleDocument?>> getSchedule();
+
+  /// Replaces the whole schedule. A 400 comes back as an [ApiError] whose `errors` lists the problems.
+  Future<Result<ScheduleDocument>> saveSchedule(ScheduleDocument doc);
+  Future<Result<ScheduleStatus>> getScheduleStatus();
+
+  Future<Result<List<OverlayInfo>>> getOverlays();
+  Future<Result<void>> dismissOverlay(String id);
+  Future<Result<void>> clearOverlays();
+  Future<Result<void>> sendToast({required String message, double? seconds, String? color, String? background});
+  Future<Result<void>> sendBadge({required String id, int? x, int? y, int? size, String? color, bool? pulsing});
+
+  /// With a [message] posts the coloured message alert; without one, the plain flash.
+  Future<Result<void>> sendAlert({String? message, String? color});
 
   Uri get previewSocketUri;
   String previewUrl({int? cacheBust});
@@ -50,7 +67,8 @@ class HttpLedApi implements LedApi {
       return Err(ApiError(ApiErrorKind.network, 'Cannot reach the device: $e'));
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      return Err(ApiError(ApiErrorKind.http, _httpMessage(response), statusCode: response.statusCode));
+      return Err(ApiError(ApiErrorKind.http, _httpMessage(response),
+          statusCode: response.statusCode, errors: _validationErrors(response)));
     }
     try {
       return Ok(parse(response.body));
@@ -59,11 +77,25 @@ class HttpLedApi implements LedApi {
     }
   }
 
+  static List<String> _validationErrors(http.Response r) {
+    try {
+      final decoded = jsonDecode(r.body);
+      if (decoded is Map && decoded['errors'] is List) {
+        return (decoded['errors'] as List).map((e) => e.toString()).toList();
+      }
+    } catch (_) {
+      // Not a JSON validation body; the plain message is used instead.
+    }
+    return const [];
+  }
+
   static String _httpMessage(http.Response r) {
     var detail = r.body.trim();
     try {
       final decoded = jsonDecode(detail);
-      if (decoded is Map && decoded['message'] is String) {
+      if (decoded is Map && decoded['errors'] is List) {
+        detail = (decoded['errors'] as List).join('; ');
+      } else if (decoded is Map && decoded['message'] is String) {
         detail = decoded['message'] as String;
         if (decoded['rejected'] is List) detail = '$detail: ${(decoded['rejected'] as List).join(', ')}';
       } else if (decoded is String) {
@@ -124,6 +156,87 @@ class HttpLedApi implements LedApi {
 
   @override
   Future<Result<Health>> getHealth() => _send(() => _client.get(_uri('/api/health')), (b) => Health.fromJson(_map(b)));
+
+  @override
+  Future<Result<ScheduleDocument?>> getSchedule() => _send(() => _client.get(_uri('/api/schedule')), (b) {
+        final json = _map(b);
+        return ScheduleDocument.looksLikeDocument(json) ? ScheduleDocument.fromJson(json) : null;
+      });
+
+  @override
+  Future<Result<ScheduleDocument>> saveSchedule(ScheduleDocument doc) => _send(
+        () => _client.put(_uri('/api/schedule'), headers: _json, body: doc.encode()),
+        (b) => ScheduleDocument.fromJson(_map(b)),
+      );
+
+  @override
+  Future<Result<ScheduleStatus>> getScheduleStatus() =>
+      _send(() => _client.get(_uri('/api/schedule/status')), (b) => ScheduleStatus.fromJson(_map(b)));
+
+  @override
+  Future<Result<List<OverlayInfo>>> getOverlays() => _send(
+        () => _client.get(_uri('/api/overlays')),
+        (b) => ((_map(b)['overlays'] ?? const []) as List)
+            .map((e) => OverlayInfo.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+
+  @override
+  Future<Result<void>> dismissOverlay(String id) =>
+      _send(() => _client.delete(_uri('/api/overlays/${Uri.encodeComponent(id)}')), (_) {});
+
+  @override
+  Future<Result<void>> clearOverlays() => _send(() => _client.delete(_uri('/api/overlays')), (_) {});
+
+  @override
+  Future<Result<void>> sendToast({required String message, double? seconds, String? color, String? background}) => _send(
+        () => _client.post(_uri('/api/overlays/toast'),
+            headers: _json,
+            body: jsonEncode({
+              'message': message,
+              if (seconds != null) 'seconds': seconds,
+              if (color != null) 'color': color,
+              if (background != null) 'background': background,
+            })),
+        (_) {},
+      );
+
+  @override
+  Future<Result<void>> sendBadge({required String id, int? x, int? y, int? size, String? color, bool? pulsing}) => _send(
+        () => _client.post(_uri('/api/overlays/badge'),
+            headers: _json,
+            body: jsonEncode({
+              'id': id,
+              if (x != null) 'x': x,
+              if (y != null) 'y': y,
+              if (size != null) 'size': size,
+              if (color != null) 'color': color,
+              if (pulsing != null) 'pulsing': pulsing,
+            })),
+        (_) {},
+      );
+
+  @override
+  Future<Result<void>> sendAlert({String? message, String? color}) {
+    if (message == null || message.trim().isEmpty) {
+      return _send(() => _client.post(_uri('/api/notifications')), (_) {});
+    }
+    // The server binds the colour as a Pixel, i.e. {r,g,b}.
+    return _send(
+      () => _client.post(_uri('/api/notifications/message'),
+          headers: _json, body: jsonEncode({'message': message, if (color != null) 'color': _rgb(color)})),
+      (_) {},
+    );
+  }
+
+  static Map<String, int>? _rgb(String hex) {
+    var s = hex.trim();
+    if (s.startsWith('#')) s = s.substring(1);
+    if (s.length != 6) return null;
+    final v = int.tryParse(s, radix: 16);
+    if (v == null) return null;
+    return {'r': (v >> 16) & 255, 'g': (v >> 8) & 255, 'b': v & 255};
+  }
 
   @override
   Uri get previewSocketUri {
