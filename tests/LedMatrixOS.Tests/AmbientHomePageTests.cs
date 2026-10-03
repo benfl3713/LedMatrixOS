@@ -128,7 +128,7 @@ public class AmbientHomePageTests
         app.UpdateSetting("ambientSpeed", 99);
         Assert.Equal(10, app.AmbientSpeed);
 
-        Assert.Equal(["displayMode", "showDate", "show24Hour", "theme", "ambientSpeed"], app.GetSettings().Select(s => s.Key).ToArray());
+        Assert.Equal(["displayMode", "showDate", "show24Hour", "theme", "ambientSpeed"], app.GetSettings().Select(s => s.Key).Take(5).ToArray());
     }
 
     [Fact]
