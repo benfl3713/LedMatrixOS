@@ -24,7 +24,7 @@ internal sealed class PlaneStyles
     public readonly TextStyle RowAlt = new(Fonts.QuiteSmall, new Pixel(255, 214, 90), Shadow: false);
     public readonly TextStyle RowDist = new(Fonts.QuiteSmall, new Pixel(150, 190, 255), Shadow: false);
     public readonly TextStyle Strip = new(Fonts.QuiteSmall, new Pixel(190, 190, 200), Shadow: false);
-    public readonly TextStyle Clock = new(Fonts.Small, Pixel.White, Shadow: false);
+    public readonly TextStyle Clock = new(Fonts.QuiteSmall, Pixel.White, Shadow: false);
     public readonly TextStyle MessageBig = new(Fonts.Big, Pixel.White, Shadow: false);
     public readonly TextStyle Message = new(Fonts.Small, Amber, Shadow: false);
 }

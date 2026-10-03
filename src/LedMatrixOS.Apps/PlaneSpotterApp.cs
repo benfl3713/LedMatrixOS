@@ -221,7 +221,7 @@ public sealed class PlaneSpotterApp : WidgetApp
 
     private string HintText() => _state switch
     {
-        State.NoLocation => "PlaneSpotter:Latitude / Longitude in config",
+        State.NoLocation => "Set PlaneSpotter lat/lon in config",
         State.Busy => "Backing off, will retry",
         State.Offline => "Cannot reach OpenSky",
         _ => "Scanning the skies",
