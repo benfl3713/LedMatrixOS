@@ -56,7 +56,8 @@ public static class WeatherCodes
     };
 }
 
-public sealed record HourlyPoint(DateTime LocalTime, double Temp, int Code, bool IsDay, int PrecipChance);
+/// <summary>One forecast hour. <paramref name="Wind"/> is the 10m wind speed in the query's unit (km/h or mph).</summary>
+public sealed record HourlyPoint(DateTime LocalTime, double Temp, int Code, bool IsDay, int PrecipChance, double Wind = 0);
 
 public sealed record DailyPoint(DateTime Date, double High, double Low, int Code, int PrecipChance);
 
