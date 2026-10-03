@@ -50,7 +50,14 @@ public class SpotifyDataService
     private async Task Update(CancellationToken cancellationToken)
     {
         var currentlyPlaying = await _spotify.Player.GetCurrentlyPlaying(new PlayerCurrentlyPlayingRequest(), cancellationToken);
-        var song = currentlyPlaying.Item as FullTrack;
+        var song = currentlyPlaying?.Item as FullTrack;
+        if (song == null)
+        {
+            // Nothing playing (or a podcast episode): show the idle card instead of keeping the last track
+            SpotifyDataStore.Value = new SpotifyData();
+            SpotifyDataStore.Loaded = true;
+            return;
+        }
 
         var queue = await _spotify.Player.GetQueue(cancellationToken);
         var nextTrack = queue.Queue.Count > 0 ? queue.Queue.First() as FullTrack : null;
@@ -94,6 +101,7 @@ public class SpotifyDataService
             NextTrackName = nextTrack?.Name,
             NextTrackArtwork = nextTrackArtwork
         };
+        SpotifyDataStore.Loaded = true;
     }
     
     private Pixel ExtractAlbumColor(byte[] artwork)
@@ -198,6 +206,9 @@ public class SpotifyDataService
 public static class SpotifyDataStore
 {
     public static SpotifyData Value { get; set; } = new SpotifyData();
+
+    /// <summary>True once the data service has completed a fetch (so an empty <see cref="Value"/> means "nothing playing", not "not loaded yet").</summary>
+    public static volatile bool Loaded;
 }
 
 public class SpotifyData
