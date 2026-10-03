@@ -43,9 +43,11 @@ builder.Services.AddSingleton<AppManager>(sp =>
 builder.Services.AddSingleton<AudioDataService>();
 builder.Services.AddSingleton<InterruptService>();
 var schedulePath = Path.Combine(AppContext.BaseDirectory, "schedule.json");
-builder.Services.AddSingleton<ScheduleService>(_ =>
+// Apps/services that can answer rule conditions register an IAttentionSource; none are registered by default
+builder.Services.AddSingleton<AttentionEvaluator>(sp => new AttentionEvaluator(sp.GetServices<IAttentionSource>()));
+builder.Services.AddSingleton<ScheduleService>(sp =>
 {
-    var schedule = new ScheduleService();
+    var schedule = new ScheduleService(attention: sp.GetRequiredService<AttentionEvaluator>());
     schedule.TryLoadFromJson(schedulePath);
     return schedule;
 });

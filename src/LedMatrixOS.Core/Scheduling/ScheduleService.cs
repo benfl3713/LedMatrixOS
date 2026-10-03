@@ -12,11 +12,17 @@ public sealed class ScheduleService
     private int _activeEntryIndex = 0;
     private DateTimeOffset _entryStartTime = DateTimeOffset.UtcNow;
     private readonly TimeProvider _timeProvider;
+    private readonly AttentionEvaluator _attention;
 
-    public ScheduleService(TimeProvider? timeProvider = null)
+    public ScheduleService(TimeProvider? timeProvider = null, AttentionEvaluator? attention = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _attention = attention ?? new AttentionEvaluator();
     }
+
+    /// <summary>The first (highest priority) rule that matches the time and whose condition, if any, currently holds.</summary>
+    private ScheduleRule? FindRule(DateTime local) =>
+        _rules.FirstOrDefault(r => r.Matches(local) && _attention.Evaluate(r.Condition));
 
     /// <summary>Callers that mutate the schedule (reload) while the runner reads it lock on this.</summary>
     public object Gate { get; } = new();
@@ -77,7 +83,7 @@ public sealed class ScheduleService
         var appId = GetActiveAppId();
         var now = _timeProvider.GetUtcNow();
         var local = _timeProvider.GetLocalNow().DateTime;
-        var rule = _rules.FirstOrDefault(r => r.Matches(local));
+        var rule = FindRule(local);
 
         PlaylistConfig? playlist = null;
         if (_activePlaylistId != null) _playlists.TryGetValue(_activePlaylistId, out playlist);
@@ -98,7 +104,7 @@ public sealed class ScheduleService
         for (int i = 0; i < 8 * 24 * 60; i++)
         {
             var t = boundary.AddMinutes(i);
-            if (!ReferenceEquals(_rules.FirstOrDefault(r => r.Matches(t)), rule))
+            if (!ReferenceEquals(FindRule(t), rule))
             {
                 var at = now + (t - local);
                 if (next == null || at < next) { next = at; reason = "rule"; }
@@ -126,7 +132,7 @@ public sealed class ScheduleService
         var local = _timeProvider.GetLocalNow().DateTime;
 
         // Find the active playlist based on current time and rules
-        var applicableRule = _rules.FirstOrDefault(r => r.Matches(local));
+        var applicableRule = FindRule(local);
         var targetPlaylistId = applicableRule?.PlaylistId;
 
         // If the active playlist changed, restart from index 0
@@ -173,7 +179,7 @@ public sealed class ScheduleService
     public byte? GetActiveBrightnessOverride()
     {
         var local = _timeProvider.GetLocalNow().DateTime;
-        return _rules.FirstOrDefault(r => r.Matches(local))?.BrightnessOverride;
+        return FindRule(local)?.BrightnessOverride;
     }
 }
 
