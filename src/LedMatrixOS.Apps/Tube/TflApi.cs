@@ -25,6 +25,13 @@ internal sealed record LineStatus(string LineId, string Name, int Severity, stri
 
 internal sealed record StationMatch(string Id, string Name);
 
+/// <summary>Live state of one Santander Cycles docking station. Value equality, so a label only reformats when something changed.</summary>
+internal sealed record BikePointInfo(string Id, string Name, int NbBikes, int NbEmptyDocks, int NbStandardBikes, int NbEBikes)
+{
+    /// <summary>Bikes plus empty docks: the docks that are actually in service.</summary>
+    public int Capacity => NbBikes + NbEmptyDocks;
+}
+
 /// <summary>
 /// The TfL unified API calls both Tube apps need, kept apart from the views. It only talks HTTP and shapes the results;
 /// polling, back-off and caching belong to the app (<c>Poll</c>).
@@ -114,6 +121,36 @@ internal sealed class TflApi(HttpClient http)
         return (matches.Length > 0 ? matches : ["No matches"], true);
     }
 
+    /// <summary>One Santander Cycles docking station (e.g. "BikePoints_1") with its current bike and dock counts.</summary>
+    public async Task<BikePointInfo> GetBikePointAsync(string id, CancellationToken ct)
+    {
+        var data = await http.GetFromJsonAsync<ApiBikePoint>(WithKey($"{Root}/BikePoint/{Uri.EscapeDataString(id)}"), ct)
+            ?? throw new HttpRequestException("Empty BikePoint response");
+
+        int Count(string key) => int.TryParse(data.AdditionalProperties?.FirstOrDefault(p => p.Key == key)?.Value, out var n) ? Math.Max(0, n) : 0;
+        return new BikePointInfo(string.IsNullOrWhiteSpace(data.Id) ? id : data.Id, CleanDockName(data.CommonName),
+            Count("NbBikes"), Count("NbEmptyDocks"), Count("NbStandardBikes"), Count("NbEBikes"));
+    }
+
+    /// <summary>Docking stations matching <paramref name="query"/> as "id | name" strings, or a single message such as "No matches".</summary>
+    public async Task<(string[] Options, bool Succeeded)> SearchBikePointsAsync(string query, CancellationToken ct)
+    {
+        var response = await http.GetAsync(WithKey($"{Root}/BikePoint/Search", $"query={Uri.EscapeDataString(query)}"), ct);
+        if (!response.IsSuccessStatusCode) return (["No matches"], false);
+
+        var data = await response.Content.ReadFromJsonAsync<ApiBikePoint[]>(ct) ?? [];
+        var matches = data
+            .Where(m => !string.IsNullOrWhiteSpace(m.Id) && !string.IsNullOrWhiteSpace(m.CommonName))
+            .DistinctBy(m => m.Id)
+            .Take(12)
+            .Select(m => $"{m.Id} | {CleanDockName(m.CommonName)}")
+            .ToArray();
+        return (matches.Length > 0 ? matches : ["No matches"], true);
+    }
+
+    /// <summary>TfL names read "River Street , Clerkenwell"; tidy the stray space before the comma.</summary>
+    public static string CleanDockName(string? name) => (name ?? "").Replace(" ,", ",").Trim();
+
     public static string StripStationSuffix(string name) => name
         .Replace(" Underground Station", "", StringComparison.OrdinalIgnoreCase)
         .Replace(" Rail Station", "", StringComparison.OrdinalIgnoreCase)
@@ -142,6 +179,19 @@ internal sealed class TflApi(HttpClient http)
     {
         [JsonPropertyName("commonName")] public string CommonName { get; set; } = "";
         [JsonPropertyName("indicator")] public string? Indicator { get; set; }
+    }
+
+    private sealed class ApiBikePoint
+    {
+        [JsonPropertyName("id")] public string Id { get; set; } = "";
+        [JsonPropertyName("commonName")] public string CommonName { get; set; } = "";
+        [JsonPropertyName("additionalProperties")] public ApiProperty[]? AdditionalProperties { get; set; }
+    }
+
+    private sealed class ApiProperty
+    {
+        [JsonPropertyName("key")] public string Key { get; set; } = "";
+        [JsonPropertyName("value")] public string? Value { get; set; }
     }
 
     private sealed class SearchResponse { [JsonPropertyName("matches")] public SearchMatch[]? Matches { get; set; } }

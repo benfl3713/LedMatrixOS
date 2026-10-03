@@ -61,3 +61,27 @@ dismiss_overlay:
 reload_schedule:
   name: Reload schedule
   description: Re-read schedule.json on the matrix.
+
+show_alert:
+  name: Show alert
+  description: Show an alert overlay on the matrix.
+  fields:
+    message:
+      name: Message
+      required: true
+      example: "Alert!"
+      selector:
+        text:
+    color:
+      name: Colour
+      description: Hex colour, e.g. "#ff0000".
+      selector:
+        text:
+
+flash_screen:
+  name: Flash screen
+  description: Flash the screen briefly.
+
+clear_overlays:
+  name: Clear overlays
+  description: Remove all active overlays from the matrix.
