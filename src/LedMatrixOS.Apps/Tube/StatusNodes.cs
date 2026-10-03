@@ -62,6 +62,18 @@ internal sealed class StatusTile : Node
 
         int cx = bounds.X + bounds.Width / 2, cy = bounds.Y + 11 + (bounds.Height - 11) / 2;
         var white = Pixel.White;
+        if (bounds.Height < 30)
+        {
+            // Compact two-row tile: a small glyph in the 9px under the code.
+            switch (health)
+            {
+                case Health.Good: TubeGfx.DrawTick(frame, cx - 1, cy + 2, 6, white); break;
+                case Health.Planned: for (int i = -1; i <= 1; i++) frame.Fill(new Rectangle(cx + i * 3 - 1, cy, 2, 2), white); break;
+                case Health.Closed: TubeGfx.DrawCross(frame, cx - 1, cy, 2, white); break;
+                default: TubeGfx.DrawBang(frame, cx, cy - 3, 7, wave > 0.4f ? white : health.Color()); break;
+            }
+        }
+        else
         switch (health)
         {
             case Health.Good: TubeGfx.DrawTick(frame, cx - 1, cy + 5, 9, white); break;
@@ -113,6 +125,16 @@ internal static class StatusCards
         return text.Length <= max ? text : text[..(max - 3)].TrimEnd() + "...";
     }
 
+    /// <summary>The whole reason without the "NORTHERN LINE:" prefix; the marquee scrolls it when it is too long to fit.</summary>
+    public static string FullReason(string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason)) return "";
+        var text = reason.Trim();
+        int colon = text.IndexOf(": ", StringComparison.Ordinal);
+        if (colon is > 0 and < 30 && text[..colon].All(c => char.IsUpper(c) || c == ' ' || c == '&' || c == '-')) text = text[(colon + 2)..];
+        return text.Replace('\n', ' ').Replace('\r', ' ').TrimEnd('.', ' ');
+    }
+
     public static Node Build(StatusCard card, BoardStyles styles)
     {
         if (card.Status is not { } s)
@@ -146,7 +168,7 @@ internal static class StatusCards
                         new Label(s.Description.ToUpperInvariant()) { Style = new TextStyle(Fonts.Small, s.Health.Color(), Shadow: false) },
                     },
                 },
-                new MarqueeLabel(ShortReason(s.Reason)) { Style = styles.Strip, Height = 8, Margin = new Thickness(0, 1, 0, 0), Speed = 40 },
+                new MarqueeLabel(FullReason(s.Reason)) { Style = styles.Strip, Height = 8, Margin = new Thickness(0, 1, 0, 0), Speed = 40 },
             },
         };
     }
