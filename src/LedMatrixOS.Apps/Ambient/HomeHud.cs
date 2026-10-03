@@ -27,6 +27,9 @@ internal sealed class DateBlock : Node
 
     public float Alpha = 1f;
 
+    /// <summary>0 normally; 1 once the data chips are showing and AM/PM sits beside the weekday.</summary>
+    public float Compact;
+
     public void SetText(string weekday, string date, string ampm)
     {
         _weekdayText = weekday;
@@ -42,18 +45,22 @@ internal sealed class DateBlock : Node
         _ampm.Set(_tiny, _ampmText);
 
         var p = _s.Pal;
-        int ampmH = _ampmText.Length > 0 ? _ampm.Height + 2 : 0;
+        // With the data chips showing, AM/PM moves from above the weekday to beside it, so the block is no taller than in 24-hour mode.
+        float inline = Compact;
+        int ampmH = _ampmText.Length > 0 ? (int)MathF.Round((_ampm.Height + 2) * (1f - inline)) : 0;
         int total = ampmH + _weekday.Height + 4 + 2 + 4 + _date.Height * 2;
         int x = bounds.X, y = bounds.Y + (bounds.Height - total) / 2;
 
-        if (ampmH > 0)
+        if (_ampmText.Length > 0)
         {
             var ap = TextPaint.Solid(Gfx.Mix(p.Date, p.Accent, 0.4f));
             ap.Alpha = Alpha;
             ap.Shadow = true;
-            _ampm.Draw(frame, x, y, 1, ap);
-            y += ampmH;
+            int ax = x + (int)MathF.Round((_weekday.Width + 5) * inline);
+            int ay = y + (int)MathF.Round((ampmH + _weekday.Height - _ampm.Height - ampmH) * inline);
+            _ampm.Draw(frame, ax, ay, 1, ap);
         }
+        y += ampmH;
 
         var wp = TextPaint.Vertical(Gfx.Mix(p.Date, Pixel.White, 0.45f), p.Date);
         wp.Alpha = Alpha;
@@ -314,6 +321,7 @@ internal sealed class HomeDirector : Node
         float chipLift = ChipLift * chipMix;
         _strip.Position = new Vector2(x, lift - chipLift);
         _s.ChipLeft = mix;
+        _date.Compact = chipMix;
         _band.Opacity = chipMix;
 
         float t = _s.T;
