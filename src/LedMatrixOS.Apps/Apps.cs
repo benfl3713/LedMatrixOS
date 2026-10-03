@@ -26,6 +26,7 @@ public static class BuiltInApps
         yield return typeof(BusArrivalsApp);
         yield return typeof(RailDeparturesApp);
         yield return typeof(CycleHubApp);
+        yield return typeof(JourneyApp);
         yield return typeof(CommuteApp);
         yield return typeof(HomeAssistantTilesApp);
         yield return typeof(CalendarApp);
