@@ -131,7 +131,7 @@ public class BinDayApp : WidgetApp
             Visible = false,
             Children =
             {
-                new PulseBlock(),
+                new PulseBlock { HAlign = Align.Stretch, VAlign = Align.Stretch },
                 new MarqueeLabel(() => _reminderText)
                 {
                     Style = styles.Reminder,
@@ -281,7 +281,7 @@ public class BinDayApp : WidgetApp
             _plateText = !tomorrow ? "TODAY" : now.Hour >= Math.Clamp(EveningHour, 0, 23) ? "TONIGHT" : "TOMORROW";
             _plateColour = !tomorrow ? new Pixel(255, 90, 60) : _plateText == "TONIGHT" ? BinStyles.Amber : new Pixel(120, 200, 255);
             _plate.Text = _plateText;
-            _plate.Background = _plateColour;
+            _plate.Background = _plateColour.WithBrightness(0.7f);
             _sub = "";
             _view = View.Alert;
             return;

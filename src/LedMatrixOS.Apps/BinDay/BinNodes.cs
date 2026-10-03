@@ -20,7 +20,7 @@ internal sealed class BinStyles
     public readonly TextStyle Relative = new(Fonts.QuiteSmall, Muted, Shadow: false);
     public readonly TextStyle RelativeSoon = new(Fonts.QuiteSmall, Amber, Shadow: false);
     public readonly TextStyle Headline = new(Fonts.Small, Pixel.White, Shadow: true);
-    public readonly TextStyle Plate = new(Fonts.QuiteSmall, Pixel.Black, Shadow: false);
+    public readonly TextStyle Plate = new(Fonts.QuiteSmall, Pixel.White, Shadow: false);
     public readonly TextStyle Reminder = new(Fonts.Big, Pixel.White, Shadow: true);
     public readonly TextStyle Message = new(Fonts.Small, Amber, Shadow: false);
     public readonly TextStyle Caption = new(Fonts.QuiteSmall, Muted, Shadow: false);
@@ -152,8 +152,8 @@ internal sealed class SummaryRow : Stack
         Height = 18;
         CrossAlign = Align.Center;
         Children.Add(new BinIcon(mini: true) { Colour = row.Colour });
-        Children.Add(new MarqueeLabel(row.Name) { Style = styles.Name, Width = 90 });
-        Children.Add(new Label(row.Date) { Style = styles.Date, Width = 54 });
+        Children.Add(new MarqueeLabel(row.Name) { Style = styles.Name, Width = 66 });
+        Children.Add(new Label(row.Date) { Style = styles.Date, Width = 56 });
         Children.Add(new Label(row.Relative) { Style = row.Soon ? styles.RelativeSoon : styles.Relative, Grow = 1, HAlign = Align.Stretch });
     }
 }
