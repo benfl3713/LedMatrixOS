@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:led_matrix_controller/api/led_api.dart';
 import 'package:led_matrix_controller/api/models.dart';
 import 'package:led_matrix_controller/api/result.dart';
+import 'package:led_matrix_controller/api/schedule_models.dart';
 import 'package:led_matrix_controller/core/providers.dart';
 import 'package:led_matrix_controller/main.dart';
 
@@ -95,6 +96,97 @@ class FakeApi implements LedApi {
   @override
   Future<Result<Health>> getHealth() async => const Ok(
       Health(status: 'ok', activeApp: 'clock', isEnabled: true, width: 256, height: 64, uptimeSeconds: 3700));
+
+  // Schedule ---------------------------------------------------------------
+
+  ScheduleDocument scheduleDoc = const ScheduleDocument(
+    playlists: [
+      PlaylistDoc(name: 'day', entries: [
+        EntryDoc(appId: 'clock', durationMs: 20000),
+        EntryDoc(appId: 'weather', durationMs: 10000, transition: 'slide'),
+      ]),
+      PlaylistDoc(name: 'night', entries: [EntryDoc(appId: 'fire', durationMs: 60000)]),
+    ],
+    rules: [
+      RuleDoc(playlistId: 'day', priority: 10, startTime: '07:00', endTime: '22:00'),
+      RuleDoc(playlistId: 'night', priority: 60, startTime: '22:00', endTime: '07:00', daysMask: 62, brightnessOverride: 51),
+    ],
+  );
+
+  /// Validation errors the next save returns (cleared after use).
+  List<String> saveErrors = [];
+  final List<ScheduleDocument> savedDocs = [];
+
+  ScheduleStatus scheduleStatus = ScheduleStatus(
+    activeRule: const ActiveRuleInfo(index: 0, playlistId: 'day', priority: 10),
+    playlist: 'day',
+    entryIndex: 1,
+    entryCount: 2,
+    appId: 'weather',
+    nextChange: DateTime.now().add(const Duration(minutes: 5)),
+    nextChangeReason: 'playlist',
+  );
+
+  @override
+  Future<Result<ScheduleDocument?>> getSchedule() async => Ok(scheduleDoc);
+
+  @override
+  Future<Result<ScheduleDocument>> saveSchedule(ScheduleDocument doc) async {
+    calls.add('saveSchedule');
+    if (saveErrors.isNotEmpty) {
+      final errors = saveErrors;
+      saveErrors = [];
+      return Err(ApiError(ApiErrorKind.http, 'HTTP 400: ${errors.join('; ')}', statusCode: 400, errors: errors));
+    }
+    savedDocs.add(doc);
+    scheduleDoc = doc;
+    return Ok(doc);
+  }
+
+  @override
+  Future<Result<ScheduleStatus>> getScheduleStatus() async => Ok(scheduleStatus);
+
+  // Overlays ----------------------------------------------------------------
+
+  List<OverlayInfo> overlays = const [
+    OverlayInfo(id: 'toast-1', kind: 'toast', text: 'Dinner is ready', priority: 10, remainingSeconds: 3.2),
+    OverlayInfo(id: 'badge-1', kind: 'badge', priority: 5),
+  ];
+
+  @override
+  Future<Result<List<OverlayInfo>>> getOverlays() async => Ok(overlays);
+
+  @override
+  Future<Result<void>> dismissOverlay(String id) async {
+    calls.add('dismiss:$id');
+    overlays = [for (final o in overlays) if (o.id != id) o];
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void>> clearOverlays() async {
+    calls.add('clearOverlays');
+    overlays = const [];
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void>> sendToast({required String message, double? seconds, String? color, String? background}) async {
+    calls.add('toast:$message:${seconds?.round()}:$color:$background');
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void>> sendBadge({required String id, int? x, int? y, int? size, String? color, bool? pulsing}) async {
+    calls.add('badge:$id:$x:$y:$size:$color:$pulsing');
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void>> sendAlert({String? message, String? color}) async {
+    calls.add('alert:$message:$color');
+    return const Ok(null);
+  }
 
   @override
   Uri get previewSocketUri => Uri.parse('ws://fake/ws/preview');

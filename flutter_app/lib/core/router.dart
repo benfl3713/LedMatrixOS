@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/apps/apps_page.dart';
+import '../features/notify/notify_page.dart';
 import '../features/now/now_page.dart';
+import '../features/schedule/schedule_page.dart';
 import '../features/settings/settings_page.dart';
 import 'shell.dart';
 
@@ -44,24 +46,19 @@ final List<AppTab> appTabs = [
     selectedIcon: Icons.grid_view_rounded,
     builder: (_) => const AppsPage(),
   ),
-  // PLACEHOLDER: the Schedule tab is added by a later milestone. Replace the builder with the
-  // real page and set enabled: true (or just delete `enabled`).
   AppTab(
     path: '/schedule',
     label: 'Schedule',
     icon: Icons.calendar_month_outlined,
     selectedIcon: Icons.calendar_month_rounded,
-    builder: (_) => const SizedBox.shrink(),
-    enabled: false,
+    builder: (_) => const SchedulePage(),
   ),
-  // PLACEHOLDER: the Notify tab is added by a later milestone (same recipe as Schedule).
   AppTab(
     path: '/notify',
     label: 'Notify',
     icon: Icons.notifications_none_rounded,
     selectedIcon: Icons.notifications_rounded,
-    builder: (_) => const SizedBox.shrink(),
-    enabled: false,
+    builder: (_) => const NotifyPage(),
   ),
   AppTab(
     path: '/settings',

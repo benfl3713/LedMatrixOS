@@ -21,9 +21,9 @@ void main() {
     expect(find.text('50%'), findsOneWidget); // 128 / 255
     expect(find.text('Quick switch'), findsOneWidget);
     expect(find.text('Weather'), findsOneWidget);
-    // Disabled placeholder tabs are not shown.
-    expect(find.text('Schedule'), findsNothing);
-    expect(find.text('Notify'), findsNothing);
+    // All five tabs are in the navigation bar.
+    expect(find.text('Schedule'), findsOneWidget);
+    expect(find.text('Notify'), findsOneWidget);
   });
 
   testWidgets('quick switch activates an app', (tester) async {

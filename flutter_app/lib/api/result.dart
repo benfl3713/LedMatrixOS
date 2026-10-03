@@ -2,11 +2,14 @@
 enum ApiErrorKind { network, timeout, http, parse }
 
 class ApiError implements Exception {
-  const ApiError(this.kind, this.message, {this.statusCode});
+  const ApiError(this.kind, this.message, {this.statusCode, this.errors = const []});
 
   final ApiErrorKind kind;
   final String message;
   final int? statusCode;
+
+  /// Server validation problems (`400 {errors:[...]}`), one per line. Empty for other errors.
+  final List<String> errors;
 
   @override
   String toString() => message;
