@@ -18,7 +18,6 @@ public sealed class SpotifyApp : MatrixAppBase
     public override string Name => "Spotify";
     public override int FrameRate { get; } = 10;
 
-    // Mock scrolling text - you'll want to replace this with your actual ScrollOverflowText
     private ScrollOverflowTextForFrameBuffer? _songNameText;
     private ScrollOverflowTextForFrameBuffer? _artistNameText;
     private ScrollOverflowTextForFrameBuffer? _nextTrackText;
@@ -257,14 +256,10 @@ public sealed class SpotifyApp : MatrixAppBase
     private Pixel _currentBackgroundColor = new Pixel(0, 0, 0);
 
     // --- Fun Animated Equalizer ---
-    private double _equalizerPhase = 0;
     private readonly Pixel[] _eqColors = new Pixel[] {
         new Pixel(0,255,255), new Pixel(0,128,255), new Pixel(0,255,128),
         new Pixel(255,255,0), new Pixel(255,128,0), new Pixel(255,0,128), new Pixel(128,0,255)
     };
-    private readonly double[] _eqBarOffsets = new double[32]; // up to 32 bars
-    private readonly double[] _eqBarSpeeds = new double[32];
-    private bool _eqBarInit = false;
     
     private void DrawEqualizer()
     {
@@ -360,24 +355,6 @@ public sealed class SpotifyApp : MatrixAppBase
 
     // --- Animated Background State ---
     private double _backgroundWavePhase = 0;
-    
-    private void DrawAnimatedBackground()
-    {
-        // Animated color wave background
-        _backgroundWavePhase += 0.05; // Controls speed
-        for (int x = 0; x < _matrixWidth; x++)
-        {
-            for (int y = 0; y < _matrixHeight; y++)
-            {
-                // Wave pattern: color varies with x, y, and phase
-                double v = Math.Sin((x + _backgroundWavePhase * 20) / 12.0) + Math.Cos((y + _backgroundWavePhase * 10) / 8.0);
-                byte r = (byte)(80 + 60 * Math.Sin(v + _backgroundWavePhase));
-                byte g = (byte)(80 + 60 * Math.Sin(v + _backgroundWavePhase + 2));
-                byte b = (byte)(80 + 60 * Math.Sin(v + _backgroundWavePhase + 4));
-                _matrix.SetPixel(x, y, new Pixel(r, g, b) / 4);
-            }
-        }
-    }
     
     private void DrawAnimatedBackgroundWithAlbumColors()
     {

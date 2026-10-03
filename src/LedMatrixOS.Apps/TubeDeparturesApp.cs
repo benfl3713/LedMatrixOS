@@ -23,7 +23,6 @@ public class TubeDeparturesApp : WidgetApp
     public override string Name => "Tube Departures";
     public override int FrameRate => 30;
 
-    private const string NoStationSearchHint = "Type at least 2 chars";
     private static readonly IReadOnlyList<LineStatus> NoStatuses = [];
 
     [Setting("Station Search", Description = "Type a station name (e.g. Baker Street).")]
@@ -57,8 +56,7 @@ public class TubeDeparturesApp : WidgetApp
     private volatile ILiveData<string>? _stationName;
     private CancellationTokenSource? _stationPollCts;
 
-    private volatile string[] _stationSearchOptions = [NoStationSearchHint];
-    private string _stationSearchLastQuery = "";
+    private readonly TflStopPicker _picker;
 
     private Node? _board, _strip;
     private Node? _rest;
@@ -72,6 +70,8 @@ public class TubeDeparturesApp : WidgetApp
         _http = httpClient;
         _http.Timeout = TimeSpan.FromSeconds(10);
         _api = new TflApi(_http);
+        _picker = new TflStopPicker("stationSearch", "stationSelect", "Station Select", "Choose a result to set the station automatically.",
+            () => StationSearch, _api.SearchStationsAsync, ApplyStationId, RunInBackground);
     }
 
     // ---- view -------------------------------------------------------------------------------------------------------------------
@@ -159,34 +159,18 @@ public class TubeDeparturesApp : WidgetApp
     // ---- settings ---------------------------------------------------------------------------------------------------------------
 
     // stationSelect has options that change as the user types, so it is not a [Setting] property.
-    public override IEnumerable<AppSetting> GetSettings()
-    {
-        foreach (var setting in base.GetSettings())
-        {
-            yield return setting;
-            if (setting.Key == "stationSearch")
-                yield return new AppSetting("stationSelect", "Station Select", "Choose a result to set the station automatically.", AppSettingType.Select, "", "", Options: _stationSearchOptions);
-        }
-    }
+    public override IEnumerable<AppSetting> GetSettings() => _picker.WithSelect(base.GetSettings());
 
     public override void UpdateSetting(string key, object value)
     {
-        if (key != "stationSelect")
-        {
-            base.UpdateSetting(key, value);
-            return;
-        }
-
-        var selected = value.ToString() ?? "";
-        var split = selected.IndexOf(" | ", StringComparison.Ordinal);
-        if (split > 0 && selected[..split].Trim() is { Length: > 0 } id) ApplyStationId(id);
+        if (!_picker.TryUpdate(key, value)) base.UpdateSetting(key, value);
     }
 
     protected override void OnSettingChanged(string key)
     {
         switch (key)
         {
-            case "stationSearch": SearchStations(); break;
+            case "stationSearch": _picker.OnQueryChanged(); break;
             case "stationId": ApplyStationId(StationId); break;
             case "pageSeconds":
                 if (_pager is not null) _pager.Interval = PageSeconds.Seconds();
@@ -228,60 +212,14 @@ public class TubeDeparturesApp : WidgetApp
 
         var arrivals = Poll(_refreshInterval, ct => _api.GetArrivalsAsync(stationId, ct), cts.Token);
         _arrivals = arrivals;
-        _lineStatuses = Poll(_lineStatusRefreshInterval, ct => FetchLineStatusesAsync(arrivals, ct), cts.Token);
+        _lineStatuses = Poll(_lineStatusRefreshInterval, ct => TflStopPicker.FetchLineStatusesAsync(_api, arrivals, ct), cts.Token);
         _stationName = Poll(_stationNameRefreshInterval, ct => _api.GetStationNameAsync(stationId, ct), cts.Token);
     }
-
-    private async Task<LineStatus[]> FetchLineStatusesAsync(ILiveData<TflArrival[]> arrivals, CancellationToken ct)
-    {
-        // Which lines serve the station is only known once arrivals have loaded
-        string[] lineIds;
-        while ((lineIds = LineIdsOf(arrivals.Value)).Length == 0) await Task.Delay(250, ct);
-        return await _api.GetLineStatusesAsync(lineIds, ct);
-    }
-
-    // All unique line IDs that serve this station (from unfiltered arrivals)
-    private static string[] LineIdsOf(TflArrival[]? arrivals) => (arrivals ?? [])
-        .Where(a => !string.IsNullOrWhiteSpace(a.LineId)).Select(a => a.LineId)
-        .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(id => id).ToArray();
 
     private void ApplyStationId(string stationId)
     {
         StationId = stationId;
         RestartStationPolling();
-    }
-
-    private void SearchStations()
-    {
-        var query = StationSearch.Trim();
-        if (query.Length < 2)
-        {
-            _stationSearchOptions = [NoStationSearchHint];
-            return;
-        }
-
-        RunInBackground(ct => SearchStationsAsync(query, ct));
-    }
-
-    private async Task SearchStationsAsync(string query, CancellationToken ct)
-    {
-        try
-        {
-            if (string.Equals(query, _stationSearchLastQuery, StringComparison.OrdinalIgnoreCase) && _stationSearchOptions.Length > 0) return;
-
-            var (options, succeeded) = await _api.SearchStationsAsync(query, ct);
-            if (succeeded) _stationSearchLastQuery = query;
-
-            // The user may have kept typing while this was in flight; only the latest query may publish its results
-            if (string.Equals(query, StationSearch.Trim(), StringComparison.OrdinalIgnoreCase)) _stationSearchOptions = options;
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-        }
-        catch
-        {
-            _stationSearchOptions = ["Search failed"];
-        }
     }
 
     internal DepartureBoardModel Board => _model;

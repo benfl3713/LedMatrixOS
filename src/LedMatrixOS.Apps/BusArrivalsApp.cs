@@ -23,7 +23,6 @@ public class BusArrivalsApp : WidgetApp
     public override int FrameRate => 30;
 
     public const int MaxStops = 4;
-    private const string NoSearchHint = "Type at least 2 chars";
     private static readonly IReadOnlyList<StopToken> NoTokens = [];
 
     [Setting("Stop Search", Description = "Type a bus stop name (e.g. Victoria Station).")]
@@ -50,8 +49,7 @@ public class BusArrivalsApp : WidgetApp
     private IReadOnlyList<StopToken> _tokens = NoTokens;
     private CancellationTokenSource? _pollCts;
 
-    private volatile string[] _searchOptions = [NoSearchHint];
-    private string _searchLastQuery = "";
+    private readonly TflStopPicker _picker;
 
     private Pager? _pager;
     private Label? _message;
@@ -62,6 +60,8 @@ public class BusArrivalsApp : WidgetApp
         _http = httpClient;
         _http.Timeout = TimeSpan.FromSeconds(10);
         _api = new TflApi(_http);
+        _picker = new TflStopPicker("stopSearch", "stopSelect", "Stop Select", "Choose a result to add the stop.",
+            () => StopSearch, _api.SearchBusStopsAsync, AddStop, RunInBackground);
     }
 
     // ---- view -------------------------------------------------------------------------------------------------------------------
@@ -156,34 +156,18 @@ public class BusArrivalsApp : WidgetApp
     // ---- settings ---------------------------------------------------------------------------------------------------------------
 
     // stopSelect has options that change as the user types, so it is not a [Setting] property.
-    public override IEnumerable<AppSetting> GetSettings()
-    {
-        foreach (var setting in base.GetSettings())
-        {
-            yield return setting;
-            if (setting.Key == "stopSearch")
-                yield return new AppSetting("stopSelect", "Stop Select", "Choose a result to add the stop.", AppSettingType.Select, "", "", Options: _searchOptions);
-        }
-    }
+    public override IEnumerable<AppSetting> GetSettings() => _picker.WithSelect(base.GetSettings());
 
     public override void UpdateSetting(string key, object value)
     {
-        if (key != "stopSelect")
-        {
-            base.UpdateSetting(key, value);
-            return;
-        }
-
-        var selected = value.ToString() ?? "";
-        var split = selected.IndexOf(" | ", StringComparison.Ordinal);
-        if (split > 0 && selected[..split].Trim() is { Length: > 0 } id) AddStop(id);
+        if (!_picker.TryUpdate(key, value)) base.UpdateSetting(key, value);
     }
 
     protected override void OnSettingChanged(string key)
     {
         switch (key)
         {
-            case "stopSearch": SearchStops(); break;
+            case "stopSearch": _picker.OnQueryChanged(); break;
             case "stopIds": RestartPolling(); break;
             case "pageSeconds":
                 if (_pager is not null) _pager.Interval = PageSeconds.Seconds();
@@ -247,39 +231,6 @@ public class BusArrivalsApp : WidgetApp
         ids.Add(stopId);
         StopIds = string.Join(",", ids);
         RestartPolling();
-    }
-
-    private void SearchStops()
-    {
-        var query = StopSearch.Trim();
-        if (query.Length < 2)
-        {
-            _searchOptions = [NoSearchHint];
-            return;
-        }
-
-        RunInBackground(ct => SearchStopsAsync(query, ct));
-    }
-
-    private async Task SearchStopsAsync(string query, CancellationToken ct)
-    {
-        try
-        {
-            if (string.Equals(query, _searchLastQuery, StringComparison.OrdinalIgnoreCase) && _searchOptions.Length > 0) return;
-
-            var (options, succeeded) = await _api.SearchBusStopsAsync(query, ct);
-            if (succeeded) _searchLastQuery = query;
-
-            // The user may have kept typing while this was in flight; only the latest query may publish its results
-            if (string.Equals(query, StopSearch.Trim(), StringComparison.OrdinalIgnoreCase)) _searchOptions = options;
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-        }
-        catch
-        {
-            _searchOptions = ["Search failed"];
-        }
     }
 
     internal IReadOnlyList<BusStopFeed> Feeds => _feeds;

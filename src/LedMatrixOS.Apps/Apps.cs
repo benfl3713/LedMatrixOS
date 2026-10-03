@@ -19,7 +19,6 @@ public static class BuiltInApps
         yield return typeof(SpotifyApp);
         yield return typeof(FlipClockApp);
         yield return typeof(CountdownTimerApp);
-        //yield return typeof(PongApp);
         yield return typeof(ScrollingTextApp);
         yield return typeof(EqualizerApp);
         yield return typeof(FireApp);
