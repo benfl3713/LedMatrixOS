@@ -50,6 +50,7 @@ builder.Services.AddSingleton<IAttentionSource, SpotifyPlayingSource>();
 builder.Services.AddSingleton<IAttentionSource, LineDisruptionSource>();
 builder.Services.AddSingleton<IAttentionSource, BusDueSource>();
 builder.Services.AddSingleton<IAttentionSource, HomeAssistantStateSource>();
+builder.Services.AddSingleton<IAttentionSource, BinDayDueSource>();
 builder.Services.AddSingleton<AttentionEvaluator>(sp => new AttentionEvaluator(sp.GetServices<IAttentionSource>()));
 builder.Services.AddSingleton<AttentionCoordinator>(sp =>
     new AttentionCoordinator(sp.GetRequiredService<ScheduleService>(), sp.GetServices<IAttentionSource>()));

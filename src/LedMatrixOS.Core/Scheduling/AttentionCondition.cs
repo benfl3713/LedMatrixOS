@@ -3,7 +3,7 @@ namespace LedMatrixOS.Core.Scheduling;
 /// <summary>A parsed rule condition such as "line_disrupted:victoria" (kind + optional argument).</summary>
 public sealed record AttentionCondition(string Kind, string? Argument)
 {
-    public static readonly string[] KnownKinds = { "spotify_playing", "line_disrupted", "bus_due", "ha_state" };
+    public static readonly string[] KnownKinds = { "spotify_playing", "line_disrupted", "bus_due", "ha_state", "bin_day" };
 
     public static bool TryParse(string text, out AttentionCondition condition, out string error)
     {
@@ -20,7 +20,8 @@ public sealed record AttentionCondition(string Kind, string? Argument)
         switch (kind)
         {
             case "spotify_playing":
-                if (arg != null) { error = "spotify_playing takes no argument"; return false; }
+            case "bin_day":
+                if (arg != null) { error = $"{kind} takes no argument"; return false; }
                 break;
             case "line_disrupted":
             case "bus_due":
