@@ -132,6 +132,7 @@ These keep costs low. The main (Opus) session **orchestrates and reviews only**.
    - the constraints from AGENTS.md: allocation-free rendering, no `DateTime.Now`, secrets config-only, register in `Apps.cs`
    - the done criteria: `dotnet test` green, new goldens written with `UPDATE_SNAPSHOTS=1`
    - "report back only a ≤150-word summary + list of changed files", so results don't flood the main context
+   - **a first step to sync the base:** worktrees can fork from an old commit, so tell the agent to run `git merge --ff-only <integration branch>` (or `git merge <integration branch>`) before touching anything, and to check `git log --oneline -5` shows the latest work. The Phase 1 agent skipped this and rebuilt notifications-as-overlays that already existed, which cost a manual merge.
 2. **Don't re-read what agents produced** beyond:
    - `git diff --stat`
    - the new golden PNGs, which the orchestrator views itself (visual judgement must not be delegated)
