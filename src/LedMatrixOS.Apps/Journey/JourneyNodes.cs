@@ -151,7 +151,7 @@ internal sealed class JourneyPage : Node
         var transit = option.FirstTransit;
         _dep.Set(Fonts.QuiteSmall, transit is null
             ? $"Walk {option.Minutes} min"
-            : Fonts.QuiteSmall.TruncateWithEllipsis($"{transit.Departure:HH:mm} from {transit.From}", 140));
+            : Fonts.QuiteSmall.TruncateWithEllipsis($"{transit.Departure:HH:mm} from {TflApi.StripStationSuffix(transit.From)}", 120));
         if (count > 1) _tag.Set(Fonts.QuiteSmall, index == 0 ? $"BEST 1/{count}" : $"ALT {index + 1}/{count}");
     }
 

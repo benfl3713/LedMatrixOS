@@ -117,7 +117,7 @@ public class JourneyApp : WidgetApp
 
         var clock = new TextStyle(Fonts.Small, new Pixel(245, 245, 245), Shadow: false);
         _disruption = new Pill("DISRUPTION", TubeGfx.Amber, pulse: true)
-            { Style = new TextStyle(Fonts.QuiteSmall, Pixel.Black, Shadow: false), Height = 9, Padding = new Thickness(3, 0), Visible = false };
+            { Style = new TextStyle(Fonts.QuiteSmall, Pixel.Black, Shadow: false), Height = 10, Padding = new Thickness(3, 1), Visible = false };
         _strip = new Panel
         {
             Height = StripHeight,
@@ -149,6 +149,7 @@ public class JourneyApp : WidgetApp
     {
         _ = Host;   // builds the tree on the first frame
 
+        if (!ReferenceEquals(From, _labelFrom) || !ReferenceEquals(To, _labelTo) || !ReferenceEquals(DestinationLabel, _labelName)) RefreshLabels();
         var state = Refresh(context.Time);
         bool hasBoard = state is null;
         if (hasBoard)
@@ -253,8 +254,11 @@ public class JourneyApp : WidgetApp
 
     // ---- data -------------------------------------------------------------------------------------------------------------------
 
+    private string? _labelFrom, _labelTo, _labelName;
+
     private void RefreshLabels()
     {
+        (_labelFrom, _labelTo, _labelName) = (From, To, DestinationLabel);
         var label = string.IsNullOrWhiteSpace(DestinationLabel) ? To : DestinationLabel;
         _headerText = string.IsNullOrWhiteSpace(label) ? "JOURNEY" : "TO " + label.Trim().ToUpperInvariant();
         _fromText = string.IsNullOrWhiteSpace(From) ? "" : "From " + From.Trim();
