@@ -6,6 +6,12 @@ namespace LedMatrixOS.Core;
 /// <summary>Static description of a registered app, available without activating it.</summary>
 public sealed record AppInfo(string Id, string Name, bool HasSettings);
 
+public enum SettingsStatus { Ok, NotFound, NotConfigurable }
+
+public sealed record SettingsLookup(SettingsStatus Status, IReadOnlyList<AppSetting> Settings);
+
+public sealed record SettingsUpdateResult(SettingsStatus Status, IReadOnlyList<string> RejectedKeys);
+
 public sealed class AppManager
 {
     private readonly IServiceProvider _services;
@@ -89,6 +95,70 @@ public sealed class AppManager
             configurableApp.UpdateSetting(key, value);
             _settingsStorage.UpdateAppSetting(_activeApp.Id, key, value);
         }
+    }
+
+    /// <summary>
+    /// Reads an app's settings whether or not it is active. For an inactive app a short-lived instance is built
+    /// (never activated) and given the persisted values, so the active app and its lifecycle are untouched.
+    /// </summary>
+    public SettingsLookup GetSettings(string id)
+    {
+        if (!_appsById.TryGetValue(id, out var type)) return new SettingsLookup(SettingsStatus.NotFound, Array.Empty<AppSetting>());
+
+        if (_activeApp != null && string.Equals(_activeApp.Id, id, StringComparison.OrdinalIgnoreCase))
+        {
+            return _activeApp is IConfigurableApp active
+                ? new SettingsLookup(SettingsStatus.Ok, active.GetSettings().ToList())
+                : new SettingsLookup(SettingsStatus.NotConfigurable, Array.Empty<AppSetting>());
+        }
+
+        var instance = Create(type);
+        try
+        {
+            if (instance is not IConfigurableApp configurable)
+                return new SettingsLookup(SettingsStatus.NotConfigurable, Array.Empty<AppSetting>());
+            if (_settingsStorage != null) RestoreAppSettings(configurable);
+            return new SettingsLookup(SettingsStatus.Ok, configurable.GetSettings().ToList());
+        }
+        finally { (instance as IDisposable)?.Dispose(); }
+    }
+
+    /// <summary>
+    /// Applies and persists settings for any registered app. Persisted values are restored the next time the app is
+    /// activated. Returns the keys that were not recognised.
+    /// </summary>
+    public SettingsUpdateResult UpdateSettings(string id, IEnumerable<KeyValuePair<string, object>> updates)
+    {
+        if (!_appsById.TryGetValue(id, out var type)) return new SettingsUpdateResult(SettingsStatus.NotFound, Array.Empty<string>());
+
+        if (_activeApp != null && string.Equals(_activeApp.Id, id, StringComparison.OrdinalIgnoreCase))
+        {
+            if (_activeApp is not IConfigurableApp) return new SettingsUpdateResult(SettingsStatus.NotConfigurable, Array.Empty<string>());
+            foreach (var (key, value) in updates) UpdateCurrentAppSetting(key, value);
+            return new SettingsUpdateResult(SettingsStatus.Ok, Array.Empty<string>());
+        }
+
+        var instance = Create(type);
+        try
+        {
+            if (instance is not IConfigurableApp configurable)
+                return new SettingsUpdateResult(SettingsStatus.NotConfigurable, Array.Empty<string>());
+            if (_settingsStorage != null) RestoreAppSettings(configurable);
+
+            var rejected = new List<string>();
+            foreach (var (key, value) in updates)
+            {
+                var before = configurable.GetSettings().FirstOrDefault(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase));
+                if (before == null) { rejected.Add(key); continue; }
+                try { configurable.UpdateSetting(key, value); }
+                catch { /* an app that was never activated may fail in its change hook; the value itself is read back below */ }
+
+                var after = configurable.GetSettings().First(x => x.Key == before.Key);
+                _settingsStorage?.UpdateAppSetting(configurable.Id, after.Key, after.CurrentValue);
+            }
+            return new SettingsUpdateResult(SettingsStatus.Ok, rejected);
+        }
+        finally { (instance as IDisposable)?.Dispose(); }
     }
 
     private void SaveCurrentAppSettings(IConfigurableApp app)

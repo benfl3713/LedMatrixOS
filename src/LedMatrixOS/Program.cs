@@ -106,39 +106,24 @@ app.MapPost("/api/apps/{id}", async (string id, AppManager appManager, Cancellat
 
 app.MapGet("/api/apps/{id}/settings", (string id, AppManager appManager) =>
 {
-    var activeApp = appManager.ActiveApp;
-    if (activeApp?.Id != id)
+    var lookup = appManager.GetSettings(id);
+    return lookup.Status switch
     {
-        return Results.BadRequest("App is not currently active");
-    }
-    
-    if (activeApp is IConfigurableApp configurableApp)
-    {
-        var settings = configurableApp.GetSettings();
-        return Results.Ok(new { appId = id, settings });
-    }
-    
-    return Results.Ok(new { appId = id, settings = Array.Empty<object>() });
+        SettingsStatus.NotFound => Results.NotFound($"Unknown app '{id}'"),
+        _ => Results.Ok(new { appId = id, settings = lookup.Settings }),
+    };
 });
 
-app.MapPost("/api/apps/{id}/settings", async (string id, Dictionary<string, object> settingsUpdate, AppManager appManager) =>
+app.MapPost("/api/apps/{id}/settings", (string id, Dictionary<string, object> settingsUpdate, AppManager appManager) =>
 {
-    var activeApp = appManager.ActiveApp;
-    if (activeApp?.Id != id)
+    var result = appManager.UpdateSettings(id, settingsUpdate);
+    return result.Status switch
     {
-        return Results.BadRequest("App is not currently active");
-    }
-    
-    if (activeApp is IConfigurableApp)
-    {
-        foreach (var setting in settingsUpdate)
-        {
-            appManager.UpdateCurrentAppSetting(setting.Key, setting.Value);
-        }
-        return Results.Ok(new { message = "Settings updated successfully" });
-    }
-    
-    return Results.BadRequest("App does not support configuration");
+        SettingsStatus.NotFound => Results.NotFound($"Unknown app '{id}'"),
+        SettingsStatus.NotConfigurable => Results.BadRequest("App does not support configuration"),
+        _ when result.RejectedKeys.Count > 0 => Results.BadRequest(new { message = "Unknown setting(s)", rejected = result.RejectedKeys }),
+        _ => Results.Ok(new { message = "Settings updated successfully" }),
+    };
 });
 
 app.MapGet("/api/health", (RenderEngine eng, IMatrixDevice device, AppManager apps) =>
