@@ -22,9 +22,13 @@ public sealed class AppManager
     private readonly Dictionary<string, Type> _appsById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AppInfo> _infoById = new(StringComparer.OrdinalIgnoreCase);
     private readonly AppSettingsStorage? _settingsStorage;
+    private readonly Dictionary<string, (string TargetId, IReadOnlyDictionary<string, object> Preset)> _aliases = new(StringComparer.OrdinalIgnoreCase);
     private IMatrixApp? _activeApp;
+    private string? _activeKey; // the id settings are persisted under: the requested id, so an alias keeps its own saved profile
 
     public IEnumerable<Type> Apps => _appsById.Values;
+    /// <summary>Retired ids that still resolve to a registered app; not part of <see cref="AppInfos"/>.</summary>
+    public IEnumerable<string> AliasIds => _aliases.Keys;
     public IEnumerable<AppInfo> AppInfos => _infoById.Values;
     public IMatrixApp? ActiveApp => _activeApp;
 
@@ -54,12 +58,44 @@ public sealed class AppManager
         _infoById[id] = new AppInfo(id, instance.Name, instance is IConfigurableApp);
     }
 
+    /// <summary>
+    /// Makes <paramref name="alias"/> an alternative id for the registered app <paramref name="targetId"/>. Activating or
+    /// configuring the alias uses the target app with <paramref name="preset"/> applied on top of the alias's own persisted
+    /// settings (stored under the alias id, so existing app-settings.json entries keep applying).
+    /// </summary>
+    public void RegisterAlias(string alias, string targetId, IReadOnlyDictionary<string, object> preset)
+    {
+        if (!_appsById.ContainsKey(targetId)) throw new ArgumentException($"Unknown target app '{targetId}'", nameof(targetId));
+        if (_appsById.ContainsKey(alias)) throw new ArgumentException($"'{alias}' is already a registered app", nameof(alias));
+        _aliases[alias] = (targetId, preset);
+    }
+
+    private bool TryResolve(string id, out Type type, out string key, out IReadOnlyDictionary<string, object>? preset)
+    {
+        if (_appsById.TryGetValue(id, out type!)) { key = _infoById[id].Id; preset = null; return true; }
+        if (_aliases.TryGetValue(id, out var alias) && _appsById.TryGetValue(alias.TargetId, out type!))
+        {
+            key = id; preset = alias.Preset; return true;
+        }
+        key = id; preset = null; type = null!;
+        return false;
+    }
+
+    private static void ApplyPreset(IMatrixApp app, IReadOnlyDictionary<string, object>? preset)
+    {
+        if (preset == null || app is not IConfigurableApp configurable) return;
+        foreach (var (key, value) in preset)
+        {
+            try { configurable.UpdateSetting(key, value); } catch { /* a preset must never stop an app starting */ }
+        }
+    }
+
     // Apps are built through DI so their constructors can take services (HttpClient factory, AudioDataService, ...)
     private IMatrixApp Create(Type app) => (IMatrixApp)ActivatorUtilities.CreateInstance(_services, app);
 
     public async Task<bool> ActivateAsync(string id, CancellationToken cancellationToken)
     {
-        if (!_appsById.TryGetValue(id, out var next)) return false;
+        if (!TryResolve(id, out var next, out var key, out var preset)) return false;
 
         // Save current app settings before switching
         if (_activeApp is IConfigurableApp currentConfigurable && _settingsStorage != null)
@@ -70,6 +106,7 @@ public sealed class AppManager
         // Create the new app instance first
         var nextApp = Create(next);
         if (nextApp is MatrixAppBase overlayAware) overlayAware.OverlayService = Overlays;
+        ApplyPreset(nextApp, preset); // before activation so the first build already has the right shape
         
         // Raise the AppActivated event BEFORE switching, so RenderEngine can capture the old frame
         AppActivated?.Invoke(this, nextApp);
@@ -85,10 +122,12 @@ public sealed class AppManager
         // Restore settings for the new app
         if (nextApp is IConfigurableApp nextConfigurable && _settingsStorage != null)
         {
-            RestoreAppSettings(nextConfigurable);
+            RestoreAppSettings(nextConfigurable, key);
+            ApplyPreset(nextApp, preset);
         }
-        
+
         _activeApp = nextApp;
+        _activeKey = key;
 
         return true;
     }
@@ -98,7 +137,7 @@ public sealed class AppManager
         if (_activeApp is IConfigurableApp configurableApp && _settingsStorage != null)
         {
             configurableApp.UpdateSetting(key, value);
-            _settingsStorage.UpdateAppSetting(_activeApp.Id, key, value);
+            _settingsStorage.UpdateAppSetting(_activeKey ?? _activeApp.Id, key, value);
         }
     }
 
@@ -108,9 +147,9 @@ public sealed class AppManager
     /// </summary>
     public SettingsLookup GetSettings(string id)
     {
-        if (!_appsById.TryGetValue(id, out var type)) return new SettingsLookup(SettingsStatus.NotFound, Array.Empty<AppSetting>());
+        if (!TryResolve(id, out var type, out var key, out var preset)) return new SettingsLookup(SettingsStatus.NotFound, Array.Empty<AppSetting>());
 
-        if (_activeApp != null && string.Equals(_activeApp.Id, id, StringComparison.OrdinalIgnoreCase))
+        if (_activeApp != null && string.Equals(_activeKey, key, StringComparison.OrdinalIgnoreCase))
         {
             return _activeApp is IConfigurableApp active
                 ? new SettingsLookup(SettingsStatus.Ok, active.GetSettings().ToList())
@@ -122,7 +161,9 @@ public sealed class AppManager
         {
             if (instance is not IConfigurableApp configurable)
                 return new SettingsLookup(SettingsStatus.NotConfigurable, Array.Empty<AppSetting>());
-            if (_settingsStorage != null) RestoreAppSettings(configurable);
+            ApplyPreset(instance, preset);
+            if (_settingsStorage != null) RestoreAppSettings(configurable, key);
+            ApplyPreset(instance, preset);
             return new SettingsLookup(SettingsStatus.Ok, configurable.GetSettings().ToList());
         }
         finally { (instance as IDisposable)?.Dispose(); }
@@ -134,9 +175,9 @@ public sealed class AppManager
     /// </summary>
     public SettingsUpdateResult UpdateSettings(string id, IEnumerable<KeyValuePair<string, object>> updates)
     {
-        if (!_appsById.TryGetValue(id, out var type)) return new SettingsUpdateResult(SettingsStatus.NotFound, Array.Empty<string>());
+        if (!TryResolve(id, out var type, out var storageKey, out var preset)) return new SettingsUpdateResult(SettingsStatus.NotFound, Array.Empty<string>());
 
-        if (_activeApp != null && string.Equals(_activeApp.Id, id, StringComparison.OrdinalIgnoreCase))
+        if (_activeApp != null && string.Equals(_activeKey, storageKey, StringComparison.OrdinalIgnoreCase))
         {
             if (_activeApp is not IConfigurableApp) return new SettingsUpdateResult(SettingsStatus.NotConfigurable, Array.Empty<string>());
             foreach (var (key, value) in updates) UpdateCurrentAppSetting(key, value);
@@ -148,7 +189,9 @@ public sealed class AppManager
         {
             if (instance is not IConfigurableApp configurable)
                 return new SettingsUpdateResult(SettingsStatus.NotConfigurable, Array.Empty<string>());
-            if (_settingsStorage != null) RestoreAppSettings(configurable);
+            ApplyPreset(instance, preset);
+            if (_settingsStorage != null) RestoreAppSettings(configurable, storageKey);
+            ApplyPreset(instance, preset);
 
             var rejected = new List<string>();
             foreach (var (key, value) in updates)
@@ -159,7 +202,7 @@ public sealed class AppManager
                 catch { /* an app that was never activated may fail in its change hook; the value itself is read back below */ }
 
                 var after = configurable.GetSettings().First(x => x.Key == before.Key);
-                _settingsStorage?.UpdateAppSetting(configurable.Id, after.Key, after.CurrentValue);
+                _settingsStorage?.UpdateAppSetting(storageKey, after.Key, after.CurrentValue);
             }
             return new SettingsUpdateResult(SettingsStatus.Ok, rejected);
         }
@@ -169,12 +212,12 @@ public sealed class AppManager
     private void SaveCurrentAppSettings(IConfigurableApp app)
     {
         var settings = app.GetSettings().ToDictionary(s => s.Key, s => s.CurrentValue);
-        _settingsStorage!.SaveAppSettings(app.Id, settings);
+        _settingsStorage!.SaveAppSettings(_activeKey ?? ((IMatrixApp)app).Id, settings);
     }
 
-    private void RestoreAppSettings(IConfigurableApp app)
+    private void RestoreAppSettings(IConfigurableApp app, string storageKey)
     {
-        var savedSettings = _settingsStorage!.GetAppSettings(app.Id);
+        var savedSettings = _settingsStorage!.GetAppSettings(storageKey);
         if (savedSettings != null)
         {
             foreach (var (key, value) in savedSettings)

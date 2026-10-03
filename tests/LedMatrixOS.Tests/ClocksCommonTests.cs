@@ -16,8 +16,8 @@ public class ClocksCommonTests
     public static IEnumerable<object[]> Apps =>
     [
         [(Func<WidgetApp>)(() => new ClockApp())],
-        [(Func<WidgetApp>)(() => new AnimatedClockApp())],
-        [(Func<WidgetApp>)(() => new FlipClockApp())],
+        [(Func<WidgetApp>)(() => new ClockApp { Style = "Animated" })],
+        [(Func<WidgetApp>)(() => new ClockApp { Style = "Flip" })],
     ];
 
     private static byte[] Bytes(FrameBuffer frame)
@@ -48,7 +48,7 @@ public class ClocksCommonTests
     public void KeepsIdAndName(Func<WidgetApp> make)
     {
         var app = make();
-        Assert.Contains((app.Id, app.Name), new[] { ("clock", "Clock"), ("animated-clock", "Animated Clock"), ("flip-clock", "Flip Clock") });
+        Assert.Equal(("clock", "Clock"), (app.Id, app.Name));
     }
 
     [Theory, MemberData(nameof(Apps))]
@@ -73,10 +73,47 @@ public class ClocksCommonTests
     [Fact]
     public void LegacySettingKeysAreKept()
     {
-        var keys = new ClockApp().GetSettings().Select(s => s.Key).ToHashSet();
-        Assert.Superset(new HashSet<string> { "showSeconds", "show24Hour", "timeColor" }, keys);
-        keys = new FlipClockApp().GetSettings().Select(s => s.Key).ToHashSet();
-        Assert.Superset(new HashSet<string> { "showSeconds", "show24Hour", "textColor", "backgroundColor" }, keys);
+        var keys = new ClockApp().GetSettings().Select(s => s.Key).ToList();
+        // Union of the three former apps' keys, so persisted values for any of them still bind.
+        Assert.Equal(
+            new[] { "style", "showSeconds", "show24Hour", "showDate", "palette", "timeColor", "waves", "sparks", "textColor", "backgroundColor", "showAmPm" },
+            keys);
+    }
+
+    [Fact]
+    public void Style_SwitchesAtRuntime_AndSettlesAllocationFree()
+    {
+        var app = new ClockApp();
+        var h = new ClocksHarness(app, ClocksHarness.At(10, 20, 30, 0));
+        h.Step(16, 100);
+        foreach (var style in new[] { "Animated", "Flip", "Digital" })
+        {
+            app.UpdateSetting("style", style);
+            h.Step(16, 400); // entrance and rolls settle
+            for (int i = 0; i < 120; i++) { h.Step(16); h.Render(); }
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 100; i++) { h.Step(16); h.Render(); }
+            Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+        }
+    }
+
+    [Fact]
+    public void Style_MatchesTheDedicatedBuild_AndStyleSpecificSettingsAreIgnoredElsewhere()
+    {
+        // Switching at runtime renders the same pixels as constructing with the style, and an irrelevant setting changes nothing.
+        foreach (var style in new[] { "Animated", "Flip" })
+        {
+            var direct = new ClockApp { Style = style };
+            var hd = new ClocksHarness(direct, ClocksHarness.At(10, 20, 30, 250));
+            hd.Step(16, 200);
+            var expected = Bytes(hd.Snapshot());
+
+            var other = new ClockApp { Style = style };
+            var ho = new ClocksHarness(other, ClocksHarness.At(10, 20, 30, 250));
+            other.UpdateSetting(style == "Animated" ? "textColor" : "waves", style == "Animated" ? "Red" : false);
+            ho.Step(16, 200);
+            Assert.Equal(expected, Bytes(ho.Snapshot()));
+        }
     }
 
     [Fact]

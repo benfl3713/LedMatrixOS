@@ -2,55 +2,32 @@ using System.Numerics;
 using LedMatrixOS.Apps.Clocks;
 using LedMatrixOS.Core;
 using LedMatrixOS.Core.Animation;
-using LedMatrixOS.Core.Settings;
 using LedMatrixOS.Graphics.Particles;
 using LedMatrixOS.Graphics.Text;
 using LedMatrixOS.Graphics.UI;
 
 namespace LedMatrixOS.Apps;
 
-/// <summary>
-/// The showy clock, a piece of living light art. Glowing neon digits float over three flowing aurora ribbons; every second a
-/// ripple runs out from the colon and kicks the ribbons into a wave front, embers drift up from the floor, and when a digit
-/// changes the new one drops in with a bounce and a spray of sparks as it lands. The digits keep a white-hot core and a dark
-/// underlay so they stay readable whatever the waves are doing.
-/// </summary>
-public sealed class AnimatedClockApp : WidgetApp
+// Animated style: the showy clock, a piece of living light art. Glowing neon digits float over three flowing aurora ribbons;
+// every second a ripple runs out from the colon and kicks the ribbons into a wave front, embers drift up from the floor, and
+// when a digit changes the new one drops in with a bounce and a spray of sparks as it lands. The digits keep a white-hot core
+// and a dark underlay so they stay readable whatever the waves are doing.
+public sealed partial class ClockApp
 {
-    public override string Id => "animated-clock";
-    public override string Name => "Animated Clock";
-
-    [Setting("Palette", Description = "Colour theme of the ribbons, embers and glow", Options = ["Aurora", "Lava", "Cyber", "Ocean", "Rainbow"])]
-    public string Palette { get; set; } = "Aurora";
-
-    [Setting("Show Seconds", Description = "Show small rolling seconds beside the time")]
-    public bool ShowSeconds { get; set; } = true;
-
-    [Setting("24-Hour Format", Description = "Use 24-hour format instead of 12-hour")]
-    public bool Show24Hour { get; set; } = true;
-
-    [Setting("Show Date", Description = "Show the weekday and date above the seconds")]
-    public bool ShowDate { get; set; } = true;
-
-    [Setting("Waves", Description = "Flowing ribbons that ripple on every second")]
-    public bool Waves { get; set; } = true;
-
-    [Setting("Embers And Sparks", Description = "Drifting embers and the spark burst when a digit lands")]
-    public bool Sparks { get; set; } = true;
-
     private readonly AnimatedFx _fx = new();
-    private ClockState _state = null!;
     private SparkBursts? _bursts;
     private Emitter? _embers;
     private WaveField? _waves;
 
-    protected override void OnSettingChanged(string key)
+    // Palette names only the Digital style knows fall back to the Animated default, so the shared setting never breaks it.
+    private string AnimatedPaletteName() => Palette is "Sunset" or "Neon" or "Ember" or "Mono" ? "Aurora" : Palette;
+
+    private void AnimatedSettingChanged(string key)
     {
-        if (Root is null) return;
         switch (key)
         {
             case "palette":
-                _fx.SetPalette(Palette);
+                _fx.SetPalette(AnimatedPaletteName());
                 Recolor();
                 break;
             case "show24Hour":
@@ -61,7 +38,8 @@ public sealed class AnimatedClockApp : WidgetApp
             case "sparks":
                 if (_embers is not null) _embers.Enabled = Sparks;
                 break;
-            default:
+            case "showSeconds":
+            case "showDate":
                 Host.Root = Build();
                 break;
         }
@@ -83,9 +61,9 @@ public sealed class AnimatedClockApp : WidgetApp
         }
     }
 
-    protected override Node Build()
+    private Node BuildAnimated()
     {
-        _fx.SetPalette(Palette);
+        _fx.SetPalette(AnimatedPaletteName());
         _state = new ClockState(Time);
         _state.Refresh();
         _fx.Time = (float)_state.SecondsOfDay;

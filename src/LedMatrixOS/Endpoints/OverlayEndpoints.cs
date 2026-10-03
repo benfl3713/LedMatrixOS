@@ -95,7 +95,7 @@ public static class OverlayEndpoints
             var doc = ScheduleDocument.TryParse(await reader.ReadToEndAsync(), out var parseError);
             if (doc == null) return Results.BadRequest(new { errors = new[] { parseError } });
 
-            var known = apps.AppInfos.Select(i => i.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var known = apps.AppInfos.Select(i => i.Id).Concat(apps.AliasIds).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var errors = doc.Validate(known.Contains, engine.Transitions.IsValidName);
             if (errors.Count > 0) return Results.BadRequest(new { errors });
 

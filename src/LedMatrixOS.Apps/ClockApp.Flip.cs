@@ -1,45 +1,19 @@
 using LedMatrixOS.Apps.Clocks;
 using LedMatrixOS.Core;
-using LedMatrixOS.Core.Settings;
 using LedMatrixOS.Graphics.Text;
 using LedMatrixOS.Graphics.UI;
 
 namespace LedMatrixOS.Apps;
 
-/// <summary>
-/// A retro split-flap clock. Big charcoal flip cards with cream numerals show hours and minutes, smaller cards show the seconds,
-/// and an AM/PM flap and weekday / day / month flaps sit alongside. Every change is a physically convincing flip: the top flap
-/// falls forward and darkens, the new bottom flap swings down with a little bounce, and a shadow sweeps the lower half.
-/// </summary>
-public sealed class FlipClockApp : WidgetApp
+// Flip style: a retro split-flap clock. Big charcoal flip cards with cream numerals show hours and minutes, smaller cards show
+// the seconds, and an AM/PM flap and weekday / day / month flaps sit alongside. Every change is a physically convincing flip:
+// the top flap falls forward and darkens, the new bottom flap swings down with a little bounce, and a shadow sweeps the lower half.
+public sealed partial class ClockApp
 {
-    public override string Id => "flip-clock";
-    public override string Name => "Flip Clock";
-
-    [Setting("Show Seconds", Description = "Display seconds with flip animation")]
-    public bool ShowSeconds { get; set; } = true;
-
-    [Setting("24-Hour Format", Description = "Use 24-hour format instead of 12-hour")]
-    public bool Show24Hour { get; set; } = true;
-
-    [Setting("Text Color", Description = "Color of the flip cards text", Options = ["White", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta", "Amber", "Orange"])]
-    public string TextColor { get; set; } = "White";
-
-    [Setting("Background Color", Description = "Color of the flip cards background", Options = ["Black", "DarkBlue", "DarkGray", "White"])]
-    public string BackgroundColor { get; set; } = "Black";
-
-    [Setting("Show Date", Description = "Show weekday, day and month flaps")]
-    public bool ShowDate { get; set; } = true;
-
-    [Setting("Show AM/PM", Description = "Show an AM/PM flap in 12-hour mode")]
-    public bool ShowAmPm { get; set; } = true;
-
     private readonly List<FlipCard> _cards = new();
-    private ClockState _state = null!;
 
-    protected override void OnSettingChanged(string key)
+    private void FlipSettingChanged(string key)
     {
-        if (Root is null) return;
         switch (key)
         {
             case "textColor":
@@ -50,13 +24,15 @@ public sealed class FlipClockApp : WidgetApp
             case "show24Hour":
                 if (ShowAmPm) Host.Root = Build();
                 break;
-            default:
+            case "showSeconds":
+            case "showDate":
+            case "showAmPm":
                 Host.Root = Build();
                 break;
         }
     }
 
-    protected override Node Build()
+    private Node BuildFlip()
     {
         _cards.Clear();
         _state = new ClockState(Time);

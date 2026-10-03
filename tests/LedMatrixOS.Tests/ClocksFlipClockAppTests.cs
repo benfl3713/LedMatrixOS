@@ -6,9 +6,9 @@ namespace LedMatrixOS.Tests;
 
 public class ClocksFlipClockAppTests
 {
-    private static ClocksHarness Make(DateTimeOffset start, Action<FlipClockApp>? configure = null)
+    private static ClocksHarness Make(DateTimeOffset start, Action<ClockApp>? configure = null)
     {
-        var app = new FlipClockApp();
+        var app = new ClockApp { Style = "Flip" };
         configure?.Invoke(app);
         var h = new ClocksHarness(app, start);
         h.Step(16);
