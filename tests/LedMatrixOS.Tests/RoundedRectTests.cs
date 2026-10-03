@@ -46,8 +46,14 @@ public class RoundedRectTests
         var white = new Pixel(255, 255, 255);
         for (int i = 0; i < 20; i++) { frame.FillRoundedRect(rect, 3, white); frame.DrawRoundedRect(rect, 3, white); frame.FillCircle(20, 16, 8, white); frame.DrawEllipse(rect, white); }
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 200; i++) { frame.FillRoundedRect(rect, 3, white); frame.DrawRoundedRect(rect, 3, white); frame.FillCircle(20, 16, 8, white); frame.DrawEllipse(rect, white); }
-        Assert.True(GC.GetAllocatedBytesForCurrentThread() - before < 256);
+        // A real per-call allocation shows up in every window; one-off runtime (tiered JIT) allocations only hit some, so take the minimum.
+        var windows = new long[4];
+        for (int w = 0; w < windows.Length; w++)
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 200; i++) { frame.FillRoundedRect(rect, 3, white); frame.DrawRoundedRect(rect, 3, white); frame.FillCircle(20, 16, 8, white); frame.DrawEllipse(rect, white); }
+            windows[w] = GC.GetAllocatedBytesForCurrentThread() - before;
+        }
+        Assert.True(windows.Min() < 256, "allocated bytes per 200-iteration window: " + string.Join(", ", windows));
     }
 }

@@ -214,17 +214,20 @@ public class PollingLiveDataTests
     {
         var app = new PollApp();
         int calls = 0;
+        int errorObserved = 0;
         var data = app.Start(Interval, _ =>
         {
             int n = Interlocked.Increment(ref calls);
             if (n == 1) return Task.FromResult(1);
-            if (n <= 3) throw new InvalidOperationException("boom");
+            // Keep failing until the test has seen the error: with a 10 ms interval a fixed number of failures can come and go between two checks under load.
+            if (Volatile.Read(ref errorObserved) == 0) throw new InvalidOperationException("boom");
             return Task.FromResult(100 + n);
         });
 
         await WaitFor(() => data.Error != null);
         Assert.Equal(1, data.Value); // last good value is retained
         Assert.IsType<InvalidOperationException>(data.Error);
+        Volatile.Write(ref errorObserved, 1);
 
         await WaitFor(() => data.Error == null && data.Value > 100);
         await app.OnDeactivatedAsync(CancellationToken.None);
