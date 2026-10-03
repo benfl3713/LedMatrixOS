@@ -21,6 +21,14 @@ public class SpotifyDataService
 
     public async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // The Spotify app and the spotify_playing attention source may both want the feed; the second waits for the first to stop.
+        await SpotifyDataStore.RunLock.WaitAsync(stoppingToken).ConfigureAwait(false);
+        try { await RunAsync(stoppingToken).ConfigureAwait(false); }
+        finally { SpotifyDataStore.RunLock.Release(); }
+    }
+
+    private async Task RunAsync(CancellationToken stoppingToken)
+    {
         var spotifyClientConfig = await SpotifyAuth.GetClientConfig(_clientId, _clientSecret);
         _spotify = new SpotifyClient(spotifyClientConfig);
         int counter = 4;
@@ -205,7 +213,23 @@ public class SpotifyDataService
 
 public static class SpotifyDataStore
 {
-    public static SpotifyData Value { get; set; } = new SpotifyData();
+    private static SpotifyData _value = new SpotifyData();
+    private static long _updatedTicks;
+
+    public static SpotifyData Value
+    {
+        get => _value;
+        set { _value = value; Interlocked.Exchange(ref _updatedTicks, DateTimeOffset.UtcNow.UtcTicks); }
+    }
+
+    /// <summary>When <see cref="Value"/> was last assigned (UTC), or null if never. The data service reassigns it at least every few seconds while it runs.</summary>
+    public static DateTimeOffset? UpdatedAt
+    {
+        get { var t = Interlocked.Read(ref _updatedTicks); return t == 0 ? null : new DateTimeOffset(t, TimeSpan.Zero); }
+    }
+
+    /// <summary>Only one data service may feed the store at a time (it advances progress itself); others wait their turn.</summary>
+    internal static readonly SemaphoreSlim RunLock = new(1, 1);
 
     /// <summary>True once the data service has completed a fetch (so an empty <see cref="Value"/> means "nothing playing", not "not loaded yet").</summary>
     public static volatile bool Loaded;

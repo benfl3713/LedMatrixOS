@@ -57,9 +57,22 @@ public sealed class ScheduleService
             var doc = ScheduleDocument.TryParse(File.ReadAllText(jsonPath), out _);
             if (doc == null) return false;
             doc.ApplyTo(this);
+            Changed?.Invoke();
             return true;
         }
         catch { return false; }
+    }
+
+    /// <summary>Raised after the rules were replaced or reloaded (possibly while the caller holds <see cref="Gate"/>).</summary>
+    public event Action? Changed;
+
+    /// <summary>The parsed conditions of all current rules. Caller should hold <see cref="Gate"/>.</summary>
+    public IReadOnlyList<AttentionCondition> ReferencedConditions()
+    {
+        var list = new List<AttentionCondition>();
+        foreach (var rule in _rules)
+            if (rule.Condition != null && AttentionCondition.TryParse(rule.Condition, out var parsed, out _)) list.Add(parsed);
+        return list;
     }
 
     /// <summary>Snapshot of the current playlists and rules in file form.</summary>
@@ -72,6 +85,7 @@ public sealed class ScheduleService
     {
         Clear();
         doc.ApplyTo(this);
+        Changed?.Invoke();
     }
 
     /// <summary>

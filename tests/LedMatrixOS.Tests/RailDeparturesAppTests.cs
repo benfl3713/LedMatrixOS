@@ -229,6 +229,70 @@ public class RailDeparturesAppTests(ITestOutputHelper output)
         Assert.False(app.LastTrainPill.Visible);
     }
 
+    private sealed class FakeOverlays : LedMatrixOS.Core.Overlays.IOverlayService
+    {
+        public List<LedMatrixOS.Core.Overlays.IOverlay> Added { get; } = new();
+        public List<string> Removed { get; } = new();
+        public int Width => 256;
+        public int Height => 64;
+        public void Add(LedMatrixOS.Core.Overlays.IOverlay overlay) => Added.Add(overlay);
+        public bool Remove(string id) { Removed.Add(id); return true; }
+    }
+
+    [Fact]
+    public void LastTrain_RaisesOneToastWithinFifteenMinutes_AndRearmsOnlyForANewService()
+    {
+        Fonts.Load();
+        var evening = new DateTimeOffset(2026, 1, 2, 23, 30, 0, TimeSpan.Zero);
+        var clock = new FakeTime { Now = evening };
+        var overlays = new FakeOverlays();
+        var live = new MutableLive<RailService[]> { Value = [Svc(evening, 4, "London Bridge", "2"), Svc(evening, 22, "London Victoria", "2", last: true)] };
+        var app = new RailDeparturesApp { Time = clock, OverlayService = overlays };
+        app.UseData(live, "Havenbridge");
+        var stage = new AppStage(app);
+
+        stage.Step(33, 10);                       // 22 minutes away: nothing yet
+        Assert.Empty(overlays.Added);
+
+        clock.Now = evening.AddMinutes(8);        // 14 minutes away
+        stage.Step(33, 5);
+        var toast = Assert.Single(overlays.Added);
+        Assert.Equal("toast", ((LedMatrixOS.Core.Overlays.OverlayBase)toast).Kind);
+        Assert.Contains("London Victoria", ((LedMatrixOS.Core.Overlays.OverlayBase)toast).Text);
+
+        clock.Now = evening.AddMinutes(10);       // still the same service: no repeat
+        stage.Step(33, 5);
+        Assert.Single(overlays.Added);
+
+        live.Value = [Svc(evening, 22, "London Victoria", "2", last: true) with { IsLastTrain = false }, Svc(evening, 24, "Brighton", "1", last: true)];
+        stage.Step(33, 5);                        // a different flagged service re-arms
+        Assert.Equal(2, overlays.Added.Count);
+    }
+
+    [Fact]
+    public void LastTrain_WithoutAnOverlayService_StillRenders()
+    {
+        var evening = new DateTimeOffset(2026, 1, 2, 23, 30, 0, TimeSpan.Zero);
+        var (app, _, _) = Board([Svc(evening, 10, "London Victoria", "2", last: true)], evening);
+        Assert.Null(app.OverlayService);
+        Assert.True(app.LastTrainPill!.Visible);
+    }
+
+    [Fact]
+    public async Task Deactivation_RemovesTheAppsOwnOverlays()
+    {
+        Fonts.Load();
+        var evening = new DateTimeOffset(2026, 1, 2, 23, 30, 0, TimeSpan.Zero);
+        var overlays = new FakeOverlays();
+        var app = new RailDeparturesApp { Time = new FakeTime { Now = evening }, OverlayService = overlays };
+        app.UseData(new MutableLive<RailService[]> { Value = [Svc(evening, 10, "London Victoria", "2", last: true)] }, "Havenbridge");
+        new AppStage(app).Step(33, 5);
+        var id = Assert.Single(overlays.Added).Id;
+
+        await app.OnDeactivatedAsync(CancellationToken.None);
+        Assert.Equal(new[] { id }, overlays.Removed);
+    }
+
     [Fact]
     public void Pager_SlidesToTheSecondPage()
     {

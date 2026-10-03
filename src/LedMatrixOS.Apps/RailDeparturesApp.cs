@@ -18,8 +18,8 @@ namespace LedMatrixOS.Apps;
 /// within 30 minutes. Departures come from an <see cref="IRailDepartureSource"/> (a hard-coded sample timetable until a real one is plugged in).
 /// </summary>
 /// <remarks>
-/// The "last train home" overlay alert is not raised: apps have no hook into the engine's overlay manager (it is only reachable from
-/// the REST endpoints), so the pulsing pill is the in-app signal.
+/// When the flagged last train comes within <see cref="LastTrainAlertMinutes"/> minutes a toast overlay is raised once (through
+/// <c>OverlayService</c>); it fires again only if the flagged service changes.
 /// </remarks>
 public class RailDeparturesApp : WidgetApp
 {
@@ -28,6 +28,7 @@ public class RailDeparturesApp : WidgetApp
     public override int FrameRate => 30;
 
     public const int MaxServicesLimit = 5;
+    public const int LastTrainAlertMinutes = 15;
 
     [Setting("Station", Description = "Station code (e.g. HVB).")]
     public string Station { get; set; } = HardcodedRailSource.SampleStationCode;
@@ -54,6 +55,7 @@ public class RailDeparturesApp : WidgetApp
     private Panel? _board;
     private Pill? _lastTrain;
     private bool _entered, _boardShown;
+    private string? _alertedLastTrain;
 
     public RailDeparturesApp(IRailDepartureSource? source = null)
     {
@@ -177,7 +179,15 @@ public class RailDeparturesApp : WidgetApp
         _nextMinutes = _model.NextMinutes(now);
         _nextStrip!.Visible = _nextMinutes >= 0;
 
-        var last = _model.LastTrainMinutes(now);
+        var lastTrain = _model.LastTrain(now);
+        if (lastTrain is { } lt && lt.Minutes <= LastTrainAlertMinutes && lt.Key != _alertedLastTrain)
+        {
+            var minutes = Math.Max(1, (int)Math.Ceiling(lt.Minutes));
+            var shown = ShowToast($"Last train to {lt.Destination} in {minutes} min", Pixel.Black, new Pixel(255, 90, 60), TimeSpan.FromSeconds(8));
+            if (shown is not null) _alertedLastTrain = lt.Key;
+        }
+
+        var last = lastTrain?.Minutes;
         bool pulsing = last is { } m && TimeSpan.FromMinutes(m) <= RailBoardModel.LastTrainWindow;
         _lastTrain!.Visible = pulsing;
         if (pulsing) _lastTrain.Background = last <= 15 ? new Pixel(255, 90, 60) : RailStyles.Amber;
@@ -219,6 +229,7 @@ public class RailDeparturesApp : WidgetApp
     public override Task OnActivatedAsync((int height, int width) dimensions, Microsoft.Extensions.Configuration.IConfiguration configuration, CancellationToken cancellationToken)
     {
         _entered = _boardShown = false;
+        _alertedLastTrain = null;
         RestartPolling();
         return base.OnActivatedAsync(dimensions, configuration, cancellationToken);
     }

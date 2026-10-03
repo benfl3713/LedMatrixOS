@@ -1,6 +1,7 @@
 using System.Text.Json;
 using LedMatrixOS;
 using LedMatrixOS.Apps;
+using LedMatrixOS.Apps.Attention;
 using LedMatrixOS.Core;
 using LedMatrixOS.Core.Scheduling;
 using LedMatrixOS.Core.Transitions;
@@ -43,8 +44,15 @@ builder.Services.AddSingleton<AppManager>(sp =>
 builder.Services.AddSingleton<AudioDataService>();
 builder.Services.AddSingleton<InterruptService>();
 var schedulePath = Path.Combine(AppContext.BaseDirectory, "schedule.json");
-// Apps/services that can answer rule conditions register an IAttentionSource; none are registered by default
+// Services that can answer rule conditions register an IAttentionSource. They are lazy: AttentionCoordinator only lets them
+// poll while a schedule rule references their condition.
+builder.Services.AddSingleton<IAttentionSource, SpotifyPlayingSource>();
+builder.Services.AddSingleton<IAttentionSource, LineDisruptionSource>();
+builder.Services.AddSingleton<IAttentionSource, BusDueSource>();
+builder.Services.AddSingleton<IAttentionSource, HomeAssistantStateSource>();
 builder.Services.AddSingleton<AttentionEvaluator>(sp => new AttentionEvaluator(sp.GetServices<IAttentionSource>()));
+builder.Services.AddSingleton<AttentionCoordinator>(sp =>
+    new AttentionCoordinator(sp.GetRequiredService<ScheduleService>(), sp.GetServices<IAttentionSource>()));
 builder.Services.AddSingleton<ScheduleService>(sp =>
 {
     var schedule = new ScheduleService(attention: sp.GetRequiredService<AttentionEvaluator>());
@@ -72,7 +80,9 @@ builder.Services.AddSingleton<RenderEngine>(sp =>
     var apps = sp.GetRequiredService<AppManager>();
     var interruptService = sp.GetRequiredService<InterruptService>();
     foreach (var app in BuiltInApps.GetAll()) apps.Register(app);
-    return new RenderEngine(device, apps, interruptService, logger: sp.GetService<ILogger<RenderEngine>>());
+    var renderEngine = new RenderEngine(device, apps, interruptService, logger: sp.GetService<ILogger<RenderEngine>>());
+    apps.Overlays = renderEngine.Overlays;
+    return renderEngine;
 });
 
 var app = builder.Build();
@@ -88,6 +98,9 @@ var engine = app.Services.GetRequiredService<RenderEngine>();
 var crashCard = new LedMatrixOS.Graphics.UI.CrashCard();
 engine.CrashRenderer = crashCard.Render;
 var appManager = app.Services.GetRequiredService<AppManager>();
+var attention = app.Services.GetRequiredService<AttentionCoordinator>();
+attention.Start();
+app.Lifetime.ApplicationStopping.Register(attention.Dispose);
 
 await appManager.ActivateAsync("home", CancellationToken.None);
 engine.Start();

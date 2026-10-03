@@ -1,6 +1,9 @@
 using LedMatrixOS.Core;
 using LedMatrixOS.Core.Animation;
+using LedMatrixOS.Core.Overlays;
 using LedMatrixOS.Core.Settings;
+using LedMatrixOS.Graphics.Text;
+using SixLabors.ImageSharp;
 using Microsoft.Extensions.Configuration;
 
 namespace LedMatrixOS.Graphics.UI;
@@ -50,6 +53,30 @@ public abstract class WidgetApp : SettingsAppBase
         await base.OnDeactivatedAsync(cancellationToken);
         _host?.Animator.Clear();
         _host = null;
+    }
+
+    /// <summary>Raises a banner toast across the top of the screen. Returns its id (null when the app has no overlay service). It is removed when the app deactivates.</summary>
+    protected string? ShowToast(string text, Pixel foreground, Pixel background, TimeSpan duration)
+    {
+        if (OverlayService is not { } service) return null;
+        var run = new TextRun();
+        run.Set(Fonts.Small, text);
+        int width = service.Width;
+        var toast = new ToastOverlay(
+            duration,
+            (frame, _) => run.Draw(frame, Math.Max(0, (width - run.Width) / 2), 1, foreground),
+            background,
+            new Rectangle(0, 0, width, Math.Max(8, run.Height + 2)),
+            id: "toast-" + Guid.NewGuid().ToString("N")[..8]) { Text = text };
+        return RaiseOverlay(toast) ? toast.Id : null;
+    }
+
+    /// <summary>Raises a full-screen alert message (visuals from <see cref="AlertFactory"/>). Returns its id, or null without an overlay service.</summary>
+    protected string? ShowAlert(string message, Pixel color)
+    {
+        if (OverlayService is not { } service) return null;
+        var alert = AlertFactory.Message(message, color, service.Width, service.Height);
+        return RaiseOverlay(alert) ? alert.Id : null;
     }
 
     public override void Update(FrameContext context, CancellationToken cancellationToken)
