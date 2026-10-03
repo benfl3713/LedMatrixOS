@@ -7,6 +7,25 @@ The v1 roadmap (`docs/ROADMAP.md`, "7 to 10") is done: widget framework, animati
 - **Flutter app:** one 526-line `HomePage` god-object with errors silently swallowed. The finished live preview widget is never shown. Brightness is 0–100 on a 0–255 API. Colour settings are text boxes, and only the active app can be configured. There is no schedule, transitions or overlay management, and the only test is a broken template test.
 - **Server gaps blocking the clients:** no schedule write API, app settings rejected (400) unless the app is active, `/api/notifications*` still take over the full screen, schedule `Condition`s are stubbed.
 
+## Status (2026-10-03)
+
+Phases 1-4 are implemented and merged on `transport-apps` (full `dotnet test` and `flutter test` green; goldens reviewed by eye; the phone app and the server were exercised together against the simulator).
+
+| Phase | State | Notes |
+|---|---|---|
+| 0 Housekeeping | Done except the PRs | `TflStopPicker` shared; `PongApp` and dead Spotify code removed. **Open:** merge `cleanup-helpers` and `transport-apps` to `main` through pull requests. |
+| 1 Server API | Done | `PUT /api/schedule` (+ `GET` now returns the document, `GET /api/schedule/status`), settings for inactive apps, `GET /api/overlays`, notifications as alert overlays, schedule conditions (`spotify_playing`, `line_disrupted:`, `bus_due:`, `ha_state:`, `bin_day`) with lazy polling sources, and an app-facing overlay hook (`WidgetApp.ShowToast/ShowAlert`). HA integration has the new services and sensors. |
+| 2 Display refresh | Done | Tube Departures (Split / Platform / Hero), Spotify rewrite, Tube Status two-row tiles, Home data chips, Weather rain and hourly charts, Calendar timeline + recurrence overrides, HA tiles (pager, icons, history sparklines), one `Clock` app with `Style` (old ids kept as aliases). |
+| 3 New apps | Done | Bus Arrivals, Rail Departures (hard-coded sample source), Cycle Hub, Plane Spotter, Journey Planner, Bin Day, Morning Briefing. |
+| 4 Flutter rewrite | Done | Riverpod + go_router; Now, Apps, Schedule, Notify and Settings screens. |
+| 5 Stretch | Not started | Declarative screens, `QrCode` node + Party Mode, gallery page, platform gaps. |
+
+### Known follow-ups
+- **Rail Departures** uses `HardcodedRailSource`; the real integration goes behind `IRailDepartureSource`.
+- **Not yet verified on hardware:** frame time on the Raspberry Pi, the Flutter app on Android/iOS devices (verified only as a web build against the simulator), and the Home Assistant integration inside a real HA instance (it compiles and follows the existing code, but has no test harness).
+- **Small visual items:** Liberty and Lioness both abbreviate to "LI" in Tube Status; the black bin icon in Bin Day is low contrast on black; the DISRUPTION pill in Journey is cramped.
+- **Behaviour notes:** Plane Spotter reads its location from config only (not the live Weather setting); the Morning Briefing rebuilds the current card if feed data arrives after the first frame; the `bin_day` condition ignores calendar one-offs.
+
 ---
 
 ## Phase 0: Housekeeping
