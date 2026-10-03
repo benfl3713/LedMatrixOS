@@ -40,16 +40,34 @@ public class AudioDataService
     {
         lock (_lock)
         {
-            // Decay old data if no recent updates
-            if ((DateTime.UtcNow - _lastUpdate).TotalMilliseconds > 100)
-            {
-                for (int i = 0; i < _frequencyBands.Length; i++)
-                {
-                    _frequencyBands[i] *= 0.9f; // Decay
-                }
-            }
-            
+            DecayIfStale();
             return (float[])_frequencyBands.Clone();
+        }
+    }
+
+    /// <summary>
+    /// Copies the current band values into <paramref name="destination"/> (at most <see cref="FrequencyBandCount"/> entries) and returns
+    /// how many were written. Unlike <see cref="GetFrequencyBands"/> it allocates nothing, so render code should prefer it.
+    /// </summary>
+    public int CopyFrequencyBands(Span<float> destination)
+    {
+        lock (_lock)
+        {
+            DecayIfStale();
+            int count = Math.Min(destination.Length, _frequencyBands.Length);
+            _frequencyBands.AsSpan(0, count).CopyTo(destination);
+            return count;
+        }
+    }
+
+    // Decay old data if no recent updates
+    private void DecayIfStale()
+    {
+        if ((DateTime.UtcNow - _lastUpdate).TotalMilliseconds <= 100) return;
+
+        for (int i = 0; i < _frequencyBands.Length; i++)
+        {
+            _frequencyBands[i] *= 0.9f; // Decay
         }
     }
 

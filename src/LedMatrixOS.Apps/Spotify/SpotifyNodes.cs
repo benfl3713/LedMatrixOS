@@ -67,6 +67,7 @@ internal sealed class VisualiserNode : Node
     private static readonly float[] Phase = [0.0f, 1.3f, 2.1f, 0.7f, 3.4f, 4.2f, 5.0f, 2.8f, 1.9f];
 
     private readonly float[] _level = new float[Bars];
+    private readonly float[] _bands = new float[AudioDataService.FrequencyBandCount];
     private TimeSpan _time;
     private float _dt;
 
@@ -88,16 +89,16 @@ internal sealed class VisualiserNode : Node
         _dt = (float)ctx.Delta.TotalSeconds;
         float t = (float)ctx.Time.TotalSeconds;
 
-        float[]? bands = Active && Audio is { } audio && audio.HasRecentData() ? audio.GetFrequencyBands() : null;
+        int bandCount = Active && Audio is { } audio && audio.HasRecentData() ? audio.CopyFrequencyBands(_bands) : 0;
         for (int i = 0; i < Bars; i++)
         {
             float target;
             if (!Active) target = 0f;
-            else if (bands is not null)
+            else if (bandCount >= Bars)
             {
-                int per = bands.Length / Bars;
+                int per = bandCount / Bars;
                 float sum = 0;
-                for (int j = 0; j < per; j++) sum += bands[i * per + j];
+                for (int j = 0; j < per; j++) sum += _bands[i * per + j];
                 target = Math.Clamp(sum / per * 3f, 0f, 1f);
             }
             else
