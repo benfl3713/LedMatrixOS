@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace LedMatrixOS.Core.Scheduling;
 
 /// <summary>
@@ -50,61 +48,72 @@ public sealed class ScheduleService
         try
         {
             if (!File.Exists(jsonPath)) return false;
-            var json = File.ReadAllText(jsonPath);
-            var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            if (root.TryGetProperty("playlists", out var playlistsElem))
-            {
-                foreach (var p in playlistsElem.EnumerateArray())
-                {
-                    var name = p.GetProperty("name").GetString() ?? "unnamed";
-                    var entries = new List<PlaylistEntry>();
-                    foreach (var e in p.GetProperty("entries").EnumerateArray())
-                    {
-                        var appId = e.GetProperty("appId").GetString() ?? "";
-                        var durationMs = e.GetProperty("durationMs").GetInt32();
-                        var duration = TimeSpan.FromMilliseconds(durationMs);
-                        Dictionary<string, string>? overrides = null;
-                        if (e.TryGetProperty("settings", out var settingsElem) && settingsElem.ValueKind == JsonValueKind.Object)
-                        {
-                            overrides = new();
-                            foreach (var prop in settingsElem.EnumerateObject())
-                                overrides[prop.Name] = prop.Value.ValueKind == JsonValueKind.String
-                                    ? prop.Value.GetString() ?? "" : prop.Value.GetRawText();
-                        }
-                        var transition = e.TryGetProperty("transition", out var tr) ? tr.GetString() : null;
-                        var entry = new PlaylistEntry(appId, duration, overrides, transition);
-                        entries.Add(entry);
-                    }
-                    RegisterPlaylist(new PlaylistConfig { Name = name, Entries = entries });
-                }
-            }
-
-            if (root.TryGetProperty("rules", out var rulesElem))
-            {
-                foreach (var r in rulesElem.EnumerateArray())
-                {
-                    var rule = new ScheduleRule
-                    {
-                        PlaylistId = r.GetProperty("playlistId").GetString() ?? "",
-                        Priority = r.GetProperty("priority").GetInt32(),
-                    };
-                    if (r.TryGetProperty("startTime", out var st))
-                        rule.StartTime = TimeSpan.Parse(st.GetString() ?? "00:00");
-                    if (r.TryGetProperty("endTime", out var et))
-                        rule.EndTime = TimeSpan.Parse(et.GetString() ?? "23:59");
-                    if (r.TryGetProperty("daysMask", out var dm))
-                        rule.ActiveDaysMask = dm.GetInt32();
-                    if (r.TryGetProperty("brightnessOverride", out var bo))
-                        rule.BrightnessOverride = (byte)bo.GetInt32();
-                    AddRule(rule);
-                }
-            }
-
+            var doc = ScheduleDocument.TryParse(File.ReadAllText(jsonPath), out _);
+            if (doc == null) return false;
+            doc.ApplyTo(this);
             return true;
         }
         catch { return false; }
+    }
+
+    /// <summary>Snapshot of the current playlists and rules in file form.</summary>
+    public ScheduleDocument Export() => ScheduleDocument.From(_playlists.Values, _rules);
+
+    /// <summary>
+    /// Replaces the whole schedule with the document. Caller should hold <see cref="Gate"/>.
+    /// </summary>
+    public void Replace(ScheduleDocument doc)
+    {
+        Clear();
+        doc.ApplyTo(this);
+    }
+
+    /// <summary>
+    /// Where the schedule is right now: matching rule, playlist position and the next moment the answer changes.
+    /// Caller should hold <see cref="Gate"/>. Conditional rules are assumed to keep their current state when looking ahead.
+    /// </summary>
+    public ScheduleStatus GetStatus()
+    {
+        var appId = GetActiveAppId();
+        var now = _timeProvider.GetUtcNow();
+        var local = _timeProvider.GetLocalNow().DateTime;
+        var rule = _rules.FirstOrDefault(r => r.Matches(local));
+
+        PlaylistConfig? playlist = null;
+        if (_activePlaylistId != null) _playlists.TryGetValue(_activePlaylistId, out playlist);
+
+        DateTimeOffset? next = null;
+        string? reason = null;
+
+        if (playlist != null && playlist.Entries.Count > 1)
+        {
+            var end = _entryStartTime;
+            for (int i = 0; i <= _activeEntryIndex && i < playlist.Entries.Count; i++) end += playlist.Entries[i].Duration;
+            next = end;
+            reason = "playlist";
+        }
+
+        // Scan forward a minute at a time for the next time the matching rule differs.
+        var boundary = new DateTime(local.Year, local.Month, local.Day, local.Hour, local.Minute, 0).AddMinutes(1);
+        for (int i = 0; i < 8 * 24 * 60; i++)
+        {
+            var t = boundary.AddMinutes(i);
+            if (!ReferenceEquals(_rules.FirstOrDefault(r => r.Matches(t)), rule))
+            {
+                var at = now + (t - local);
+                if (next == null || at < next) { next = at; reason = "rule"; }
+                break;
+            }
+        }
+
+        return new ScheduleStatus(
+            rule == null ? null : new ActiveRuleInfo(_rules.IndexOf(rule), rule.PlaylistId, rule.Priority, rule.Condition),
+            playlist?.Name,
+            playlist == null ? null : _activeEntryIndex,
+            playlist?.Entries.Count,
+            appId,
+            next,
+            reason);
     }
 
     /// <summary>
@@ -167,3 +176,14 @@ public sealed class ScheduleService
         return _rules.FirstOrDefault(r => r.Matches(local))?.BrightnessOverride;
     }
 }
+
+public sealed record ActiveRuleInfo(int Index, string PlaylistId, int Priority, string? Condition);
+
+public sealed record ScheduleStatus(
+    ActiveRuleInfo? ActiveRule,
+    string? Playlist,
+    int? EntryIndex,
+    int? EntryCount,
+    string? AppId,
+    DateTimeOffset? NextChange,
+    string? NextChangeReason);

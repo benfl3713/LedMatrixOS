@@ -74,6 +74,30 @@ public static class OverlayEndpoints
             lock (schedule.Gate)
                 return Results.Ok(new { appId = schedule.GetActiveAppId(), brightness = schedule.GetActiveBrightnessOverride() });
         });
+
+        endpoints.MapPut("/api/schedule", async (HttpRequest request, [FromServices] ScheduleService schedule, [FromServices] AppManager apps, [FromServices] RenderEngine engine) =>
+        {
+            using var reader = new StreamReader(request.Body);
+            var doc = ScheduleDocument.TryParse(await reader.ReadToEndAsync(), out var parseError);
+            if (doc == null) return Results.BadRequest(new { errors = new[] { parseError } });
+
+            var known = apps.AppInfos.Select(i => i.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var errors = doc.Validate(known.Contains, engine.Transitions.IsValidName);
+            if (errors.Count > 0) return Results.BadRequest(new { errors });
+
+            lock (schedule.Gate)
+            {
+                ScheduleDocument.WriteAtomic(schedulePath, doc.ToJson());
+                schedule.Replace(doc);
+                return Results.Ok(schedule.Export());
+            }
+        });
+
+        endpoints.MapGet("/api/schedule/status", ([FromServices] ScheduleService schedule) =>
+        {
+            lock (schedule.Gate)
+                return Results.Ok(schedule.GetStatus());
+        });
     }
 
     private static Pixel ParseColor(string? hex, Pixel fallback) =>
