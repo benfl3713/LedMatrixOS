@@ -136,10 +136,19 @@ internal sealed class HomeDirector : Node
     private readonly DateBlock _date;
     private readonly SecondsLine _line;
     private readonly HomeBackdrop _backdrop;
+    private readonly HomeChips _chips;
+    private readonly ChipPager _band;
 
     private readonly Tween<float> _themeMix = new(1f);
     private readonly Tween<float> _dateMix = new(1f);
+    // 0 with no chips showing; 1 once the clock has lifted to make room for the chip band underneath.
+    private readonly Tween<float> _chipMix = new(0f);
+    private float _chipTarget;
+    private int _chipSeconds = -1;
     private readonly Tween<float> _enterTime = new(0f), _enterDate = new(0f), _enterLine = new(0f);
+
+    // With chips showing, the clock and date lift by ChipLift pixels and the chip band sits in the strip that frees up above the seconds line.
+    private const float ChipLift = 6f;
 
     private HomePalette _from, _to;
     private string? _theme, _mode;
@@ -147,8 +156,10 @@ internal sealed class HomeDirector : Node
     private bool _first = true;
     private int _day = -1, _minute = -1;
 
-    public HomeDirector(HomePageApp app, HomeState state, DigitStrip strip, DateBlock date, SecondsLine line, HomeBackdrop backdrop)
+    public HomeDirector(HomePageApp app, HomeState state, DigitStrip strip, DateBlock date, SecondsLine line, HomeBackdrop backdrop, HomeChips chips, ChipPager band)
     {
+        _chips = chips;
+        _band = band;
         _app = app;
         _s = state;
         _strip = strip;
@@ -208,11 +219,33 @@ internal sealed class HomeDirector : Node
 
         _date.SetText(_weekday, _dateText, h24 ? "" : (now.Hour < 12 ? "AM" : "PM"));
 
+        UpdateChips(host, now);
         Pose();
         _first = false;
     }
 
     private string _weekday = "", _dateText = "";
+
+    // Polls for the switched-on chips, the strings they show, and the clock lifting to make room while at least one is visible.
+    private void UpdateChips(UiHost host, DateTimeOffset now)
+    {
+        _app.SyncChipPolls();
+        _chips.Refresh(_app, now);
+
+        int seconds = Math.Clamp(_app.ChipSeconds, 3, 30);
+        if (seconds != _chipSeconds)
+        {
+            _chipSeconds = seconds;
+            _band.Interval = TimeSpan.FromSeconds(seconds);
+        }
+
+        float target = _chips.Visible.Count > 0 ? 1f : 0f;
+        if (target != _chipTarget)
+        {
+            _chipTarget = target;
+            host.Animator.Animate(_chipMix, target, TimeSpan.FromMilliseconds(700), Easing.InOutCubic);
+        }
+    }
 
     private void Start(UiHost host)
     {
@@ -277,7 +310,11 @@ internal sealed class HomeDirector : Node
         float mix = _dateMix.Value;
         float x = center + (leftX - center) * mix;
         float lift = (1f - _enterTime.Value) * 20f;
-        _strip.Position = new Vector2(x, lift);
+        float chipMix = _chipMix.Value;
+        float chipLift = ChipLift * chipMix;
+        _strip.Position = new Vector2(x, lift - chipLift);
+        _s.ChipLeft = mix;
+        _band.Opacity = chipMix;
 
         float t = _s.T;
         float shift = 0.5f + 0.5f * MathF.Sin(t * 0.25f * _s.Speed);
@@ -294,7 +331,7 @@ internal sealed class HomeDirector : Node
 
         float dateAlpha = _enterDate.Value * mix;
         _date.Alpha = dateAlpha;
-        _date.Position = new Vector2(x + w + gap + (1f - _enterDate.Value) * 36f, 0f);
+        _date.Position = new Vector2(x + w + gap + (1f - _enterDate.Value) * 36f, -chipLift);
         _line.Alpha = _enterLine.Value;
     }
 }
