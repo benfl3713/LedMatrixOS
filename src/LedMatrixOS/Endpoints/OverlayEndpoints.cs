@@ -89,21 +89,30 @@ public static class OverlayEndpoints
             }
         });
 
-        endpoints.MapPut("/api/schedule", async (HttpRequest request, [FromServices] ScheduleService schedule, [FromServices] AppManager apps, [FromServices] RenderEngine engine) =>
+        endpoints.MapPut("/api/schedule", async (HttpRequest request, [FromServices] ScheduleService schedule, [FromServices] AppManager apps, [FromServices] RenderEngine engine, [FromServices] ILoggerFactory loggers) =>
         {
-            using var reader = new StreamReader(request.Body);
-            var doc = ScheduleDocument.TryParse(await reader.ReadToEndAsync(), out var parseError);
-            if (doc == null) return Results.BadRequest(new { errors = new[] { parseError } });
-
-            var known = apps.AppInfos.Select(i => i.Id).Concat(apps.AliasIds).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var errors = doc.Validate(known.Contains, engine.Transitions.IsValidName);
-            if (errors.Count > 0) return Results.BadRequest(new { errors });
-
-            lock (schedule.Gate)
+            try
             {
-                ScheduleDocument.WriteAtomic(schedulePath, doc.ToJson());
-                schedule.Replace(doc);
-                return Results.Ok(schedule.Export());
+                using var reader = new StreamReader(request.Body);
+                var doc = ScheduleDocument.TryParse(await reader.ReadToEndAsync(), out var parseError);
+                if (doc == null) return Results.BadRequest(new { errors = new[] { parseError } });
+
+                var known = apps.AppInfos.Select(i => i.Id).Concat(apps.AliasIds).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var errors = doc.Validate(known.Contains, engine.Transitions.IsValidName);
+                if (errors.Count > 0) return Results.BadRequest(new { errors });
+
+                lock (schedule.Gate)
+                {
+                    ScheduleDocument.WriteAtomic(schedulePath, doc.ToJson());
+                    schedule.Replace(doc);
+                    return Results.Ok(schedule.Export());
+                }
+            }
+            catch (Exception ex)
+            {
+                // Without this a failure here is a bare 500 that says nothing about the cause (an unwritable folder, a full disk, ...).
+                loggers.CreateLogger("Schedule").LogError(ex, "Saving the schedule to {Path} failed", schedulePath);
+                return Results.Json(new { errors = new[] { $"Could not save the schedule ({ex.GetType().Name}): {ex.Message}" } }, statusCode: StatusCodes.Status500InternalServerError);
             }
         });
 

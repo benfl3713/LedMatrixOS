@@ -23,6 +23,9 @@ public sealed class ScheduleDocument
         {
             var doc = JsonSerializer.Deserialize<ScheduleDocument>(json, Options);
             if (doc == null) { error = "Body must be a JSON object"; return null; }
+            // "playlists": null (or "rules": null) is the same as leaving it out.
+            doc.Playlists ??= new();
+            doc.Rules ??= new();
             error = null;
             return doc;
         }
