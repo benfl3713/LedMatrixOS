@@ -26,6 +26,23 @@ bool useSimulator = builder.Configuration.GetValue("Matrix:UseSimulator", false)
 
 Fonts.Load();
 
+// Mutable state (settings, screens, schedule) lives in DataDir (default: next to the binary). Set it to a directory the
+// service user can write when the matrix library drops root privileges, e.g. DataDir=/var/lib/ledmatrixos.
+string dataDir = builder.Configuration["DataDir"] is { Length: > 0 } configuredDataDir
+    ? Path.GetFullPath(configuredDataDir)
+    : AppContext.BaseDirectory;
+Directory.CreateDirectory(dataDir);
+string DataFile(string name)
+{
+    var path = Path.Combine(dataDir, name);
+    var legacy = Path.Combine(AppContext.BaseDirectory, name);
+    if (!File.Exists(path) && File.Exists(legacy) && !string.Equals(path, legacy, StringComparison.Ordinal))
+    {
+        try { File.Copy(legacy, path); } catch { /* keep going: the app starts with defaults */ }
+    }
+    return path;
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -36,7 +53,7 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<AppSettingsStorage>(_ => 
-    new AppSettingsStorage(Path.Combine(AppContext.BaseDirectory, "app-settings.json")));
+    new AppSettingsStorage(DataFile("app-settings.json")));
 builder.Services.AddSingleton<AppManager>(sp => 
 {
     var settingsStorage = sp.GetRequiredService<AppSettingsStorage>();
@@ -53,10 +70,10 @@ builder.Services.AddSingleton<LedMatrixOS.Core.Screens.IScreenStore>(sp => sp.Ge
 builder.Services.AddSingleton(sp => new LedMatrixOS.Core.Screens.ScreenCatalog(
     sp.GetRequiredService<LedMatrixOS.Core.Screens.ScreenStore>(),
     sp.GetRequiredService<AppManager>(),
-    Path.Combine(AppContext.BaseDirectory, "screens.json")));
+    DataFile("screens.json")));
 builder.Services.AddSingleton<AudioDataService>();
 builder.Services.AddSingleton<InterruptService>();
-var schedulePath = Path.Combine(AppContext.BaseDirectory, "schedule.json");
+var schedulePath = DataFile("schedule.json");
 // Services that can answer rule conditions register an IAttentionSource. They are lazy: AttentionCoordinator only lets them
 // poll while a schedule rule references their condition.
 builder.Services.AddSingleton<IAttentionSource, SpotifyPlayingSource>();
