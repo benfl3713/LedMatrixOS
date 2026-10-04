@@ -34,6 +34,7 @@ public static class BuiltInApps
         yield return typeof(HomeAssistantTilesApp);
         yield return typeof(CalendarApp);
         yield return typeof(WidgetDemoApp);
+        yield return typeof(Screens.ScreenApp);
     }
 
     /// <summary>Retired app ids that still work in schedules, the API and persisted settings: (alias, target id, preset settings).</summary>

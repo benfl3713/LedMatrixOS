@@ -41,6 +41,7 @@ builder.Services.AddSingleton<AppManager>(sp =>
     var settingsStorage = sp.GetRequiredService<AppSettingsStorage>();
     return new AppManager(sp, builder.Configuration, height, width, settingsStorage);
 });
+builder.Services.AddSingleton<LedMatrixOS.Core.Screens.IScreenStore, LedMatrixOS.Core.Screens.ScreenStore>();
 builder.Services.AddSingleton<AudioDataService>();
 builder.Services.AddSingleton<InterruptService>();
 var schedulePath = Path.Combine(AppContext.BaseDirectory, "schedule.json");

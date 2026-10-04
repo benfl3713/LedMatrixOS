@@ -2,11 +2,11 @@ using System.Text.RegularExpressions;
 
 namespace LedMatrixOS.Core.Screens;
 
-public enum BindingKind { Time, Weather, Tube, HomeAssistant, BinDay }
+public enum BindingKind { Time, Weather, Tube, HomeAssistant, BinDay, Item }
 
 /// <summary>
 /// A data binding key a screen node can reference. Valid keys: <c>time</c>, <c>weather.temp|feels|high|low|precip</c>,
-/// <c>tube.&lt;line-id&gt;</c>, <c>ha:&lt;entity_id&gt;</c>, <c>bin_day</c>.
+/// <c>tube.&lt;line-id&gt;</c>, <c>ha:&lt;entity_id&gt;</c>, <c>bin_day</c>, and (inside a list's item template) <c>item</c> and <c>item.label</c>.
 /// In a string prop, keys are written as <c>{key}</c> templates (<c>{{</c> and <c>}}</c> are literal braces);
 /// a prop may also be an object <c>{"bind":"key"}</c>.
 /// </summary>
@@ -25,6 +25,7 @@ public readonly record struct BindingKey(BindingKind Kind, string Name)
 
         if (key == "time") { result = new(BindingKind.Time, "time"); return true; }
         if (key == "bin_day") { result = new(BindingKind.BinDay, "bin_day"); return true; }
+        if (key is "item" or "item.label") { result = new(BindingKind.Item, key); return true; }
 
         if (key.StartsWith("weather.", StringComparison.Ordinal))
         {
