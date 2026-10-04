@@ -29,6 +29,7 @@ public static class BuiltInApps
         yield return typeof(RoadDisruptionsApp);
         yield return typeof(AirQualityApp);
         yield return typeof(PlaneSpotterApp);
+        yield return typeof(IssTrackerApp);
         yield return typeof(JourneyApp);
         yield return typeof(BinDayApp);
         yield return typeof(MorningBriefingApp);

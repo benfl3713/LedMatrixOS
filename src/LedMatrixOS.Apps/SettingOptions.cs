@@ -37,6 +37,7 @@ public static class BuiltInSettingOptions
         registry.Register("commute", "location", places);
         registry.Register("air-quality", "location", places);
         registry.Register("plane-spotter", "location", places);
+        registry.Register("iss-tracker", "location", places);
 
         var journeyPoints = new JourneyPointOptions(geocoder, tfl);
         registry.Register("journey", "from", journeyPoints);
