@@ -170,6 +170,7 @@ class AppSetting {
     this.currentLabel,
     this.currentLabels,
     this.browse = false,
+    this.advanced = false,
   });
 
   final String key;
@@ -189,6 +190,18 @@ class AppSetting {
   /// Search/MultiSearch whose options are a short list computed from the app's other settings (e.g. the routes of the
   /// chosen station): shown straight away, no typing needed.
   final bool browse;
+
+  /// Rarely used or raw setting; clients group these under "Advanced".
+  final bool advanced;
+
+  /// Differs from [defaultValue] (a setting without a default is never modified).
+  bool get isModified {
+    final d = defaultValue;
+    final c = currentValue;
+    if (d == null) return false;
+    if (d is num && c is num) return d != c;
+    return d.toString() != (c?.toString() ?? '');
+  }
 
   /// Picked ids of a MultiSearch setting.
   List<String> get currentIds => (currentValue?.toString() ?? '')
@@ -217,6 +230,7 @@ class AppSetting {
       currentLabel: json['currentLabel'] as String?,
       currentLabels: labels is List ? labels.map((e) => e.toString()).toList() : null,
       browse: json['browse'] == true,
+      advanced: json['advanced'] == true,
     );
   }
 
@@ -233,5 +247,6 @@ class AppSetting {
         currentLabel: currentLabel ?? this.currentLabel,
         currentLabels: currentLabels ?? this.currentLabels,
         browse: browse,
+        advanced: advanced,
       );
 }

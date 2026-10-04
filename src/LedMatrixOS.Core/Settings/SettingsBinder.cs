@@ -14,14 +14,23 @@ public static class SettingsBinder
 
     private static readonly ConcurrentDictionary<Type, Entry[]> Cache = new();
 
+    // The property values of a freshly constructed instance, per app type (what "reset to default" goes back to).
+    private static readonly ConcurrentDictionary<Type, Dictionary<string, object>> Defaults = new();
+
+    /// <summary>Remembers the current values of <paramref name="target"/> as its type's defaults. Call on a new instance; later calls for the type are ignored.</summary>
+    public static void CaptureDefaults(object target) => Defaults.GetOrAdd(target.GetType(), _ =>
+        Cache.GetOrAdd(target.GetType(), Discover).ToDictionary(e => e.Key, e => e.Property.GetValue(target) ?? ""));
+
     public static IEnumerable<AppSetting> GetSettings(object target)
     {
+        Defaults.TryGetValue(target.GetType(), out var defaults);
         foreach (var e in Cache.GetOrAdd(target.GetType(), Discover))
         {
             var current = e.Property.GetValue(target) ?? "";
+            var fallback = defaults != null && defaults.TryGetValue(e.Key, out var d) ? d : current;
             yield return new AppSetting(
                 e.Key, e.Attribute.Name, e.Attribute.Description, e.Type,
-                current, current, e.Attribute.Min, e.Attribute.Max, e.Attribute.Options, Browse: e.Attribute.Browse);
+                fallback, current, e.Attribute.Min, e.Attribute.Max, e.Attribute.Options, Browse: e.Attribute.Browse, Advanced: e.Attribute.Advanced);
         }
     }
 

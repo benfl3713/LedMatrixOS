@@ -34,7 +34,7 @@ public class CommuteApp : WidgetApp
     [Setting("Routes", Description = "Only trains on these lines and directions (e.g. Metropolitan towards Aldgate). Leave empty for all.", MultiSearch = true, Browse = true)]
     public string Routes { get; set; } = "";
 
-    [Setting("Platform Filter", Description = "Advanced: only trains whose platform contains this text (e.g. 'Eastbound'). Prefer Routes; leave empty for all.")]
+    [Setting("Platform Filter", Description = "Advanced: only trains whose platform contains this text (e.g. 'Eastbound'). Prefer Routes; leave empty for all.", Advanced = true)]
     public string PlatformFilter { get; set; } = "";
 
     [Setting("Walk Minutes", Description = "How long it takes you to get to the platform.", Min = 0, Max = 60)]

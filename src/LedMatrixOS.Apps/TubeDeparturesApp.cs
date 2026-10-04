@@ -33,7 +33,7 @@ public class TubeDeparturesApp : WidgetApp
     [Setting("Routes", Description = "Only show these lines and directions (e.g. Metropolitan towards Aldgate). Leave empty to show everything.", MultiSearch = true, Browse = true)]
     public string Routes { get; set; } = "";
 
-    [Setting("Platform Filter", Description = "Advanced: filter by platform name text (e.g. 'Eastbound'). Prefer Routes; leave empty to show everything.")]
+    [Setting("Platform Filter", Description = "Advanced: filter by platform name text (e.g. 'Eastbound'). Prefer Routes; leave empty to show everything.", Advanced = true)]
     public string PlatformFilter { get; set; } = "";
 
     [Setting("Board Style", Description = "Split: a column per direction with the next trains of each. Platform: classic amber platform sign. Hero: the next train big, the rest paged below.",

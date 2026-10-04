@@ -30,7 +30,7 @@ public class BusArrivalsApp : WidgetApp
     [Setting("Stops", Description = "Search for bus stops, up to 4.", MultiSearch = true, Max = MaxStops)]
     public string StopIds { get; set; } = "";
 
-    [Setting("Route Filter", Description = "Only show these routes, comma separated (e.g. 73,38). Leave empty to show all.")]
+    [Setting("Route Filter", Description = "Only show these routes, comma separated (e.g. 73,38). Leave empty to show all.", Advanced = true)]
     public string RouteFilter { get; set; } = "";
 
     [Setting("Buses Per Stop", Description = "Number of buses listed for each stop", Min = 1, Max = 4)]

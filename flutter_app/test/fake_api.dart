@@ -16,6 +16,9 @@ class FakeApi implements LedApi {
 
   bool failActivate;
   bool failApps;
+
+  /// When set, settings updates fail with this error (nothing is applied).
+  ApiError? failUpdate;
   String active = 'clock';
   int brightness = 128;
   bool power = true;
@@ -72,6 +75,7 @@ class FakeApi implements LedApi {
   @override
   Future<Result<void>> updateAppSettings(String id, Map<String, Object?> values) async {
     settingUpdates.add(values);
+    if (failUpdate != null) return Err(failUpdate!);
     for (var i = 0; i < settings.length; i++) {
       final s = settings[i];
       if (!values.containsKey(s.key)) continue;

@@ -29,7 +29,7 @@ public class BinDayApp : WidgetApp
     [Setting("Bins", Description = "Collection rules separated by ';' or new lines, fields by '|': " + BinParser.BinSyntax + ". Day is Mon-Sun, EveryNWeeks 1-4 (the anchor is a known collection date and sets the fortnightly week); a sixth field lists dates to skip, e.g. bank holidays: 2026-12-28,2027-01-04.")]
     public string Bins { get; set; } = "";
 
-    [Setting("Calendar Keyword", Description = "Calendar feed events whose title contains this are shown as one-off collections. Empty turns it off.")]
+    [Setting("Calendar Keyword", Description = "Calendar feed events whose title contains this are shown as one-off collections. Empty turns it off.", Advanced = true)]
     public string CalendarKeyword { get; set; } = "";
 
     [Setting("Reminders", Description = "Text cards shown while the time is inside a window, separated by ';' or new lines: " + BinParser.ReminderSyntax)]

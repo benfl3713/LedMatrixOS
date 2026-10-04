@@ -32,6 +32,8 @@ public sealed class SettingAttribute : Attribute
     /// computed from the app's other settings.
     /// </summary>
     public bool Browse { get; set; }
+    /// <summary>Rarely used or raw setting: clients may hide it under an "Advanced" section.</summary>
+    public bool Advanced { get; set; }
 }
 
 /// <summary>

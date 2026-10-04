@@ -121,7 +121,12 @@ public sealed class AppManager
     }
 
     // Apps are built through DI so their constructors can take services (HttpClient factory, AudioDataService, ...)
-    private IMatrixApp Create(Type app) => (IMatrixApp)ActivatorUtilities.CreateInstance(_services, app);
+    private IMatrixApp Create(Type app)
+    {
+        var instance = (IMatrixApp)ActivatorUtilities.CreateInstance(_services, app);
+        SettingsBinder.CaptureDefaults(instance); // before presets or persisted values touch it
+        return instance;
+    }
 
     public async Task<bool> ActivateAsync(string id, CancellationToken cancellationToken)
     {
