@@ -4,6 +4,7 @@ import 'package:led_matrix_controller/api/led_api.dart';
 import 'package:led_matrix_controller/api/models.dart';
 import 'package:led_matrix_controller/api/result.dart';
 import 'package:led_matrix_controller/api/schedule_models.dart';
+import 'package:led_matrix_controller/api/screen_models.dart';
 import 'package:led_matrix_controller/core/providers.dart';
 import 'package:led_matrix_controller/main.dart';
 
@@ -187,6 +188,94 @@ class FakeApi implements LedApi {
     calls.add('alert:$message:$color');
     return const Ok(null);
   }
+
+  // Screens -----------------------------------------------------------------
+
+  final Map<String, ScreenDefinition> screens = {
+    'demo': ScreenDefinition(
+      id: 'demo',
+      name: 'Demo',
+      root: ScreenNode(type: 'stack', props: {'direction': 'vertical'}, children: [
+        ScreenNode(type: 'label', props: {'text': 'Hello {weather.temp}', 'color': '#FFFFFF', 'mystery': 7}),
+      ]),
+    ),
+  };
+
+  /// Validation errors the next putScreen returns (cleared after use).
+  List<FieldError> screenErrors = [];
+  final List<ScreenDefinition> putScreens = [];
+
+  static const screenSchema = ScreenSchema(
+    maxDepth: 8,
+    maxNodes: 200,
+    fonts: ['Big', 'Small'],
+    slots: ['children', 'top', 'bottom', 'left', 'right', 'fill', 'item'],
+    commonProps: [
+      PropSchema(name: 'width', kind: PropKind.int),
+      PropSchema(name: 'halign', kind: PropKind.enumeration, options: ['left', 'center', 'right']),
+      PropSchema(name: 'visible', kind: PropKind.bool),
+    ],
+    nodeTypes: [
+      NodeTypeSchema(type: 'stack', props: [
+        PropSchema(name: 'direction', kind: PropKind.enumeration, options: ['horizontal', 'vertical']),
+        PropSchema(name: 'gap', kind: PropKind.int),
+      ], slots: ['children']),
+      NodeTypeSchema(type: 'dock', props: [], slots: ['top', 'bottom', 'left', 'right', 'fill']),
+      NodeTypeSchema(type: 'label', props: [
+        PropSchema(name: 'text', kind: PropKind.binding),
+        PropSchema(name: 'font', kind: PropKind.enumeration, options: ['Big', 'Small']),
+        PropSchema(name: 'color', kind: PropKind.color),
+      ], slots: []),
+      NodeTypeSchema(type: 'clock', props: [
+        PropSchema(name: 'format', kind: PropKind.string),
+        PropSchema(name: 'color', kind: PropKind.color),
+      ], slots: []),
+      NodeTypeSchema(type: 'list', props: [
+        PropSchema(name: 'source', kind: PropKind.binding),
+      ], slots: ['item']),
+    ],
+    bindingKeys: [
+      BindingKeyInfo(key: 'time', kind: 'time', description: 'Current time'),
+      BindingKeyInfo(key: 'weather.<field>', kind: 'weather', description: 'Weather value', fields: ['temp', 'high']),
+      BindingKeyInfo(key: 'item', kind: 'item', description: 'Current list item', insideListOnly: true),
+    ],
+  );
+
+  @override
+  Future<Result<List<ScreenSummary>>> listScreens() async =>
+      Ok([for (final s in screens.values) ScreenSummary(id: s.id, name: s.name)]);
+
+  @override
+  Future<Result<ScreenDefinition>> getScreen(String id) async {
+    final s = screens[id];
+    if (s == null) return const Err(ApiError(ApiErrorKind.http, 'HTTP 404: not found', statusCode: 404));
+    return Ok(s.clone());
+  }
+
+  @override
+  Future<Result<ScreenDefinition>> putScreen(ScreenDefinition screen) async {
+    calls.add('putScreen:${screen.id}');
+    if (screenErrors.isNotEmpty) {
+      final errors = screenErrors;
+      screenErrors = [];
+      return Err(ApiError(ApiErrorKind.http, 'HTTP 400: ${errors.join('; ')}',
+          statusCode: 400, errors: [for (final e in errors) e.toString()], fieldErrors: errors));
+    }
+    final copy = screen.clone();
+    putScreens.add(copy);
+    screens[screen.id] = copy;
+    return Ok(copy.clone());
+  }
+
+  @override
+  Future<Result<void>> deleteScreen(String id) async {
+    calls.add('deleteScreen:$id');
+    screens.remove(id);
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<ScreenSchema>> getScreenSchema() async => const Ok(screenSchema);
 
   @override
   Uri get previewSocketUri => Uri.parse('ws://fake/ws/preview');

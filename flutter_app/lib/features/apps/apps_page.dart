@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../api/models.dart';
 import '../../core/app_icons.dart';
@@ -38,6 +39,20 @@ class _AppsPageState extends ConsumerState<AppsPage> {
                   hintText: 'Search apps',
                   leading: const Icon(Icons.search),
                   onChanged: (v) => setState(() => _query = v),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Card(
+                  margin: EdgeInsets.zero,
+                  child: ListTile(
+                    key: const Key('screens-entry'),
+                    leading: const Icon(Icons.dashboard_customize_rounded),
+                    title: const Text('Screens'),
+                    subtitle: const Text('Build your own screens'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/apps/screens'),
+                  ),
                 ),
               ),
               Expanded(

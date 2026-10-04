@@ -39,6 +39,7 @@ Dependency direction: `LedMatrixOS` -> `Apps`, `Core`, `Graphics`, both hardware
 ## Where to make common changes
 
 - **New or changed display app:** `src/LedMatrixOS.Apps/<Name>App.cs`, then register in `Apps.cs`. Prefer `WidgetApp` (override `Build()`, use `[Setting]` properties and `Poll(...)`); add a test file with goldens and a zero-allocation check (copy `CommuteAppTests.cs`). Use `MatrixAppBase` only for low-level pixel apps.
+- **User-defined JSON screens:** schema and validation in `src/LedMatrixOS.Core/Screens/` (`ScreenSchema`, `BindingKey`), runtime in `src/LedMatrixOS.Apps/Screens/` (`ScreenApp`, `BindingResolver`, `ScreenNodeFactory`), API in `Endpoints/ScreenEndpoints.cs`, stored in `screens.json`; each screen is an alias `screen:<id>`. A new node type or binding key must be added to the schema, the factory/resolver and `flutter_app/lib/features/screens/`.
 - **New REST endpoint:** `src/LedMatrixOS/Program.cs` (or a new `Endpoints/*.cs` extension like `NotificationEndpoints`).
 - **Rendering/lifecycle/engine behaviour:** `src/LedMatrixOS.Core`.
 - **Text, fonts, drawing primitives:** `src/LedMatrixOS.Graphics`.

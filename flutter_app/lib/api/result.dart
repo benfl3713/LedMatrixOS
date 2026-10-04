@@ -1,8 +1,19 @@
 /// What went wrong talking to the device.
 enum ApiErrorKind { network, timeout, http, parse }
 
+/// A validation problem tied to a location, e.g. `root.children[2].color`.
+class FieldError {
+  const FieldError(this.path, this.message);
+
+  final String path;
+  final String message;
+
+  @override
+  String toString() => path.isEmpty ? message : '$path: $message';
+}
+
 class ApiError implements Exception {
-  const ApiError(this.kind, this.message, {this.statusCode, this.errors = const []});
+  const ApiError(this.kind, this.message, {this.statusCode, this.errors = const [], this.fieldErrors = const []});
 
   final ApiErrorKind kind;
   final String message;
@@ -10,6 +21,9 @@ class ApiError implements Exception {
 
   /// Server validation problems (`400 {errors:[...]}`), one per line. Empty for other errors.
   final List<String> errors;
+
+  /// The same problems when the server reports them as `{path,message}` objects.
+  final List<FieldError> fieldErrors;
 
   @override
   String toString() => message;

@@ -18,7 +18,7 @@ Phases 1-4 are implemented and merged on `transport-apps` (full `dotnet test` an
 | 2 Display refresh | Done | Tube Departures (Split / Platform / Hero), Spotify rewrite, Tube Status two-row tiles, Home data chips, Weather rain and hourly charts, Calendar timeline + recurrence overrides, HA tiles (pager, icons, history sparklines), one `Clock` app with `Style` (old ids kept as aliases). |
 | 3 New apps | Done | Bus Arrivals, Rail Departures (hard-coded sample source), Cycle Hub, Plane Spotter, Journey Planner, Bin Day, Morning Briefing. |
 | 4 Flutter rewrite | Done | Riverpod + go_router; Now, Apps, Schedule, Notify and Settings screens. |
-| 5 Stretch | Not started | Declarative screens, `QrCode` node + Party Mode, gallery page, platform gaps. |
+| 5 Stretch | Declarative screens done | User-defined JSON screens (`ScreenApp`, `/api/screens`, Flutter editor, `screens.json`). **Open:** `QrCode` node + Party Mode, gallery page, platform gaps. Screens are verified against the simulator only. |
 
 ### Known follow-ups
 - **Rail Departures** uses `HardcodedRailSource`; the real integration goes behind `IRailDepartureSource`.
@@ -111,7 +111,7 @@ Each item ships with updated or new goldens and a zero-allocation test.
 - Delete the template test.
 
 ## Phase 5: Stretch
-- Declarative JSON screens (widget tree plus bindings), creatable from the phone.
+- ~~Declarative JSON screens (widget tree plus bindings), creatable from the phone.~~ Done: `Core/Screens`, `Apps/Screens`, `Endpoints/ScreenEndpoints.cs`, `flutter_app/lib/features/screens`.
 - `QrCode` node and Party Mode.
 - Widget and transition gallery page in `wwwroot`.
 - Platform gaps: `Panel` absolute positioning, transparent `Pager` transitions, a writable `FrameBuffer` span API.

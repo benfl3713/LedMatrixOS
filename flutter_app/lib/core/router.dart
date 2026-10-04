@@ -6,6 +6,8 @@ import '../features/apps/apps_page.dart';
 import '../features/notify/notify_page.dart';
 import '../features/now/now_page.dart';
 import '../features/schedule/schedule_page.dart';
+import '../features/screens/screen_editor_page.dart';
+import '../features/screens/screens_page.dart';
 import '../features/settings/settings_page.dart';
 import 'shell.dart';
 
@@ -18,6 +20,7 @@ class AppTab {
     required this.selectedIcon,
     required this.builder,
     this.enabled = true,
+    this.routes = const [],
   });
 
   final String path;
@@ -28,6 +31,9 @@ class AppTab {
 
   /// Disabled tabs are neither routed nor shown.
   final bool enabled;
+
+  /// Pushed pages that live under this tab (the navigation bar stays visible).
+  final List<RouteBase> routes;
 }
 
 /// The tab registry. Order here is the order in the navigation bar.
@@ -45,6 +51,18 @@ final List<AppTab> appTabs = [
     icon: Icons.grid_view_outlined,
     selectedIcon: Icons.grid_view_rounded,
     builder: (_) => const AppsPage(),
+    routes: [
+      GoRoute(
+        path: 'screens',
+        builder: (context, state) => const ScreensPage(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            builder: (context, state) => ScreenEditorPage(id: state.pathParameters['id']!),
+          ),
+        ],
+      ),
+    ],
   ),
   AppTab(
     path: '/schedule',
@@ -80,7 +98,7 @@ GoRouter buildRouter({List<AppTab>? tabs}) {
           for (final tab in active)
             StatefulShellBranch(
               routes: [
-                GoRoute(path: tab.path, builder: (context, state) => tab.builder(context)),
+                GoRoute(path: tab.path, builder: (context, state) => tab.builder(context), routes: tab.routes),
               ],
             ),
         ],
