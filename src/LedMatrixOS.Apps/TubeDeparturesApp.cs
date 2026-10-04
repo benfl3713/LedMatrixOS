@@ -17,6 +17,8 @@ namespace LedMatrixOS.Apps;
 /// station, the station name (which swaps to the current disruption when there is one) and the clock. TfL polling lives here, the board
 /// derivation in <see cref="DepartureBoardModel"/>, the HTTP calls in <see cref="TflApi"/>.
 /// </summary>
+[LegacySettingKey("stationSearch")]
+[LegacySettingKey("stationSelect", "stationId")]
 public class TubeDeparturesApp : WidgetApp
 {
     public override string Id => "tube-departures";
@@ -25,10 +27,7 @@ public class TubeDeparturesApp : WidgetApp
 
     private static readonly IReadOnlyList<LineStatus> NoStatuses = [];
 
-    [Setting("Station Search", Description = "Type a station name (e.g. Baker Street).")]
-    public string StationSearch { get; set; } = "";
-
-    [Setting("Station ID", Description = "TfL Naptan ID (auto-filled when you select from Station Select).")]
+    [Setting("Station", Description = "Search for a station (e.g. Baker Street).", Search = true)]
     public string StationId { get; set; } = "";
 
     [Setting("Platform Filter", Description = "Filter by platform name (e.g. 'Eastbound'). Leave empty to show all platforms.")]
@@ -60,8 +59,6 @@ public class TubeDeparturesApp : WidgetApp
     private volatile ILiveData<string>? _stationName;
     private CancellationTokenSource? _stationPollCts;
 
-    private readonly TflStopPicker _picker;
-
     private Node? _board, _strip;
     private Node? _heroBody, _splitBody, _platformBody, _splitDivider, _splitSecond, _stripNormal, _stripPlatform;
     private Ticker? _platformTicker;
@@ -76,8 +73,6 @@ public class TubeDeparturesApp : WidgetApp
         _http = httpClient;
         _http.Timeout = TimeSpan.FromSeconds(10);
         _api = new TflApi(_http);
-        _picker = new TflStopPicker("stationSearch", "stationSelect", "Station Select", "Choose a result to set the station automatically.",
-            () => StationSearch, _api.SearchStationsAsync, ApplyStationId, RunInBackground);
     }
 
     // ---- view -------------------------------------------------------------------------------------------------------------------
@@ -253,19 +248,10 @@ public class TubeDeparturesApp : WidgetApp
 
     // ---- settings ---------------------------------------------------------------------------------------------------------------
 
-    // stationSelect has options that change as the user types, so it is not a [Setting] property.
-    public override IEnumerable<AppSetting> GetSettings() => _picker.WithSelect(base.GetSettings());
-
-    public override void UpdateSetting(string key, object value)
-    {
-        if (!_picker.TryUpdate(key, value)) base.UpdateSetting(key, value);
-    }
-
     protected override void OnSettingChanged(string key)
     {
         switch (key)
         {
-            case "stationSearch": _picker.OnQueryChanged(); break;
             case "stationId": ApplyStationId(StationId); break;
             case "pageSeconds":
                 if (_pager is not null) _pager.Interval = PageSeconds.Seconds();
@@ -307,7 +293,7 @@ public class TubeDeparturesApp : WidgetApp
 
         var arrivals = Poll(_refreshInterval, ct => _api.GetArrivalsAsync(stationId, ct), cts.Token);
         _arrivals = arrivals;
-        _lineStatuses = Poll(_lineStatusRefreshInterval, ct => TflStopPicker.FetchLineStatusesAsync(_api, arrivals, ct), cts.Token);
+        _lineStatuses = Poll(_lineStatusRefreshInterval, ct => TflLookups.FetchLineStatusesAsync(_api, arrivals, ct), cts.Token);
         _stationName = Poll(_stationNameRefreshInterval, ct => _api.GetStationNameAsync(stationId, ct), cts.Token);
     }
 

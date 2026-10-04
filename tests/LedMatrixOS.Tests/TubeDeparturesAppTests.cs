@@ -67,10 +67,10 @@ public class TubeDeparturesAppTests(ITestOutputHelper output)
         var settings = NewApp().GetSettings().ToList();
 
         Assert.Equal(
-            new[] { "stationSearch", "stationSelect", "stationId", "platformFilter", "boardStyle", "maxDepartures", "colorDeparturesByLine", "pageSeconds" },
+            new[] { "stationId", "platformFilter", "boardStyle", "maxDepartures", "colorDeparturesByLine", "pageSeconds" },
             settings.Select(s => s.Key).ToArray());
         Assert.Equal(
-            new[] { AppSettingType.String, AppSettingType.Select, AppSettingType.String, AppSettingType.String, AppSettingType.Select, AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Integer },
+            new[] { AppSettingType.Search, AppSettingType.String, AppSettingType.Select, AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Integer },
             settings.Select(s => s.Type).ToArray());
 
         var max = settings.Single(s => s.Key == "maxDepartures");
@@ -80,7 +80,6 @@ public class TubeDeparturesAppTests(ITestOutputHelper output)
         Assert.Equal(1, max.MinValue);
         Assert.Equal(12, max.MaxValue);
         Assert.Equal(false, settings.Single(s => s.Key == "colorDeparturesByLine").CurrentValue);
-        Assert.Equal(new[] { "Type at least 2 chars" }, settings.Single(s => s.Key == "stationSelect").Options);
         Assert.Equal("tube-departures", NewApp().Id);
         Assert.Equal("Tube Departures", NewApp().Name);
     }
@@ -105,7 +104,7 @@ public class TubeDeparturesAppTests(ITestOutputHelper output)
         app.UpdateSetting("platformFilter", Json("\"East\""));
         Assert.Equal("East", app.PlatformFilter);
 
-        // The empty stationSelect that gets persisted must not clear the station
+        // The retired stationSelect (and the empty value it used to persist) must not clear the station
         app.UpdateSetting("stationId", "940GZZLUBST");
         app.UpdateSetting("stationSelect", "");
         app.UpdateSetting("stationSelect", "not a selection");
@@ -165,21 +164,6 @@ public class TubeDeparturesAppTests(ITestOutputHelper output)
         Assert.Single(app.Board.Visible);
         Assert.Equal("Aldgate", app.Board.Hero[0].Destination);
         Assert.Equal("3", app.Board.Hero[0].PlatformNumber);
-        await app.OnDeactivatedAsync(CancellationToken.None);
-    }
-
-    [Fact]
-    public async Task StationSearch_PublishesRailStopsAsIdPipeName()
-    {
-        var app = NewApp(new TflStubHandler(), station: "");
-        await app.OnActivatedAsync((64, 256), new ConfigurationBuilder().Build(), CancellationToken.None);
-
-        app.UpdateSetting("stationSearch", "b");
-        Assert.Equal(new[] { "Type at least 2 chars" }, app.GetSettings().Single(s => s.Key == "stationSelect").Options);
-
-        app.UpdateSetting("stationSearch", "baker");
-        await WaitFor(() => app.GetSettings().Single(s => s.Key == "stationSelect").Options!.Contains("940GZZLUBST | Baker Street"));
-        Assert.Equal(new[] { "940GZZLUBST | Baker Street" }, app.GetSettings().Single(s => s.Key == "stationSelect").Options);
         await app.OnDeactivatedAsync(CancellationToken.None);
     }
 

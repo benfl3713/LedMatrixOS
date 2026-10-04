@@ -1,3 +1,4 @@
+using LedMatrixOS.Core.Settings;
 using LedMatrixOS.Core.Overlays;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -101,6 +102,14 @@ public sealed class AppManager
         key = id; preset = null; type = null!;
         return false;
     }
+
+    /// <summary>
+    /// The id of the registered app that serves <paramref name="id"/> (itself, or an alias's target), or null when unknown.
+    /// Never constructs an app.
+    /// </summary>
+    public string? ResolveAppId(string id) => TryResolve(id, out var type, out var key, out _)
+        ? (_aliases.TryGetValue(id, out var alias) && !_appsById.ContainsKey(id) ? _infoById[alias.TargetId].Id : key)
+        : null;
 
     private static void ApplyPreset(IMatrixApp app, IReadOnlyDictionary<string, object>? preset)
     {
@@ -218,7 +227,16 @@ public sealed class AppManager
             foreach (var (key, value) in updates)
             {
                 var before = configurable.GetSettings().FirstOrDefault(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase));
-                if (before == null) { rejected.Add(key); continue; }
+                if (before == null)
+                {
+                    // A retired key (e.g. stationSearch/stationSelect) is still accepted: applied to its replacement, or ignored
+                    if (!SettingsBinder.IsLegacyKey(configurable, key)) { rejected.Add(key); continue; }
+                    try { configurable.UpdateSetting(key, value); } catch { /* see below */ }
+                    foreach (var changed in configurable.GetSettings().Where(x => x.Type is AppSettingType.Search or AppSettingType.MultiSearch))
+                        _settingsStorage?.UpdateAppSetting(storageKey, changed.Key, changed.CurrentValue);
+                    continue;
+                }
+
                 try { configurable.UpdateSetting(key, value); }
                 catch { /* an app that was never activated may fail in its change hook; the value itself is read back below */ }
 

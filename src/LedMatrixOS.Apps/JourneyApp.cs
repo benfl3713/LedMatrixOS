@@ -1,3 +1,4 @@
+using LedMatrixOS.Apps.PlaneSpotter;
 using System.Numerics;
 using LedMatrixOS.Apps.Journey;
 using LedMatrixOS.Apps.Tube;
@@ -29,10 +30,10 @@ public class JourneyApp : WidgetApp
     private const int HeaderHeight = 12;
     private static readonly IReadOnlyList<JourneyToken> NoTokens = [];
 
-    [Setting("From", Description = "Where you start: a postcode, lat,lon or station.")]
+    [Setting("From", Description = "Where you start: search for a place, station or postcode.", Search = true)]
     public string From { get; set; } = "";
 
-    [Setting("To", Description = "Where you are going: a postcode, lat,lon or station.")]
+    [Setting("To", Description = "Where you are going: search for a place, station or postcode.", Search = true)]
     public string To { get; set; } = "";
 
     [Setting("Destination Label", Description = "Short name shown in the header (e.g. Work). Defaults to the To value.")]
@@ -259,10 +260,16 @@ public class JourneyApp : WidgetApp
     private void RefreshLabels()
     {
         (_labelFrom, _labelTo, _labelName) = (From, To, DestinationLabel);
-        var label = string.IsNullOrWhiteSpace(DestinationLabel) ? To : DestinationLabel;
+        var label = string.IsNullOrWhiteSpace(DestinationLabel) ? PlaceGeocoder.DisplayName(To) : DestinationLabel;
         _headerText = string.IsNullOrWhiteSpace(label) ? "JOURNEY" : "TO " + label.Trim().ToUpperInvariant();
-        _fromText = string.IsNullOrWhiteSpace(From) ? "" : "From " + From.Trim();
+        _fromText = string.IsNullOrWhiteSpace(From) ? "" : "From " + PlaceGeocoder.DisplayName(From.Trim());
     }
+
+    /// <summary>What the Journey Planner is asked for: a place picked in the app ("Name|lat,lon") goes as its coordinates, anything else as typed.</summary>
+    internal static string PlannerPoint(string value) =>
+        PlaceGeocoder.TryParseEncoded(value.Trim(), out _, out var c)
+            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{c.Lat},{c.Lon}")
+            : value.Trim();
 
     internal static string ModesParameter(string? modes) => modes switch
     {
@@ -281,7 +288,7 @@ public class JourneyApp : WidgetApp
         if (string.IsNullOrWhiteSpace(From) || string.IsNullOrWhiteSpace(To)) return;
 
         var cts = _cts = new CancellationTokenSource();
-        string from = From, to = To, modes = ModesParameter(Modes);
+        string from = PlannerPoint(From), to = PlannerPoint(To), modes = ModesParameter(Modes);
         var source = _source;
         JourneyResult? lastGood = null;
         _data = Poll(_interval, async ct =>

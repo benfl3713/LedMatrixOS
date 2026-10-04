@@ -31,6 +31,10 @@ public sealed class OpenMeteoWeatherSource(HttpClient http) : IWeatherSource
         location = location.Trim();
         if (_places.TryGetValue(location, out var cached)) return cached;
 
+        // A place picked in the app ("London|51.5085,-0.1257") carries its coordinates.
+        if (PlaneSpotter.PlaceGeocoder.TryParseEncoded(location, out var pickedName, out var picked))
+            return _places[location] = (pickedName, picked.Lat, picked.Lon);
+
         // "51.5,-0.12" skips geocoding.
         var parts = location.Split(',');
         if (parts.Length == 2 &&

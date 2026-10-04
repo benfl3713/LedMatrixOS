@@ -23,7 +23,7 @@ internal sealed record LineStatus(string LineId, string Name, int Severity, stri
     public Health Health => LineHealth.Classify(Severity, Description);
 }
 
-internal sealed record StationMatch(string Id, string Name);
+internal sealed record StationMatch(string Id, string Name, string? Detail = null);
 
 /// <summary>Live state of one Santander Cycles docking station. Value equality, so a label only reformats when something changed.</summary>
 internal sealed record BikePointInfo(string Id, string Name, int NbBikes, int NbEmptyDocks, int NbStandardBikes, int NbEBikes)
@@ -74,25 +74,21 @@ internal sealed class TflApi(HttpClient http)
         return Shape(lines, byName: true);
     }
 
-    /// <summary>
-    /// Rail stops matching <paramref name="query"/> as "id | name" strings (the format of the stationSelect options),
-    /// or a single message such as "No matches".
-    /// </summary>
-    public async Task<(string[] Options, bool Succeeded)> SearchStationsAsync(string query, CancellationToken ct)
+    /// <summary>Rail stops matching <paramref name="query"/> (empty when TfL has none or answers with an error).</summary>
+    public async Task<StationMatch[]> FindStationsAsync(string query, CancellationToken ct)
     {
         var url = WithKey($"{Root}/StopPoint/Search/{Uri.EscapeDataString(query)}", "modes=tube,dlr,overground,elizabeth-line,tram");
-        var response = await http.GetAsync(url, ct);
-        if (!response.IsSuccessStatusCode) return (["No matches"], false);
+        using var response = await http.GetAsync(url, ct);
+        if (!response.IsSuccessStatusCode) return [];
 
         var data = await response.Content.ReadFromJsonAsync<SearchResponse>(ct);
-        var matches = (data?.Matches ?? [])
+        return (data?.Matches ?? [])
             .Where(m => !string.IsNullOrWhiteSpace(m.Id) && !string.IsNullOrWhiteSpace(m.Name))
             .Where(IsLikelyRailStop)
             .DistinctBy(m => m.Id)
             .Take(12)
-            .Select(m => $"{m.Id} | {StripStationSuffix(m.Name)}")
+            .Select(m => new StationMatch(m.Id, StripStationSuffix(m.Name), string.Join(", ", m.Modes ?? [])))
             .ToArray();
-        return (matches.Length > 0 ? matches : ["No matches"], true);
     }
 
     /// <summary>A bus stop's display name with its indicator, e.g. "Victoria Station (Stop B)".</summary>
@@ -104,21 +100,20 @@ internal sealed class TflApi(HttpClient http)
         return string.IsNullOrWhiteSpace(data.Indicator) ? name : $"{name} ({data.Indicator.Trim()})";
     }
 
-    /// <summary>Bus stops matching <paramref name="query"/> as "id | name" strings, or a single message such as "No matches".</summary>
-    public async Task<(string[] Options, bool Succeeded)> SearchBusStopsAsync(string query, CancellationToken ct)
+    /// <summary>Bus stops matching <paramref name="query"/> (empty when TfL has none or answers with an error).</summary>
+    public async Task<StationMatch[]> FindBusStopsAsync(string query, CancellationToken ct)
     {
         var url = WithKey($"{Root}/StopPoint/Search/{Uri.EscapeDataString(query)}", "modes=bus&maxResults=12");
-        var response = await http.GetAsync(url, ct);
-        if (!response.IsSuccessStatusCode) return (["No matches"], false);
+        using var response = await http.GetAsync(url, ct);
+        if (!response.IsSuccessStatusCode) return [];
 
         var data = await response.Content.ReadFromJsonAsync<SearchResponse>(ct);
-        var matches = (data?.Matches ?? [])
+        return (data?.Matches ?? [])
             .Where(m => !string.IsNullOrWhiteSpace(m.Id) && !string.IsNullOrWhiteSpace(m.Name))
             .DistinctBy(m => m.Id)
             .Take(12)
-            .Select(m => $"{m.Id} | {m.Name.Trim()}")
+            .Select(m => new StationMatch(m.Id, m.Name.Trim()))
             .ToArray();
-        return (matches.Length > 0 ? matches : ["No matches"], true);
     }
 
     /// <summary>One Santander Cycles docking station (e.g. "BikePoints_1") with its current bike and dock counts.</summary>
@@ -155,20 +150,19 @@ internal sealed class TflApi(HttpClient http)
         }
     }
 
-    /// <summary>Docking stations matching <paramref name="query"/> as "id | name" strings, or a single message such as "No matches".</summary>
-    public async Task<(string[] Options, bool Succeeded)> SearchBikePointsAsync(string query, CancellationToken ct)
+    /// <summary>Docking stations matching <paramref name="query"/> (empty when TfL has none or answers with an error).</summary>
+    public async Task<StationMatch[]> FindBikePointsAsync(string query, CancellationToken ct)
     {
-        var response = await http.GetAsync(WithKey($"{Root}/BikePoint/Search", $"query={Uri.EscapeDataString(query)}"), ct);
-        if (!response.IsSuccessStatusCode) return (["No matches"], false);
+        using var response = await http.GetAsync(WithKey($"{Root}/BikePoint/Search", $"query={Uri.EscapeDataString(query)}"), ct);
+        if (!response.IsSuccessStatusCode) return [];
 
         var data = await response.Content.ReadFromJsonAsync<ApiBikePoint[]>(ct) ?? [];
-        var matches = data
+        return data
             .Where(m => !string.IsNullOrWhiteSpace(m.Id) && !string.IsNullOrWhiteSpace(m.CommonName))
             .DistinctBy(m => m.Id)
             .Take(12)
-            .Select(m => $"{m.Id} | {CleanDockName(m.CommonName)}")
+            .Select(m => new StationMatch(m.Id, CleanDockName(m.CommonName)))
             .ToArray();
-        return (matches.Length > 0 ? matches : ["No matches"], true);
     }
 
     /// <summary>TfL names read "River Street , Clerkenwell"; tidy the stray space before the comma.</summary>

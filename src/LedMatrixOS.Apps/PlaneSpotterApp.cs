@@ -19,8 +19,8 @@ namespace LedMatrixOS.Apps;
 /// in range listed and paged. A toast announces an aircraft that newly enters range (at most one a minute).
 /// </summary>
 /// <remarks>
-/// The home location is config only: <c>PlaneSpotter:Latitude</c>/<c>PlaneSpotter:Longitude</c>, falling back to <c>Weather:Location</c>
-/// (a place name, geocoded, or "lat,lon"). It is never a setting, so it cannot be read back through the API.
+/// The home location is the Location setting (searched by place name) when set; otherwise <c>PlaneSpotter:Latitude</c>/<c>PlaneSpotter:Longitude</c>
+/// from configuration, falling back to <c>Weather:Location</c> (a place name, geocoded, or "lat,lon").
 /// </remarks>
 public sealed class PlaneSpotterApp : WidgetApp
 {
@@ -33,6 +33,9 @@ public sealed class PlaneSpotterApp : WidgetApp
     public const int MinRadiusKm = 5, MaxRadiusKm = 100;
     public static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(20);
     public static readonly TimeSpan AlertGap = TimeSpan.FromSeconds(60);
+
+    [Setting("Location", Description = "Search for the place to watch. Empty uses the home location from the configuration.", Search = true)]
+    public string Location { get; set; } = "";
 
     [Setting("Radius", Description = "How far from home to look, in km.", Min = MinRadiusKm, Max = MaxRadiusKm)]
     public int Radius { get; set; } = 25;
@@ -53,7 +56,8 @@ public sealed class PlaneSpotterApp : WidgetApp
     private volatile ILiveData<PlaneSnapshot>? _data;
     private (double Lat, double Lon)? _home;
     private string? _placeText;
-    private bool _hasLocation;
+    private bool _hasLocation, _active;
+    private IConfiguration? _configuration;
 
     private State _state = State.Loading;
     private Pager? _pager;
@@ -278,6 +282,11 @@ public sealed class PlaneSpotterApp : WidgetApp
     {
         if (key == "pageSeconds" && _pager is not null) _pager.Interval = PageSeconds.Seconds();
         if (key == "radius" && _pollCts is not null) RestartPolling();
+        if (key == "location" && _active && _configuration is not null)
+        {
+            ReadLocation(_configuration);
+            RestartPolling();
+        }
     }
 
     public override Task OnActivatedAsync((int height, int width) dimensions, IConfiguration configuration, CancellationToken cancellationToken)
@@ -285,6 +294,8 @@ public sealed class PlaneSpotterApp : WidgetApp
         _model.Reset();
         _lastToast = DateTimeOffset.MinValue;
         _appliedRadius = -1;
+        _active = true;
+        _configuration = configuration;
         ReadLocation(configuration);
         RestartPolling();
         return base.OnActivatedAsync(dimensions, configuration, cancellationToken);
@@ -292,6 +303,7 @@ public sealed class PlaneSpotterApp : WidgetApp
 
     public override async Task OnDeactivatedAsync(CancellationToken cancellationToken)
     {
+        _active = false;
         _pollCts?.Cancel();
         _pollCts = null;
         await base.OnDeactivatedAsync(cancellationToken);
@@ -302,7 +314,14 @@ public sealed class PlaneSpotterApp : WidgetApp
     {
         _home = null;
         _placeText = null;
-        if (double.TryParse(configuration["PlaneSpotter:Latitude"], NumberStyles.Float, CultureInfo.InvariantCulture, out var lat) &&
+        if (!string.IsNullOrWhiteSpace(Location))
+        {
+            var place = Location.Trim();
+            if (PlaceGeocoder.TryParseEncoded(place, out _, out var picked)) _home = picked;
+            else if (PlaceGeocoder.TryParseCoordinates(place, out var c)) _home = c;
+            else if (_geocoder is not null) _placeText = place;
+        }
+        else if (double.TryParse(configuration["PlaneSpotter:Latitude"], NumberStyles.Float, CultureInfo.InvariantCulture, out var lat) &&
             double.TryParse(configuration["PlaneSpotter:Longitude"], NumberStyles.Float, CultureInfo.InvariantCulture, out var lon) &&
             PlaneMath.IsValidCoordinate(lat, lon))
             _home = (lat, lon);

@@ -16,6 +16,8 @@ namespace LedMatrixOS.Apps;
 /// destination and rolling minutes); the pager slides between stops. Buses enter and leave the list with an animation as they
 /// arrive and depart. TfL polling lives here, the board derivation in <see cref="DepartureBoardModel"/>, HTTP in <see cref="TflApi"/>.
 /// </summary>
+[LegacySettingKey("stopSearch")]
+[LegacySettingKey("stopSelect", "stopIds")]
 public class BusArrivalsApp : WidgetApp
 {
     public override string Id => "bus-arrivals";
@@ -25,10 +27,7 @@ public class BusArrivalsApp : WidgetApp
     public const int MaxStops = 4;
     private static readonly IReadOnlyList<StopToken> NoTokens = [];
 
-    [Setting("Stop Search", Description = "Type a bus stop name (e.g. Victoria Station).")]
-    public string StopSearch { get; set; } = "";
-
-    [Setting("Stop IDs", Description = "Comma separated TfL stop IDs, up to 4 (added automatically when you pick from Stop Select).")]
+    [Setting("Stops", Description = "Search for bus stops, up to 4.", MultiSearch = true, Max = MaxStops)]
     public string StopIds { get; set; } = "";
 
     [Setting("Route Filter", Description = "Only show these routes, comma separated (e.g. 73,38). Leave empty to show all.")]
@@ -49,8 +48,6 @@ public class BusArrivalsApp : WidgetApp
     private IReadOnlyList<StopToken> _tokens = NoTokens;
     private CancellationTokenSource? _pollCts;
 
-    private readonly TflStopPicker _picker;
-
     private Pager? _pager;
     private Label? _message;
     private bool _entered, _boardShown;
@@ -60,8 +57,6 @@ public class BusArrivalsApp : WidgetApp
         _http = httpClient;
         _http.Timeout = TimeSpan.FromSeconds(10);
         _api = new TflApi(_http);
-        _picker = new TflStopPicker("stopSearch", "stopSelect", "Stop Select", "Choose a result to add the stop.",
-            () => StopSearch, _api.SearchBusStopsAsync, AddStop, RunInBackground);
     }
 
     // ---- view -------------------------------------------------------------------------------------------------------------------
@@ -155,19 +150,10 @@ public class BusArrivalsApp : WidgetApp
 
     // ---- settings ---------------------------------------------------------------------------------------------------------------
 
-    // stopSelect has options that change as the user types, so it is not a [Setting] property.
-    public override IEnumerable<AppSetting> GetSettings() => _picker.WithSelect(base.GetSettings());
-
-    public override void UpdateSetting(string key, object value)
-    {
-        if (!_picker.TryUpdate(key, value)) base.UpdateSetting(key, value);
-    }
-
     protected override void OnSettingChanged(string key)
     {
         switch (key)
         {
-            case "stopSearch": _picker.OnQueryChanged(); break;
             case "stopIds": RestartPolling(); break;
             case "pageSeconds":
                 if (_pager is not null) _pager.Interval = PageSeconds.Seconds();
@@ -221,16 +207,6 @@ public class BusArrivalsApp : WidgetApp
     {
         _feeds = feeds;
         _tokens = feeds.Select((f, i) => new StopToken(i, f.StopId)).ToArray();
-    }
-
-    private void AddStop(string stopId)
-    {
-        var ids = ParseStopIds(StopIds).ToList();
-        if (ids.Contains(stopId, StringComparer.OrdinalIgnoreCase)) return;
-        if (ids.Count >= MaxStops) ids.RemoveAt(0);
-        ids.Add(stopId);
-        StopIds = string.Join(",", ids);
-        RestartPolling();
     }
 
     internal IReadOnlyList<BusStopFeed> Feeds => _feeds;

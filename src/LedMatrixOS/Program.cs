@@ -1,3 +1,4 @@
+using LedMatrixOS.Core.Settings;
 using System.Text.Json;
 using LedMatrixOS;
 using LedMatrixOS.Apps;
@@ -40,6 +41,12 @@ builder.Services.AddSingleton<AppManager>(sp =>
 {
     var settingsStorage = sp.GetRequiredService<AppSettingsStorage>();
     return new AppManager(sp, builder.Configuration, height, width, settingsStorage);
+});
+builder.Services.AddSingleton<SettingOptionsRegistry>(sp =>
+{
+    var registry = new SettingOptionsRegistry();
+    BuiltInSettingOptions.Register(registry, sp.GetRequiredService<IHttpClientFactory>().CreateClient(), builder.Configuration);
+    return registry;
 });
 builder.Services.AddSingleton<LedMatrixOS.Core.Screens.ScreenStore>();
 builder.Services.AddSingleton<LedMatrixOS.Core.Screens.IScreenStore>(sp => sp.GetRequiredService<LedMatrixOS.Core.Screens.ScreenStore>());
@@ -131,14 +138,25 @@ app.MapPost("/api/apps/{id}", async (string id, AppManager appManager, Cancellat
     return ok ? Results.Ok(new { activeApp = id }) : Results.NotFound();
 });
 
-app.MapGet("/api/apps/{id}/settings", (string id, AppManager appManager) =>
+app.MapGet("/api/apps/{id}/settings", async (string id, AppManager appManager, SettingOptionsRegistry options, CancellationToken ct) =>
 {
     var lookup = appManager.GetSettings(id);
-    return lookup.Status switch
-    {
-        SettingsStatus.NotFound => Results.NotFound($"Unknown app '{id}'"),
-        _ => Results.Ok(new { appId = id, settings = lookup.Settings }),
-    };
+    if (lookup.Status == SettingsStatus.NotFound) return Results.NotFound($"Unknown app '{id}'");
+
+    // Search/MultiSearch settings also report the label(s) of what is picked; a lookup that fails just leaves the id as the label
+    var settings = await options.WithLabelsAsync(appManager.ResolveAppId(id) ?? id, lookup.Settings, ct);
+    return Results.Ok(new { appId = id, settings });
+});
+
+// Live options behind a Search/MultiSearch setting. Stateless: works for inactive apps and aliases, and never touches an app instance.
+app.MapGet("/api/apps/{id}/settings/{key}/options", async (string id, string key, string? q, AppManager appManager, SettingOptionsRegistry options, CancellationToken ct) =>
+{
+    var appId = appManager.ResolveAppId(id);
+    if (appId == null) return Results.NotFound($"Unknown app '{id}'");
+    if (!options.Has(appId, key)) return Results.NotFound($"App '{id}' has no searchable setting '{key}'");
+
+    var found = await options.SearchAsync(appId, key, q, ct);
+    return Results.Ok(found.Select(o => new { value = o.Value, label = o.Label, subtitle = o.Subtitle }));
 });
 
 app.MapPost("/api/apps/{id}/settings", (string id, Dictionary<string, object> settingsUpdate, AppManager appManager) =>

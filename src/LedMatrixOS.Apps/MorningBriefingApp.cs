@@ -20,6 +20,8 @@ namespace LedMatrixOS.Apps;
 /// The data comes from the same adapters as the Home chips, Commute and Bin Day apps (feed URLs and keys stay configuration: <c>Calendar:IcsUrl</c>,
 /// <c>TFL:AppKey</c>, <c>Weather:Location</c>). Activating the app again replays from the first card; give the playlist entry <see cref="TotalSeconds"/>.
 /// </summary>
+[LegacySettingKey("stationSearch")]
+[LegacySettingKey("stationSelect", "stationId")]
 public class MorningBriefingApp : WidgetApp
 {
     public override string Id => "morning-briefing";
@@ -29,10 +31,7 @@ public class MorningBriefingApp : WidgetApp
     /// <summary>Length of the slide between two cards.</summary>
     private static readonly TimeSpan SlideTime = TimeSpan.FromMilliseconds(500);
 
-    [Setting("Station Search", Description = "Type a station name (e.g. Baker Street), then choose it in Station Select.")]
-    public string StationSearch { get; set; } = "";
-
-    [Setting("Station ID", Description = "TfL Naptan ID for the commute card (filled in when you choose a result from Station Select). Empty skips the card.")]
+    [Setting("Station", Description = "Station for the commute card (search by name). Empty skips the card.", Search = true)]
     public string StationId { get; set; } = "";
 
     [Setting("Walk Minutes", Description = "How long it takes you to get to the platform.", Min = 0, Max = 60)]
@@ -67,7 +66,6 @@ public class MorningBriefingApp : WidgetApp
         Func<ILiveData<TflArrival[]>, CancellationToken, Task<LineStatus[]>>? Statuses);
 
     private readonly HttpClient? _http;
-    private readonly TflStopPicker _picker;
     private readonly BriefingModel _model = new();
     private readonly BriefingProgress _progress = new();
 
@@ -93,14 +91,6 @@ public class MorningBriefingApp : WidgetApp
         {
             try { http.Timeout = TimeSpan.FromSeconds(20); } catch (InvalidOperationException) { }
         }
-
-        _picker = new TflStopPicker("stationSearch", "stationSelect", "Station Select", "Choose a result to set the station automatically.",
-            () => StationSearch, (q, ct) => new TflApi(http ?? new HttpClient()) { AppKey = _appKey }.SearchStationsAsync(q, ct),
-            id =>
-            {
-                StationId = id;
-                if (_active) StartPolls();
-            }, RunInBackground);
     }
 
     private string? _appKey;
@@ -189,10 +179,9 @@ public class MorningBriefingApp : WidgetApp
         await base.OnDeactivatedAsync(cancellationToken);
     }
 
-    // stationSelect has options that change as the user types, so it is not a [Setting] property.
     public override IEnumerable<AppSetting> GetSettings()
     {
-        foreach (var setting in _picker.WithSelect(base.GetSettings()))
+        foreach (var setting in base.GetSettings())
         {
             if (setting.Key == "pageSeconds")
             {
@@ -206,14 +195,8 @@ public class MorningBriefingApp : WidgetApp
         }
     }
 
-    public override void UpdateSetting(string key, object value)
-    {
-        if (!_picker.TryUpdate(key, value)) base.UpdateSetting(key, value);
-    }
-
     protected override void OnSettingChanged(string key)
     {
-        if (key == "stationSearch") _picker.OnQueryChanged();
         if (_active && key is "stationId" or "units" or "showWeather" or "showCalendar" or "showCommute") StartPolls();
     }
 
@@ -249,7 +232,7 @@ public class MorningBriefingApp : WidgetApp
             (fahrenheit, ct) => weather.GetAsync(new WeatherQuery(location, fahrenheit), ct),
             events,
             api.GetArrivalsAsync,
-            (arrivals, ct) => TflStopPicker.FetchLineStatusesAsync(api, arrivals, ct));
+            (arrivals, ct) => TflLookups.FetchLineStatusesAsync(api, arrivals, ct));
     }
 
     private void StopPolls()

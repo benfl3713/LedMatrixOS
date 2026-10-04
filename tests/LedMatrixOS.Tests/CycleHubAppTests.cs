@@ -90,9 +90,9 @@ public class CycleHubAppTests(ITestOutputHelper output)
         var app = NewApp();
         var settings = app.GetSettings().ToList();
 
-        Assert.Equal(new[] { "dockSearch", "dockSelect", "dockIds", "pageSeconds", "units" }, settings.Select(s => s.Key).ToArray());
+        Assert.Equal(new[] { "dockIds", "pageSeconds", "units" }, settings.Select(s => s.Key).ToArray());
         Assert.Equal(
-            new[] { AppSettingType.String, AppSettingType.Select, AppSettingType.String, AppSettingType.Integer, AppSettingType.Select },
+            new[] { AppSettingType.MultiSearch, AppSettingType.Integer, AppSettingType.Select },
             settings.Select(s => s.Type).ToArray());
         Assert.Equal("cycle-hub", app.Id);
         Assert.Equal("Cycle Hub", app.Name);
@@ -182,13 +182,12 @@ public class CycleHubAppTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task SearchBikePoints_ReturnsDistinctIdAndNameOptions()
+    public async Task FindBikePoints_ReturnsDistinctIdAndNameMatches()
     {
         var handler = new BikePointStubHandler();
-        var (options, ok) = await new TflApi(new HttpClient(handler)).SearchBikePointsAsync("hyde park", CancellationToken.None);
+        var matches = await new TflApi(new HttpClient(handler)).FindBikePointsAsync("hyde park", CancellationToken.None);
 
-        Assert.True(ok);
-        Assert.Equal(["BikePoints_42 | Hyde Park Corner, Hyde Park", "BikePoints_7 | Park Lane, Mayfair"], options);
+        Assert.Equal(["BikePoints_42 | Hyde Park Corner, Hyde Park", "BikePoints_7 | Park Lane, Mayfair"], matches.Select(m => $"{m.Id} | {m.Name}").ToArray());
         Assert.Contains(handler.Requests, r => r.Contains("/BikePoint/Search?query=hyde park"));
     }
 

@@ -17,6 +17,8 @@ namespace LedMatrixOS.Apps;
 /// (green, amber, then a flashing GO), next to the current weather; the strip along the bottom carries the status of every line serving the
 /// station, and the clock. Reuses the Tube departures data and the Open-Meteo weather source; the maths lives in <see cref="CommutePlanner"/>.
 /// </summary>
+[LegacySettingKey("stationSearch")]
+[LegacySettingKey("stationSelect", "stationId")]
 public class CommuteApp : WidgetApp
 {
     public override string Id => "commute";
@@ -26,10 +28,7 @@ public class CommuteApp : WidgetApp
     private static readonly IReadOnlyList<LineStatus> NoStatuses = [];
 
 
-    [Setting("Station Search", Description = "Type a station name (e.g. Baker Street), then choose it in Station Select.")]
-    public string StationSearch { get; set; } = "";
-
-    [Setting("Station ID", Description = "TfL Naptan ID (filled in when you choose a result from Station Select).")]
+    [Setting("Station", Description = "Search for a station (e.g. Baker Street).", Search = true)]
     public string StationId { get; set; } = "";
 
     [Setting("Platform Filter", Description = "Only trains whose platform contains this text (e.g. 'Eastbound'). Leave empty for all.")]
@@ -38,7 +37,7 @@ public class CommuteApp : WidgetApp
     [Setting("Walk Minutes", Description = "How long it takes you to get to the platform.", Min = 0, Max = 60)]
     public int WalkMinutes { get; set; } = 8;
 
-    [Setting("Location", Description = "Place name (e.g. London) or coordinates as 'lat,lon' for the weather.")]
+    [Setting("Location", Description = "Search for a place for the weather.", Search = true)]
     public string Location { get; set; } = "London";
 
     [Setting("Units", Description = "Temperature units.", Options = ["Celsius", "Fahrenheit"])]
@@ -54,8 +53,6 @@ public class CommuteApp : WidgetApp
     private CancellationTokenSource? _stationCts, _weatherCts;
     private bool _active, _locationFromUser;
 
-    private readonly TflStopPicker _picker;
-
     private LeaveCard? _card;
     private WeatherChip? _chip;
     private StateScreen? _state;
@@ -67,12 +64,6 @@ public class CommuteApp : WidgetApp
         httpClient.Timeout = TimeSpan.FromSeconds(10);
         _api = new TflApi(httpClient);
         _weatherSource = new OpenMeteoWeatherSource(httpClient);
-        _picker = new TflStopPicker("stationSearch", "stationSelect", "Station Select", "Choose a result to set the station automatically.",
-            () => StationSearch, _api.SearchStationsAsync, id =>
-            {
-                StationId = id;
-                if (_active) RestartStationPolling();
-            }, RunInBackground);
     }
 
     // ---- view -------------------------------------------------------------------------------------------------------------------
@@ -184,17 +175,8 @@ public class CommuteApp : WidgetApp
         await base.OnDeactivatedAsync(cancellationToken);
     }
 
-    // stationSelect has options that change as the user types, so it is not a [Setting] property.
-    public override IEnumerable<AppSetting> GetSettings() => _picker.WithSelect(base.GetSettings());
-
-    public override void UpdateSetting(string key, object value)
-    {
-        if (!_picker.TryUpdate(key, value)) base.UpdateSetting(key, value);
-    }
-
     protected override void OnSettingChanged(string key)
     {
-        if (key == "stationSearch") _picker.OnQueryChanged();
         if (!_active) return;
         switch (key)
         {
@@ -219,7 +201,7 @@ public class CommuteApp : WidgetApp
         var cts = _stationCts = new CancellationTokenSource();
         var arrivals = Poll(TimeSpan.FromSeconds(30), ct => _api.GetArrivalsAsync(stationId, ct), cts.Token);
         _arrivals = arrivals;
-        _lineStatuses = Poll(TimeSpan.FromMinutes(5), ct => TflStopPicker.FetchLineStatusesAsync(_api, arrivals, ct), cts.Token);
+        _lineStatuses = Poll(TimeSpan.FromMinutes(5), ct => TflLookups.FetchLineStatusesAsync(_api, arrivals, ct), cts.Token);
     }
 
     private void RestartWeatherPolling()
