@@ -67,10 +67,10 @@ public class TubeDeparturesAppTests(ITestOutputHelper output)
         var settings = NewApp().GetSettings().ToList();
 
         Assert.Equal(
-            new[] { "stationId", "platformFilter", "boardStyle", "maxDepartures", "colorDeparturesByLine", "pageSeconds" },
+            new[] { "stationId", "routes", "platformFilter", "boardStyle", "maxDepartures", "colorDeparturesByLine", "pageSeconds" },
             settings.Select(s => s.Key).ToArray());
         Assert.Equal(
-            new[] { AppSettingType.Search, AppSettingType.String, AppSettingType.Select, AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Integer },
+            new[] { AppSettingType.Search, AppSettingType.MultiSearch, AppSettingType.String, AppSettingType.Select, AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Integer },
             settings.Select(s => s.Type).ToArray());
 
         var max = settings.Single(s => s.Key == "maxDepartures");
@@ -398,6 +398,133 @@ public class TubeDeparturesAppTests(ITestOutputHelper output)
     {
         var (_, stage, _) = Board(CommuteBoard(40), style: "Platform");
         Golden(stage, "tube_departures_platform_due");
+    }
+
+    // ---- routes (Baker Street style interchange) ------------------------------------------------------------------
+
+    private const string MetEast = "metropolitan|Eastbound";
+    private const string JubileeSouth = "jubilee|Southbound";
+
+    private static (TubeDeparturesApp App, AppStage Stage, MutableLive<TflArrival[]> Arrivals) BakerBoard(string routes, string style, int max = 3) =>
+        BoardWithRoutes(BakerStreet(), routes, style, max);
+
+    private static (TubeDeparturesApp App, AppStage Stage, MutableLive<TflArrival[]> Arrivals) BoardWithRoutes(TflArrival[] arrivals, string routes, string style, int max)
+    {
+        var app = NewApp();
+        app.MaxDepartures = max;
+        app.BoardStyle = style;
+        app.Routes = routes;
+        var live = new MutableLive<TflArrival[]> { Value = arrivals };
+        app.UseData(live, new MutableLive<LineStatus[]> { Value = StationLines() }, new MutableLive<string> { Value = "Baker Street" });
+        var stage = new AppStage(app);
+        stage.Step(33, 1500 / 33);
+        return (app, stage, live);
+    }
+
+    [Fact]
+    public void Routes_EmptyKeepsEverything_ASelectionKeepsOnlyThoseTrains()
+    {
+        var (all, _, _) = BakerBoard("", "Hero", max: 12);
+        Assert.Equal(BakerStreet().Length, all.Board.Visible.Count);
+
+        var (one, _, _) = BakerBoard(MetEast, "Hero", max: 12);
+        Assert.Equal(3, one.Board.Visible.Count);
+        Assert.All(one.Board.Visible, d => Assert.Equal(MetEast, d.RouteKey, ignoreCase: true));
+
+        var (two, _, _) = BakerBoard(MetEast + "," + JubileeSouth, "Hero", max: 12);
+        Assert.Equal(5, two.Board.Visible.Count);
+
+        var (none, _, _) = BakerBoard("bakerloo|Northbound", "Hero", max: 12);
+        Assert.Empty(none.Board.Visible);
+    }
+
+    [Fact]
+    public void Routes_MatchOnDestinationWhenThePlatformNameHasNoDirection()
+    {
+        TflArrival[] arrivals =
+        [
+            Arrival("1", "metropolitan", "Aldgate", 100, "Platform 1", "Metropolitan"),
+            Arrival("2", "metropolitan", "Amersham", 200, "Platform 2", "Metropolitan"),
+        ];
+        var (app, _, _) = BoardWithRoutes(arrivals, "metropolitan|towards:Aldgate", "Hero", 12);
+        var only = Assert.Single(app.Board.Visible);
+        Assert.Equal("Aldgate", only.Destination);
+        Assert.Equal("Metropolitan towards Aldgate", only.RouteLabel);
+    }
+
+    [Fact]
+    public void Routes_AreCaseInsensitive_AndPlatformFilterStillApplies()
+    {
+        var (app, stage, _) = BakerBoard("METROPOLITAN|eastbound", "Hero", max: 12);
+        Assert.Equal(3, app.Board.Visible.Count);
+
+        app.UpdateSetting("platformFilter", "Platform 6");   // the fallback filter narrows within the routes
+        stage.Step(33, 2);
+        Assert.Single(app.Board.Visible);
+    }
+
+    [Fact]
+    public void Routes_PlatformNumberOnlyWhereARouteHasSeveralPlatforms()
+    {
+        var (app, _, _) = BakerBoard("", "Hero", max: 12);
+        foreach (var d in app.Board.Visible)
+            Assert.Equal(d.RouteKey.Equals(MetEast, StringComparison.OrdinalIgnoreCase), d.ShowPlatform);
+    }
+
+    [Fact]
+    public void Split_ColumnsAreTheSelectedRoutes()
+    {
+        var (app, _, _) = BakerBoard(MetEast + "," + JubileeSouth, "Split");
+        Assert.True(app.Board.ColumnsByRoute);
+        Assert.Equal(2, app.Board.ColumnCount);
+        Assert.Equal(new[] { "Jubilee Southbound", "Metropolitan Eastbound" }, new[] { app.Board.ColumnLabel(0), app.Board.ColumnLabel(1) });
+        Assert.Equal(2, app.Board.Column(0).Count);
+        Assert.Equal(3, app.Board.Column(1).Count);
+
+        var (unfiltered, _, _) = BakerBoard("", "Split");
+        Assert.False(unfiltered.Board.ColumnsByRoute);   // no selection: columns stay the directions
+    }
+
+    [Fact]
+    public void Golden_Baker_Split_NoFilter() => Golden(BakerBoard("", "Split").Stage, "tube_departures_baker_split_all");
+
+    [Fact]
+    public void Golden_Baker_Split_OneRoute() => Golden(BakerBoard(MetEast, "Split").Stage, "tube_departures_baker_split_route");
+
+    [Fact]
+    public void Golden_Baker_Split_TwoRoutes() => Golden(BakerBoard(MetEast + "," + JubileeSouth, "Split").Stage, "tube_departures_baker_split_two_routes");
+
+    [Fact]
+    public void Golden_Baker_Platform_NoFilter() => Golden(BakerBoard("", "Platform", max: 5).Stage, "tube_departures_baker_platform_all");
+
+    [Fact]
+    public void Golden_Baker_Hero_OneRoute() => Golden(BakerBoard(MetEast, "Hero").Stage, "tube_departures_baker_hero_route");
+
+    [Theory]
+    [InlineData("Split", "metropolitan|Eastbound,jubilee|Southbound")]
+    [InlineData("Platform", "")]
+    [InlineData("Hero", "metropolitan|Eastbound")]
+    public void Routes_DoNotAllocateInSteadyState(string style, string routes)
+    {
+        var (app, stage, _) = BoardWithRoutes(BakerStreet(1500), routes, style, 5);
+        for (int i = 0; i < 400; i++) { stage.Step(33); stage.Render(); }
+
+        int measured = 0;
+        long least = long.MaxValue;
+        for (int window = 0; window < 12; window++)
+        {
+            string text = app.StripTicker!.Current;
+            int page = app.RestPager!.PageIndex;
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 60; i++) { stage.Step(33); stage.Render(); }
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            if (text != app.StripTicker.Current || page != app.RestPager.PageIndex || app.RestPager.IsTransitioning) continue;
+            measured++;
+            least = Math.Min(least, allocated);
+        }
+
+        Assert.True(measured >= 3);
+        Assert.True(least < 256, $"{style}: least allocation in a steady window: {least} bytes");
     }
 
     [Fact]

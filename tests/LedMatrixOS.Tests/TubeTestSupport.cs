@@ -115,6 +115,22 @@ internal static class TubeFixtures
         Arrival("505", "victoria", "Brixton", firstSeconds + 650, "Southbound - Platform 2"),
     ];
 
+    /// <summary>An interchange like Baker Street: several lines, several platforms, and one route (Metropolitan eastbound) served from two platforms.</summary>
+    public static TflArrival[] BakerStreet(int firstSeconds = 150) =>
+    [
+        Arrival("m1", "metropolitan", "Aldgate", firstSeconds, "Eastbound - Platform 5", "Metropolitan"),
+        Arrival("m2", "metropolitan", "Aldgate", firstSeconds + 110, "Eastbound - Platform 6", "Metropolitan"),
+        Arrival("m3", "metropolitan", "Aldgate", firstSeconds + 420, "Eastbound - Platform 5", "Metropolitan"),
+        Arrival("m4", "metropolitan", "Amersham", firstSeconds + 60, "Westbound - Platform 4", "Metropolitan"),
+        Arrival("m5", "metropolitan", "Watford", firstSeconds + 300, "Westbound - Platform 4", "Metropolitan"),
+        Arrival("c1", "circle", "Edgware Road (Circle)", firstSeconds + 30, "Westbound - Platform 2", "Circle"),
+        Arrival("h1", "hammersmith-city", "Barking", firstSeconds + 90, "Eastbound - Platform 3", "Hammersmith & City"),
+        Arrival("j1", "jubilee", "Stratford", firstSeconds + 20, "Southbound - Platform 1", "Jubilee"),
+        Arrival("j2", "jubilee", "Stratford", firstSeconds + 250, "Southbound - Platform 1", "Jubilee"),
+        Arrival("j3", "jubilee", "Stanmore", firstSeconds + 140, "Northbound - Platform 7", "Jubilee"),
+        Arrival("b1", "bakerloo", "Elephant & Castle", firstSeconds + 200, "Southbound - Platform 8", "Bakerloo"),
+    ];
+
     public static LineStatus[] StationLines() =>
     [
         Status("circle", 10, "Good Service"),

@@ -169,6 +169,7 @@ class AppSetting {
     this.options,
     this.currentLabel,
     this.currentLabels,
+    this.browse = false,
   });
 
   final String key;
@@ -184,6 +185,10 @@ class AppSetting {
   /// Search: label of the picked id. MultiSearch: labels in the order of the comma separated ids.
   final String? currentLabel;
   final List<String>? currentLabels;
+
+  /// Search/MultiSearch whose options are a short list computed from the app's other settings (e.g. the routes of the
+  /// chosen station): shown straight away, no typing needed.
+  final bool browse;
 
   /// Picked ids of a MultiSearch setting.
   List<String> get currentIds => (currentValue?.toString() ?? '')
@@ -211,6 +216,7 @@ class AppSetting {
       options: options is List ? options.map((e) => e.toString()).toList() : null,
       currentLabel: json['currentLabel'] as String?,
       currentLabels: labels is List ? labels.map((e) => e.toString()).toList() : null,
+      browse: json['browse'] == true,
     );
   }
 
@@ -226,5 +232,6 @@ class AppSetting {
         options: options,
         currentLabel: currentLabel ?? this.currentLabel,
         currentLabels: currentLabels ?? this.currentLabels,
+        browse: browse,
       );
 }

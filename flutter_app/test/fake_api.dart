@@ -25,6 +25,9 @@ class FakeApi implements LedApi {
   final List<Map<String, Object?>> settingUpdates = [];
   final List<String> optionQueries = [];
 
+  /// The `ctx` the client sent with each option query (parallel to [optionQueries]).
+  final List<Map<String, String>> optionContexts = [];
+
   /// Answers option searches; defaults to no results.
   Future<Result<List<SettingOption>>> Function(String key, String q)? optionsHandler;
 
@@ -85,8 +88,9 @@ class FakeApi implements LedApi {
   }
 
   @override
-  Future<Result<List<SettingOption>>> getSettingOptions(String appId, String key, String q) async {
+  Future<Result<List<SettingOption>>> getSettingOptions(String appId, String key, String q, {Map<String, String> context = const {}}) async {
     optionQueries.add(q);
+    optionContexts.add(context);
     final h = optionsHandler;
     if (h == null) return const Ok(<SettingOption>[]);
     return h(key, q);

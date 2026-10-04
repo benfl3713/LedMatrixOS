@@ -149,13 +149,20 @@ app.MapGet("/api/apps/{id}/settings", async (string id, AppManager appManager, S
 });
 
 // Live options behind a Search/MultiSearch setting. Stateless: works for inactive apps and aliases, and never touches an app instance.
-app.MapGet("/api/apps/{id}/settings/{key}/options", async (string id, string key, string? q, AppManager appManager, SettingOptionsRegistry options, CancellationToken ct) =>
+// Options that depend on another setting (the routes of a station) read it from "ctx.<key>=<value>" query parameters, and fall back to the
+// persisted value of any setting the client did not send.
+app.MapGet("/api/apps/{id}/settings/{key}/options", async (string id, string key, string? q, HttpRequest request, AppManager appManager, SettingOptionsRegistry options, CancellationToken ct) =>
 {
     var appId = appManager.ResolveAppId(id);
     if (appId == null) return Results.NotFound($"Unknown app '{id}'");
     if (!options.Has(appId, key)) return Results.NotFound($"App '{id}' has no searchable setting '{key}'");
 
-    var found = await options.SearchAsync(appId, key, q, ct);
+    var context = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var setting in appManager.GetSettings(id).Settings) context[setting.Key] = setting.CurrentValue?.ToString() ?? "";
+    foreach (var (name, value) in request.Query)
+        if (name.StartsWith("ctx.", StringComparison.OrdinalIgnoreCase) && name.Length > 4) context[name[4..]] = value.ToString();
+
+    var found = await options.SearchAsync(appId, key, q, context, ct);
     return Results.Ok(found.Select(o => new { value = o.Value, label = o.Label, subtitle = o.Subtitle }));
 });
 

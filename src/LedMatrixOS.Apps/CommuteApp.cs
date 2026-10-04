@@ -31,7 +31,10 @@ public class CommuteApp : WidgetApp
     [Setting("Station", Description = "Search for a station (e.g. Baker Street).", Search = true)]
     public string StationId { get; set; } = "";
 
-    [Setting("Platform Filter", Description = "Only trains whose platform contains this text (e.g. 'Eastbound'). Leave empty for all.")]
+    [Setting("Routes", Description = "Only trains on these lines and directions (e.g. Metropolitan towards Aldgate). Leave empty for all.", MultiSearch = true, Browse = true)]
+    public string Routes { get; set; } = "";
+
+    [Setting("Platform Filter", Description = "Advanced: only trains whose platform contains this text (e.g. 'Eastbound'). Prefer Routes; leave empty for all.")]
     public string PlatformFilter { get; set; } = "";
 
     [Setting("Walk Minutes", Description = "How long it takes you to get to the platform.", Min = 0, Max = 60)]
@@ -114,7 +117,7 @@ public class CommuteApp : WidgetApp
     public override void Update(FrameContext context, CancellationToken cancellationToken)
     {
         _ = Host;   // builds the tree on the first frame
-        _model.Refresh(context.Time, _arrivals?.Value, PlatformFilter, 12);
+        _model.Refresh(context.Time, _arrivals?.Value, PlatformFilter, 12, routes: Routes);
 
         bool hasTrains = _model.Visible.Count > 0;
         _card!.Plan = CommutePlanner.Plan(_model.Visible, context.Time, WalkMinutes);

@@ -77,9 +77,21 @@ class AppSettingsView extends ConsumerWidget {
                           key: ValueKey(s.key),
                           setting: s,
                           appId: app.id,
+                          // Options may depend on the other settings (the routes of the chosen station)
+                          optionsContext: s.type == AppSettingType.search || s.type == AppSettingType.multiSearch
+                              ? {for (final o in list) if (o.key != s.key) o.key: o.currentValue?.toString() ?? ''}
+                              : const {},
                           onChanged: (v) => ref.read(appSettingsProvider(app.id).notifier).edit(s.key, v),
-                          onSearchChanged: (v, {label, labels}) =>
-                              ref.read(appSettingsProvider(app.id).notifier).edit(s.key, v, label: label, labels: labels),
+                          onSearchChanged: (v, {label, labels}) {
+                            final notifier = ref.read(appSettingsProvider(app.id).notifier);
+                            notifier.edit(s.key, v, label: label, labels: labels);
+                            if (s.key == 'stationId') {
+                              // Routes belong to one station: a new station starts with none picked
+                              for (final o in list) {
+                                if (o.browse && (o.currentValue?.toString() ?? '').isNotEmpty) notifier.edit(o.key, '', labels: const []);
+                              }
+                            }
+                          },
                         ),
                       ),
                   ],
@@ -92,10 +104,13 @@ class AppSettingsView extends ConsumerWidget {
 
 /// One editor for one setting, chosen by its type.
 class SettingTile extends StatelessWidget {
-  const SettingTile({super.key, required this.setting, required this.onChanged, this.appId, this.onSearchChanged});
+  const SettingTile({super.key, required this.setting, required this.onChanged, this.appId, this.onSearchChanged, this.optionsContext = const {}});
 
   final AppSetting setting;
   final ValueChanged<Object> onChanged;
+
+  /// Current values of the app's other settings, sent with option requests of Search/MultiSearch settings.
+  final Map<String, String> optionsContext;
 
   /// Needed for Search/MultiSearch settings, which query the options endpoint.
   final String? appId;
@@ -175,6 +190,7 @@ class SettingTile extends StatelessWidget {
         return SearchSetting(
           setting: s,
           appId: appId!,
+          context: optionsContext,
           onChanged: onSearchChanged ?? (v, {label, labels}) => onChanged(v),
         );
 

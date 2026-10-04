@@ -30,7 +30,10 @@ public class TubeDeparturesApp : WidgetApp
     [Setting("Station", Description = "Search for a station (e.g. Baker Street).", Search = true)]
     public string StationId { get; set; } = "";
 
-    [Setting("Platform Filter", Description = "Filter by platform name (e.g. 'Eastbound'). Leave empty to show all platforms.")]
+    [Setting("Routes", Description = "Only show these lines and directions (e.g. Metropolitan towards Aldgate). Leave empty to show everything.", MultiSearch = true, Browse = true)]
+    public string Routes { get; set; } = "";
+
+    [Setting("Platform Filter", Description = "Advanced: filter by platform name text (e.g. 'Eastbound'). Prefer Routes; leave empty to show everything.")]
     public string PlatformFilter { get; set; } = "";
 
     [Setting("Board Style", Description = "Split: a column per direction with the next trains of each. Platform: classic amber platform sign. Hero: the next train big, the rest paged below.",
@@ -62,6 +65,7 @@ public class TubeDeparturesApp : WidgetApp
     private Node? _board, _strip;
     private Node? _heroBody, _splitBody, _platformBody, _splitDivider, _splitSecond, _stripNormal, _stripPlatform;
     private Ticker? _platformTicker;
+    private Block? _stripe0, _stripe1;
     private Node? _rest;
     private Pager? _pager;
     private StateScreen? _state;
@@ -152,6 +156,9 @@ public class TubeDeparturesApp : WidgetApp
     {
         Node Column(int index)
         {
+            // With routes selected the header carries the line colour as a stripe; the label reads "Metropolitan towards Aldgate"
+            var stripe = new Block(default, width: 3) { Visible = false, HAlign = Align.Start };
+            if (index == 0) _stripe0 = stripe; else _stripe1 = stripe;
             var header = new Panel
             {
                 Height = 10,
@@ -159,8 +166,9 @@ public class TubeDeparturesApp : WidgetApp
                 Children =
                 {
                     new Block(new Pixel(22, 22, 30)),
+                    stripe,
                     new Label(() => _model.ColumnLabel(index) is { Length: > 0 } label ? label : "Next trains")
-                        { Style = styles.TinyAmber, VAlign = Align.Center, Margin = new Thickness(5, 0, 0, 0) },
+                        { Style = styles.TinyAmber, VAlign = Align.Center, Margin = new Thickness(7, 0, 0, 0) },
                 },
             };
             var rows = new ListView<Departure>(() => _model.Column(index),
@@ -184,8 +192,7 @@ public class TubeDeparturesApp : WidgetApp
             HAlign = Align.Stretch,
             Children =
             {
-                new Label("PLAT") { Style = caption, VAlign = Align.Center, Margin = new Thickness(6, 0, 0, 0) },
-                new Label("DESTINATION") { Style = caption, VAlign = Align.Center, Margin = new Thickness(30, 0, 0, 0) },
+                new Label("DESTINATION") { Style = caption, VAlign = Align.Center, Margin = new Thickness(20, 0, 0, 0) },
                 new Label("MINS") { Style = caption, VAlign = Align.Center, HAlign = Align.End, Margin = new Thickness(0, 0, 8, 0) },
                 new Block(TubeGfx.Amber.WithBrightness(0.3f), height: 1) { VAlign = Align.End },
             },
@@ -206,7 +213,14 @@ public class TubeDeparturesApp : WidgetApp
         _ = Host;   // builds the tree on the first frame
         var style = CurrentStyle;
         int max = style == Style.Platform ? 5 : MaxDepartures;
-        _model.Refresh(context.Time, _arrivals?.Value, PlatformFilter, max, perDirection: style == Style.Split);
+        _model.Refresh(context.Time, _arrivals?.Value, PlatformFilter, max, perDirection: style == Style.Split, Routes);
+        bool byRoute = _model.ColumnsByRoute;
+        _stripe0!.Visible = _stripe1!.Visible = byRoute;
+        if (byRoute)
+        {
+            _stripe0.Color = _model.ColumnColor(0);
+            _stripe1.Color = _model.ColumnColor(1);
+        }
 
         _heroBody!.Visible = style == Style.Hero;
         _splitBody!.Visible = style == Style.Split;

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,11 +13,15 @@ typedef SearchChanged = void Function(Object value, {String? label, List<String>
 /// Debounced typeahead for Search (one id) and MultiSearch (comma separated ids) settings.
 /// Works for inactive apps because the options endpoint is stateless.
 class SearchSetting extends ConsumerStatefulWidget {
-  const SearchSetting({super.key, required this.setting, required this.appId, required this.onChanged});
+  const SearchSetting({super.key, required this.setting, required this.appId, required this.onChanged, this.context = const {}});
 
   final AppSetting setting;
   final String appId;
   final SearchChanged onChanged;
+
+  /// Current values of the app's other settings, sent with every options request (`ctx.<key>`). A `browse` setting
+  /// (such as the routes of a station) lists its options straight away and reloads when this changes.
+  final Map<String, String> context;
 
   static const debounce = Duration(milliseconds: 300);
 
@@ -32,6 +37,27 @@ class _SearchSettingState extends ConsumerState<SearchSetting> {
   bool _loading = false;
 
   bool get _multi => widget.setting.type == AppSettingType.multiSearch;
+  bool get _browse => widget.setting.browse;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_browse) {
+      _loading = true;
+      _run('', ++_seq);
+    }
+  }
+
+  @override
+  void didUpdateWidget(SearchSetting old) {
+    super.didUpdateWidget(old);
+    // The options depend on other settings (the station behind a list of routes): reload when one of them changed
+    if (_browse && !mapEquals(old.context, widget.context)) {
+      _timer?.cancel();
+      _loading = true;
+      _run(_controller.text.trim(), ++_seq);
+    }
+  }
 
   /// Picked (id, label) pairs.
   List<(String, String)> get _picked {
@@ -65,7 +91,7 @@ class _SearchSettingState extends ConsumerState<SearchSetting> {
     _timer?.cancel();
     final seq = ++_seq; // invalidates any query still in flight
     final q = text.trim();
-    if (q.length < 2) {
+    if (q.length < 2 && !_browse) {
       setState(() {
         _results = const [];
         _loading = false;
@@ -77,7 +103,7 @@ class _SearchSettingState extends ConsumerState<SearchSetting> {
   }
 
   Future<void> _run(String q, int seq) async {
-    final result = await ref.read(apiProvider).getSettingOptions(widget.appId, widget.setting.key, q);
+    final result = await ref.read(apiProvider).getSettingOptions(widget.appId, widget.setting.key, q, context: widget.context);
     if (!mounted || seq != _seq) return; // stale
     result.when(
       ok: (list) => setState(() {
@@ -95,6 +121,11 @@ class _SearchSettingState extends ConsumerState<SearchSetting> {
     _timer?.cancel();
     _seq++;
     _controller.clear();
+    if (_browse) {
+      // The list stays; only the filter text goes
+      _run('', _seq);
+      return;
+    }
     setState(() {
       _results = const [];
       _loading = false;
@@ -126,7 +157,7 @@ class _SearchSettingState extends ConsumerState<SearchSetting> {
     final theme = Theme.of(context);
     final picked = _picked;
     final pickedIds = {for (final p in picked) p.$1};
-    final shown = _results.where((o) => !_multi || !pickedIds.contains(o.value)).toList();
+    final shown = _full ? <SettingOption>[] : _results.where((o) => !_multi || !pickedIds.contains(o.value)).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -167,7 +198,7 @@ class _SearchSettingState extends ConsumerState<SearchSetting> {
             controller: _controller,
             onChanged: _onText,
             decoration: InputDecoration(
-              labelText: _multi ? 'Add...' : (picked.isEmpty ? 'Search...' : 'Change...'),
+              labelText: _browse ? 'Filter...' : (_multi ? 'Add...' : (picked.isEmpty ? 'Search...' : 'Change...')),
               prefixIcon: const Icon(Icons.search_rounded),
               suffixIcon: _loading
                   ? const Padding(
@@ -180,6 +211,10 @@ class _SearchSettingState extends ConsumerState<SearchSetting> {
           )
         else
           Text('Maximum of ${_max!} reached. Remove one to add another.',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        if (_browse && !_loading && !_full && shown.isEmpty)
+          Text(_results.isEmpty ? 'Nothing to pick yet. Choose the station first.' : 'Everything is already picked.',
+              key: const ValueKey('browse-empty'),
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         for (final o in shown)
           ListTile(

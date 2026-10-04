@@ -18,6 +18,15 @@ internal sealed partial class Departure
 
     /// <summary>The direction of travel from the platform name ("Northbound" from "Northbound - Platform 1"); empty when there is none.</summary>
     public string Direction = "";
+
+    /// <summary>The route (line plus direction or destination) this train runs on; see <see cref="TubeRoutes"/>.</summary>
+    public string RouteKey = "";
+
+    /// <summary>"Jubilee Eastbound" / "Metropolitan towards Aldgate".</summary>
+    public string RouteLabel = "";
+
+    /// <summary>True when more than one platform of the station serves this train's route, so the platform number tells riders something.</summary>
+    public bool ShowPlatform;
     public Pixel Color;
 
     /// <summary>Seconds to arrival as TfL reported them at <see cref="SeenAt"/>.</summary>
@@ -80,6 +89,8 @@ internal sealed class DepartureBoardModel
     private TflArrival[]? _source;
     private string _filter = "";
     private string[] _routes = [];
+    private string _routeSetting = "";
+    private string[] _routeKeys = [];
     private int _max;
     private Departure[] _visible = [];
     private Departure[] _hero = [];
@@ -119,6 +130,12 @@ internal sealed class DepartureBoardModel
     /// <summary>The direction of a column ("" for trains with no direction).</summary>
     public string ColumnLabel(int index) => index >= 0 && index < _labels.Length ? _labels[index] : "";
 
+    /// <summary>True when the columns are the selected routes (line colour plus destination) rather than raw directions.</summary>
+    public bool ColumnsByRoute => _routeKeys.Length > 0;
+
+    /// <summary>The line colour of a column when <see cref="ColumnsByRoute"/>.</summary>
+    public Pixel ColumnColor(int index) => index >= 0 && index < _columns.Length && _columns[index].Length > 0 ? _columns[index][0].Color : default;
+
     public IReadOnlyList<Departure> Page(int index) => index >= 0 && index < _pages.Length ? _pages[index] : [];
 
     public void Reset()
@@ -139,7 +156,11 @@ internal sealed class DepartureBoardModel
     /// When true <paramref name="max"/> (capped at <see cref="ColumnRows"/>) applies to each direction rather than to the whole board, and
     /// <see cref="Column"/> holds the trains of the (up to two) busiest directions.
     /// </param>
-    public bool Refresh(TimeSpan now, TflArrival[]? arrivals, string platformFilter, int max, bool perDirection = false)
+    /// <param name="routes">
+    /// Comma separated route keys (see <see cref="TubeRoutes"/>); when set only trains on one of them are kept (and the columns are the
+    /// routes). Empty keeps everything. The platform filter still applies on top.
+    /// </param>
+    public bool Refresh(TimeSpan now, TflArrival[]? arrivals, string platformFilter, int max, bool perDirection = false, string routes = "")
     {
         Now = now;
         bool dirty = false;
@@ -155,6 +176,14 @@ internal sealed class DepartureBoardModel
         if (perDirection != _perDirection)
         {
             _perDirection = perDirection;
+            dirty = true;
+        }
+
+        routes ??= "";
+        if (routes != _routeSetting)
+        {
+            _routeSetting = routes;
+            _routeKeys = routes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             dirty = true;
         }
 
@@ -176,7 +205,7 @@ internal sealed class DepartureBoardModel
             if (!PassesFilter(d)) continue;
             if (perDirection)
             {
-                int g = DirectionIndex(d.Direction);
+                int g = DirectionIndex(GroupOf(d));
                 if (_dirCounts[g] >= perColumn) continue;
                 _dirCounts[g]++;
                 _scratch.Add(d);
@@ -202,8 +231,19 @@ internal sealed class DepartureBoardModel
         return _dirNames.Count - 1;
     }
 
+    // What a column groups by: the route when routes are selected, the direction otherwise.
+    private string GroupOf(Departure d) => _routeKeys.Length > 0 ? d.RouteKey : d.Direction;
+
     private bool PassesFilter(Departure d)
     {
+        if (_routeKeys.Length > 0)
+        {
+            bool onRoute = false;
+            foreach (var key in _routeKeys)
+                if (string.Equals(key, d.RouteKey, StringComparison.OrdinalIgnoreCase)) { onRoute = true; break; }
+            if (!onRoute) return false;
+        }
+
         if (_filter.Length == 0) return true;
         if (!FilterByRoute) return d.PlatformFilterText.Contains(_filter, StringComparison.OrdinalIgnoreCase);
 
@@ -250,15 +290,16 @@ internal sealed class DepartureBoardModel
         var names = new List<string>();
         foreach (var d in _visible)
         {
-            if (!names.Exists(n => string.Equals(n, d.Direction, StringComparison.OrdinalIgnoreCase))) names.Add(d.Direction);
+            var group = GroupOf(d);
+            if (!names.Exists(n => string.Equals(n, group, StringComparison.OrdinalIgnoreCase))) names.Add(group);
             if (names.Count == 2) break;
         }
         names.Sort(StringComparer.OrdinalIgnoreCase);
 
-        _labels = names.ToArray();
         _columns = names
-            .Select(n => _visible.Where(d => string.Equals(d.Direction, n, StringComparison.OrdinalIgnoreCase)).Take(ColumnRows).ToArray())
+            .Select(n => _visible.Where(d => string.Equals(GroupOf(d), n, StringComparison.OrdinalIgnoreCase)).Take(ColumnRows).ToArray())
             .ToArray();
+        _labels = _routeKeys.Length > 0 ? _columns.Select(c => c[0].RouteLabel).ToArray() : names.ToArray();
     }
 
     private void Ingest(TflArrival[] arrivals, TimeSpan now)
@@ -280,11 +321,20 @@ internal sealed class DepartureBoardModel
             d.PlatformNumber = Departure.PlatformNumberOf(a.PlatformName);
             d.PlatformFilterText = a.PlatformName;
             d.Direction = Departure.DirectionOf(a.PlatformName);
+            var destination = TubeRoutes.DestinationOf(a);
+            d.RouteKey = TubeRoutes.KeyOf(a.LineId, d.Direction, destination);
+            d.RouteLabel = TubeRoutes.LabelOf(string.IsNullOrWhiteSpace(a.LineName) ? TubeRoutes.LineTitle(a.LineId) : a.LineName, d.Direction, destination);
             d.Color = TubeColors.Display(a.LineId);
             d.TimeToStation = a.TimeToStation;
             d.SeenAt = now;
             _sorted.Add(d);
         }
+
+        // A platform number only means something where one route is served from several platforms (Baker Street, say)
+        var platformsPerRoute = _sorted.Where(d => d.PlatformNumber.Length > 0)
+            .GroupBy(d => d.RouteKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Select(d => d.PlatformNumber).Distinct().Count(), StringComparer.OrdinalIgnoreCase);
+        foreach (var d in _sorted) d.ShowPlatform = platformsPerRoute.GetValueOrDefault(d.RouteKey) > 1;
 
         foreach (var key in _pool.Keys.Where(k => !seen.Contains(k)).ToList()) _pool.Remove(key);
     }

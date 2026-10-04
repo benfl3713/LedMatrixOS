@@ -21,7 +21,7 @@ public static class SettingsBinder
             var current = e.Property.GetValue(target) ?? "";
             yield return new AppSetting(
                 e.Key, e.Attribute.Name, e.Attribute.Description, e.Type,
-                current, current, e.Attribute.Min, e.Attribute.Max, e.Attribute.Options);
+                current, current, e.Attribute.Min, e.Attribute.Max, e.Attribute.Options, Browse: e.Attribute.Browse);
         }
     }
 

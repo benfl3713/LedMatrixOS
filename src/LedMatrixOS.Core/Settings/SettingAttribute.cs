@@ -27,6 +27,11 @@ public sealed class SettingAttribute : Attribute
     /// <see cref="Max"/> (an int) limits how many ids are kept.
     /// </summary>
     public bool MultiSearch { get; set; }
+    /// <summary>
+    /// With <see cref="Search"/>/<see cref="MultiSearch"/>: the options are a short list the client shows straight away (no typing needed),
+    /// computed from the app's other settings.
+    /// </summary>
+    public bool Browse { get; set; }
 }
 
 /// <summary>

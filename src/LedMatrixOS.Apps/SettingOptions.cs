@@ -19,6 +19,10 @@ public static class BuiltInSettingOptions
         registry.Register("tube-departures", "stationId", stations);
         registry.Register("commute", "stationId", stations);
         registry.Register("morning-briefing", "stationId", stations);
+
+        var routes = new TflRouteOptions(tfl);
+        registry.Register("tube-departures", "routes", routes);
+        registry.Register("commute", "routes", routes);
         registry.Register("bus-arrivals", "stopIds", new TflBusStopOptions(tfl));
         registry.Register("cycle-hub", "dockIds", new TflDockOptions(tfl));
 

@@ -8,6 +8,12 @@ import 'schedule_models.dart';
 import 'screen_models.dart';
 import 'result.dart';
 
+/// The query string of an options request: `q=<query>` plus one `ctx.<key>=<value>` per context entry.
+String optionsQuery(String q, Map<String, String> context) => [
+      'q=${Uri.encodeQueryComponent(q)}',
+      for (final e in context.entries) 'ctx.${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}',
+    ].join('&');
+
 /// The device REST API. Every call returns a [Result]; nothing throws.
 abstract class LedApi {
   String get baseUrl;
@@ -17,8 +23,10 @@ abstract class LedApi {
   Future<Result<List<AppSetting>>> getAppSettings(String id);
   Future<Result<void>> updateAppSettings(String id, Map<String, Object?> values);
 
-  /// Live options for a Search/MultiSearch setting; empty for queries under 2 characters.
-  Future<Result<List<SettingOption>>> getSettingOptions(String appId, String key, String q);
+  /// Live options for a Search/MultiSearch setting; empty for queries under 2 characters (except `browse` settings).
+  /// [context] carries the current values of the app's other settings (sent as `ctx.<key>`), for options that depend on
+  /// them; where a key is absent the device falls back to the persisted value.
+  Future<Result<List<SettingOption>>> getSettingOptions(String appId, String key, String q, {Map<String, String> context = const {}});
   Future<Result<DeviceSettings>> getSettings();
   Future<Result<void>> setBrightness(int value);
   Future<Result<void>> setPower(bool enabled);
@@ -167,9 +175,10 @@ class HttpLedApi implements LedApi {
       );
 
   @override
-  Future<Result<List<SettingOption>>> getSettingOptions(String appId, String key, String q) => _send(
-        () => _client.get(_uri(
-            '/api/apps/${Uri.encodeComponent(appId)}/settings/${Uri.encodeComponent(key)}/options?q=${Uri.encodeQueryComponent(q)}')),
+  Future<Result<List<SettingOption>>> getSettingOptions(String appId, String key, String q,
+          {Map<String, String> context = const {}}) =>
+      _send(
+        () => _client.get(_uri('/api/apps/${Uri.encodeComponent(appId)}/settings/${Uri.encodeComponent(key)}/options?${optionsQuery(q, context)}')),
         (b) => (jsonDecode(b) as List).map((e) => SettingOption.fromJson(e as Map<String, dynamic>)).toList(),
       );
 

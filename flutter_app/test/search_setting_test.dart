@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:led_matrix_controller/api/led_api.dart' show optionsQuery;
 import 'package:led_matrix_controller/api/models.dart';
 import 'package:led_matrix_controller/api/result.dart';
 import 'package:led_matrix_controller/core/providers.dart';
@@ -211,6 +212,92 @@ void main() {
       await tester.tap(find.descendant(of: find.byKey(const ValueKey('chip-b')), matching: find.byIcon(Icons.clear)));
       await _settle(tester);
       expect(find.byKey(const ValueKey('search-field-stops')), findsOneWidget);
+    });
+  });
+
+  group('Browse setting (routes of a station)', () {
+    const station = AppSetting(
+      key: 'stationId',
+      name: 'Station',
+      type: AppSettingType.search,
+      currentValue: 'BST',
+      currentLabel: 'Baker Street',
+    );
+    AppSetting routes({String ids = '', List<String> labels = const []}) => AppSetting(
+          key: 'routes',
+          name: 'Routes',
+          type: AppSettingType.multiSearch,
+          currentValue: ids,
+          currentLabels: labels,
+          browse: true,
+        );
+
+    FakeApi api() => FakeApi()
+      ..knownLabels['met|Eastbound'] = 'Metropolitan Eastbound'
+      ..optionsHandler = (key, q) async => key == 'routes'
+          ? const Ok([
+              SettingOption(value: 'met|Eastbound', label: 'Metropolitan Eastbound', subtitle: 'Metropolitan line, platforms 5, 6'),
+              SettingOption(value: 'jub|Southbound', label: 'Jubilee Southbound', subtitle: 'Jubilee line, platform 1'),
+            ])
+          : const Ok(<SettingOption>[SettingOption(value: 'EUS', label: 'London Euston')]);
+
+    test('model parses browse, and the options request carries the context', () {
+      expect(AppSetting.fromJson({'key': 'r', 'name': 'R', 'type': 6, 'browse': true}).browse, isTrue);
+      expect(AppSetting.fromJson({'key': 'r', 'name': 'R', 'type': 6}).browse, isFalse);
+      expect(routes().copyWith(currentValue: 'x').browse, isTrue);
+
+      expect(optionsQuery('met', {'stationId': 'HUBBAK', 'x': 'a b&c'}), 'q=met&ctx.stationId=HUBBAK&ctx.x=a+b%26c');
+      expect(optionsQuery('', const {}), 'q=');
+    });
+
+    testWidgets('lists the options straight away, with the other settings as context', (tester) async {
+      final fake = api();
+      await _open(tester, fake, [station, routes()]);
+
+      expect(fake.optionQueries, ['']); // one browse request, no typing needed
+      expect(fake.optionContexts.single, {'stationId': 'BST'});
+      expect(find.text('Metropolitan Eastbound'), findsOneWidget);
+      expect(find.text('Metropolitan line, platforms 5, 6'), findsOneWidget);
+      expect(find.text('Jubilee Southbound'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('option-met|Eastbound')));
+      await _settle(tester);
+      expect(fake.settingUpdates.last, {'routes': 'met|Eastbound'});
+      expect(find.byKey(const ValueKey('chip-met|Eastbound')), findsOneWidget);
+      expect(find.byKey(const ValueKey('option-met|Eastbound')), findsNothing); // picked, so no longer offered
+      expect(find.byKey(const ValueKey('option-jub|Southbound')), findsOneWidget); // the list stays after a pick
+    });
+
+    testWidgets('typing filters through the same request, even for one character', (tester) async {
+      final fake = api();
+      await _open(tester, fake, [station, routes()]);
+
+      await tester.enterText(find.byKey(const ValueKey('search-field-routes')), 'j');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump();
+      expect(fake.optionQueries.last, 'j');
+    });
+
+    testWidgets('picking another station reloads the routes for it and clears the old selection', (tester) async {
+      final fake = api();
+      await _open(tester, fake, [station, routes(ids: 'met|Eastbound', labels: ['Metropolitan Eastbound'])]);
+      expect(fake.optionContexts.last['stationId'], 'BST');
+
+      await _type(tester, 'stationId', 'eus');
+      await tester.tap(find.byKey(const ValueKey('option-EUS')));
+      await tester.pump();
+      await _settle(tester);
+
+      // one save with both the new station and the emptied routes
+      expect(fake.settingUpdates.last, {'stationId': 'EUS', 'routes': ''});
+      expect(fake.optionContexts.last['stationId'], 'EUS'); // the routes list was asked again for the new station
+      expect(find.byKey(const ValueKey('chip-met|Eastbound')), findsNothing);
+    });
+
+    testWidgets('says so when the station has no routes yet', (tester) async {
+      final fake = FakeApi()..optionsHandler = (key, q) async => const Ok(<SettingOption>[]);
+      await _open(tester, fake, [routes()]);
+      expect(find.byKey(const ValueKey('browse-empty')), findsOneWidget);
     });
   });
 
