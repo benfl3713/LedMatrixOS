@@ -240,29 +240,47 @@ final previewFeedProvider = StreamProvider.autoDispose<PreviewUpdate>((ref) {
   return _previewStream(api);
 });
 
+/// The server pushes a frame ~30 times a second even when the picture is static, so this much silence means the
+/// connection is dead (typical after the phone sleeps or changes network) and a reconnect is due.
+const _previewIdleTimeout = Duration(seconds: 4);
+const _previewConnectTimeout = Duration(seconds: 4);
+
 Stream<PreviewUpdate> _previewStream(LedApi api) async* {
-  var delay = const Duration(seconds: 1);
+  var delay = const Duration(milliseconds: 500);
   while (true) {
+    // Show the polled PNG straight away while (re)connecting instead of a spinner.
+    yield const PreviewUpdate(connected: false);
     WebSocketChannel? channel;
+    var gotFrame = false;
+    final started = DateTime.now();
     try {
       channel = WebSocketChannel.connect(api.previewSocketUri);
-      await channel.ready.timeout(const Duration(seconds: 5));
-      delay = const Duration(seconds: 1);
+      await channel.ready.timeout(_previewConnectTimeout);
       yield const PreviewUpdate(connected: true);
-      await for (final message in channel.stream) {
+      final messages = channel.stream.timeout(_previewIdleTimeout, onTimeout: (sink) => sink.close());
+      await for (final message in messages) {
         if (message is List<int>) {
           final frame = parsePreviewFrame(message is Uint8List ? message : Uint8List.fromList(message));
-          if (frame != null) yield PreviewUpdate(frame: frame, connected: true);
+          if (frame != null) {
+            gotFrame = true;
+            yield PreviewUpdate(frame: frame, connected: true);
+          }
         }
       }
     } catch (_) {
       // Fall through to the reconnect path; the UI shows the polled PNG meanwhile.
     } finally {
-      await channel?.sink.close();
+      // Never await the close: on a half-open socket the handshake can hang and would stall every later retry.
+      final dead = channel;
+      if (dead != null) unawaited(dead.sink.close().timeout(const Duration(seconds: 1), onTimeout: () {}).catchError((_) {}));
     }
     yield const PreviewUpdate(connected: false);
+    // A connection that streamed for a while earns a fast retry; one that failed straight away backs off.
+    if (gotFrame && DateTime.now().difference(started) > const Duration(seconds: 5)) {
+      delay = const Duration(milliseconds: 500);
+    }
     await Future<void>.delayed(delay);
-    delay = Duration(seconds: (delay.inSeconds * 2).clamp(1, 15));
+    delay = Duration(milliseconds: (delay.inMilliseconds * 2).clamp(500, 8000));
   }
 }
 
