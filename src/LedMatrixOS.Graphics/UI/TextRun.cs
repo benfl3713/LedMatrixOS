@@ -29,12 +29,30 @@ public sealed class TextRun
         return true;
     }
 
+    /// <summary>Whether the glyph map has ink at (x, y); handy for baking a mask from text.</summary>
+    public bool Ink(int x, int y) => _map is not null && (uint)x < (uint)Width && (uint)y < (uint)_map.GetLength(1) && _map[x, y];
+
     /// <summary>Draws the text with the top left of the line box at (x, y).</summary>
     /// <param name="shadow">If true, adds a black 1px drop shadow.</param>
-    public void Draw(FrameBuffer frame, int x, int y, Pixel color, bool shadow = false)
+    /// <param name="outline">If set, a 4-neighbour outline in this colour goes under the glyphs.</param>
+    public void Draw(FrameBuffer frame, int x, int y, Pixel color, bool shadow = false, Pixel? outline = null)
     {
         if (_map is null) return;
         int rows = _map.GetLength(1);
+
+        if (outline is { } o)
+        {
+            for (int line = 0; line < rows; line++)
+                for (int bit = 0; bit < Width; bit++)
+                {
+                    if (!_map[bit, line]) continue;
+                    frame.SetPixel(x + bit + 1, y + line, o);
+                    frame.SetPixel(x + bit - 1, y + line, o);
+                    frame.SetPixel(x + bit, y + line + 1, o);
+                    frame.SetPixel(x + bit, y + line - 1, o);
+                }
+        }
+
         for (int line = 0; line < rows; line++)
         {
             for (int bit = 0; bit < Width; bit++)

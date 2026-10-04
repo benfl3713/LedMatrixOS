@@ -103,4 +103,73 @@ public class IcsParserTests
         var e = Assert.Single(Parse(Cal("DTSTART:20260228T100000Z\r\nDTEND:20260303T100000Z\r\nSUMMARY:Conference")));
         Assert.Equal("Conference", e.Title);
     }
+
+    // ---- RECURRENCE-ID overrides and EXDATE ---------------------------------------------------------------------------
+
+    private const string Standup = "UID:standup-1\r\nDTSTART:20260302T090000Z\r\nDTEND:20260302T091500Z\r\nRRULE:FREQ=DAILY;COUNT=4\r\nSUMMARY:Standup";
+
+    [Fact]
+    public void MovedInstanceReplacesTheGeneratedOccurrence()
+    {
+        var events = Parse(Cal(
+            Standup,
+            "UID:standup-1\r\nRECURRENCE-ID:20260303T090000Z\r\nDTSTART:20260303T140000Z\r\nDTEND:20260303T143000Z\r\nSUMMARY:Standup (moved)\r\nLOCATION:Room 2"));
+
+        Assert.Equal(["Standup", "Standup (moved)", "Standup", "Standup"], events.Select(e => e.Title));
+        var moved = events[1];
+        Assert.Equal(new DateTimeOffset(2026, 3, 3, 14, 0, 0, TimeSpan.Zero), moved.Start);
+        Assert.Equal(TimeSpan.FromMinutes(30), moved.End - moved.Start);
+        Assert.Equal("Room 2", moved.Location);
+        Assert.DoesNotContain(events, e => e.Title == "Standup" && e.Start.Day == 3);   // the 09:00 original is gone
+    }
+
+    [Fact]
+    public void CancelledInstanceRemovesJustThatOccurrence()
+    {
+        var events = Parse(Cal(
+            Standup,
+            "UID:standup-1\r\nRECURRENCE-ID:20260304T090000Z\r\nDTSTART:20260304T090000Z\r\nSTATUS:CANCELLED\r\nSUMMARY:Standup"));
+
+        Assert.Equal([2, 3, 5], events.Select(e => e.Start.Day));
+    }
+
+    [Fact]
+    public void OverridesAreMatchedByInstantAcrossTimeZones_AndOnlyWithinTheirOwnUid()
+    {
+        TimeZoneInfo ny;
+        try { ny = TimeZoneInfo.FindSystemTimeZoneById("America/New_York"); } catch (TimeZoneNotFoundException) { return; }
+        // 09:00 New York on the 10th (EDT, UTC-4) is 13:00 UTC; the override names it in UTC, the other series shares the time but not the UID
+        var events = IcsParser.Parse(Cal(
+            "UID:a\r\nDTSTART;TZID=America/New_York:20260309T090000\r\nRRULE:FREQ=DAILY;COUNT=3\r\nSUMMARY:Series A",
+            "UID:a\r\nRECURRENCE-ID:20260310T130000Z\r\nDTSTART:20260310T130000Z\r\nSTATUS:CANCELLED\r\nSUMMARY:Series A",
+            "UID:b\r\nDTSTART;TZID=America/New_York:20260310T090000\r\nSUMMARY:Series B"), From, To, ny);
+
+        Assert.Equal(["Series A", "Series B", "Series A"], events.Select(e => e.Title));
+    }
+
+    [Fact]
+    public void OverrideWithoutAnyGeneratedMatchStillShowsOnItsOwn()
+    {
+        var e = Assert.Single(Parse(Cal("UID:lost\r\nRECURRENCE-ID:20260101T090000Z\r\nDTSTART:20260305T090000Z\r\nSUMMARY:Orphan")));
+        Assert.Equal("Orphan", e.Title);
+    }
+
+    [Fact]
+    public void ExdateRemovesOccurrences_AcrossLinesListsAndDateOnlyValues()
+    {
+        var events = Parse(Cal(
+            "UID:x\r\nDTSTART:20260302T080000Z\r\nRRULE:FREQ=DAILY;COUNT=7\r\nEXDATE:20260303T080000Z,20260304T080000Z\r\nEXDATE;VALUE=DATE:20260306\r\nSUMMARY:Run"));
+
+        Assert.Equal([2, 5, 7, 8], events.Select(e => e.Start.Day));
+    }
+
+    [Fact]
+    public void AllDayRecurrenceHonoursExdateAndOverride()
+    {
+        var events = Parse(Cal(
+            "UID:d\r\nDTSTART;VALUE=DATE:20260302\r\nRRULE:FREQ=DAILY;COUNT=4\r\nEXDATE;VALUE=DATE:20260303\r\nSUMMARY:Bins",
+            "UID:d\r\nRECURRENCE-ID;VALUE=DATE:20260304\r\nDTSTART;VALUE=DATE:20260306\r\nSUMMARY:Bins (late)"));
+
+        Assert.Equal([("Bins", 2), ("Bins", 5), ("Bins (late)", 6)], events.Select(e => (e.Title, e.Start.Day)));
+    }
 }

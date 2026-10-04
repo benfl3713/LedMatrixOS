@@ -100,4 +100,6 @@ internal sealed class HomeState
     public int Second;
     /// <summary>Bright pulse right after the minute changes, decaying 1 to 0.</summary>
     public float MinuteFlash;
+    /// <summary>1 when the clock is left-aligned beside the date, 0 when it is centred; the data chips follow it.</summary>
+    public float ChipLeft = 1f;
 }

@@ -29,6 +29,9 @@ SERVICE_SHOW_TOAST = "show_toast"
 SERVICE_SET_BADGE = "set_badge"
 SERVICE_DISMISS_OVERLAY = "dismiss_overlay"
 SERVICE_RELOAD_SCHEDULE = "reload_schedule"
+SERVICE_SHOW_ALERT = "show_alert"
+SERVICE_FLASH_SCREEN = "flash_screen"
+SERVICE_CLEAR_OVERLAYS = "clear_overlays"
 
 TOAST_SCHEMA = vol.Schema(
     {
@@ -46,6 +49,13 @@ BADGE_SCHEMA = vol.Schema(
     }
 )
 DISMISS_SCHEMA = vol.Schema({vol.Optional("id"): cv.string})
+ALERT_SCHEMA = vol.Schema(
+    {
+        vol.Required("message"): cv.string,
+        vol.Optional("color"): cv.string,
+    }
+)
+CLEAR_OVERLAYS_SCHEMA = vol.Schema({})
 
 
 def _coordinators(hass: HomeAssistant) -> list[LedMatrixCoordinator]:
@@ -75,10 +85,25 @@ def _register_services(hass: HomeAssistant) -> None:
         for coordinator in _coordinators(hass):
             await coordinator.reload_schedule()
 
+    async def show_alert(call: ServiceCall) -> None:
+        for coordinator in _coordinators(hass):
+            await coordinator.show_alert(call.data["message"], call.data.get("color"))
+
+    async def flash_screen(call: ServiceCall) -> None:
+        for coordinator in _coordinators(hass):
+            await coordinator.flash_screen()
+
+    async def clear_overlays(call: ServiceCall) -> None:
+        for coordinator in _coordinators(hass):
+            await coordinator.clear_overlays()
+
     hass.services.async_register(DOMAIN, SERVICE_SHOW_TOAST, show_toast, schema=TOAST_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_SET_BADGE, set_badge, schema=BADGE_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_DISMISS_OVERLAY, dismiss_overlay, schema=DISMISS_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_RELOAD_SCHEDULE, reload_schedule, schema=vol.Schema({}))
+    hass.services.async_register(DOMAIN, SERVICE_SHOW_ALERT, show_alert, schema=ALERT_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_FLASH_SCREEN, flash_screen, schema=CLEAR_OVERLAYS_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_CLEAR_OVERLAYS, clear_overlays, schema=CLEAR_OVERLAYS_SCHEMA)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -105,8 +130,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
         if not hass.data[DOMAIN]:
-            for service in (SERVICE_SHOW_TOAST, SERVICE_SET_BADGE, SERVICE_DISMISS_OVERLAY, SERVICE_RELOAD_SCHEDULE):
+            for service in (SERVICE_SHOW_TOAST, SERVICE_SET_BADGE, SERVICE_DISMISS_OVERLAY, SERVICE_RELOAD_SCHEDULE, SERVICE_SHOW_ALERT, SERVICE_FLASH_SCREEN, SERVICE_CLEAR_OVERLAYS):
                 hass.services.async_remove(DOMAIN, service)
-    
+
     return unload_ok
 

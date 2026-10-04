@@ -126,7 +126,8 @@ internal sealed class CompactRow : Stack
     private bool _tinted;
     private bool _isDue;
 
-    public CompactRow(Departure dep, DepartureBoardModel model, BoardStyles styles, Func<bool> byLine) : base(Orientation.Horizontal)
+    public CompactRow(Departure dep, DepartureBoardModel model, BoardStyles styles, Func<bool> byLine, int countdownWidth = 48, int platformWidth = 13)
+        : base(Orientation.Horizontal)
     {
         _dep = dep;
         _model = model;
@@ -143,9 +144,9 @@ internal sealed class CompactRow : Stack
         _due = new DueBadge(Fonts.Small, filled: false) { Visible = false };
 
         Add(new Block(dep.Color, width: 3) { Margin = new Thickness(0, 1, 0, 1) });
-        Add(new Label(dep.PlatformNumber) { Style = styles.Tiny, TextAlignment = TextAlign.Center, Width = 13 });
+        Add(new Label(dep.PlatformNumber) { Style = styles.Tiny, TextAlignment = TextAlign.Center, Width = platformWidth });
         Add(_destination);
-        Add(new Panel { Width = 48, Margin = new Thickness(0, 0, 4, 0), Children = { _countdown, _due } });
+        Add(new Panel { Width = countdownWidth, Margin = new Thickness(0, 0, 4, 0), Children = { _countdown, _due } });
         _countdown.HAlign = Align.End;
         _countdown.VAlign = Align.Center;
         _due.HAlign = Align.End;
@@ -171,6 +172,71 @@ internal sealed class CompactRow : Stack
             var accent = BoardStyles.Tinted(_dep.Color);
             _destination.Style = tint ? new TextStyle(Fonts.Small, accent, Shadow: false) : _styles.Small;
             _minutes.Style = tint ? new TextStyle(Fonts.Small, accent, Shadow: false) : _styles.SmallAmber;
+        }
+    }
+}
+
+/// <summary>
+/// A row of the classic platform sign: amber 5x7 dot-matrix text on black, "1  Brixton  3 min". Under a minute the minutes give way to a
+/// pulsing DUE. With "colour by line" the destination takes the line colour.
+/// </summary>
+internal sealed class PlatformRow : Stack
+{
+    public const int RowHeight = 8;
+
+    private readonly Departure _dep;
+    private readonly DepartureBoardModel _model;
+    private readonly Func<bool> _byLine;
+    private readonly BoardStyles _styles;
+    private readonly MarqueeLabel _destination;
+    private readonly RollingNumber _minutes;
+    private readonly Stack _countdown;
+    private readonly DueBadge _due;
+    private bool _tinted;
+    private bool _isDue;
+
+    public PlatformRow(Departure dep, DepartureBoardModel model, BoardStyles styles, Func<bool> byLine) : base(Orientation.Horizontal)
+    {
+        _dep = dep;
+        _model = model;
+        _styles = styles;
+        _byLine = byLine;
+        CrossAlign = Align.Center;
+
+        _destination = new MarqueeLabel(dep.Destination) { Style = styles.TinyAmber, Grow = 1, Margin = new Thickness(0, 0, 4, 0), VAlign = Align.Center };
+        _minutes = new RollingNumber(() => dep.Minutes(model.Now)) { Style = styles.TinyAmber };
+        _countdown = new Stack(Orientation.Horizontal, gap: 2)
+        {
+            Children = { _minutes, new Label("min") { Style = styles.TinyAmber } },
+        };
+        _due = new DueBadge(Fonts.QuiteSmall, filled: false) { Visible = false };
+
+        Add(new Label(dep.PlatformNumber) { Style = styles.TinyAmber, Width = 24, Margin = new Thickness(6, 0, 0, 0), VAlign = Align.Center });
+        Add(_destination);
+        Add(new Panel { Width = 40, Margin = new Thickness(0, 0, 6, 0), Children = { _countdown, _due } });
+        _countdown.HAlign = Align.End;
+        _countdown.VAlign = Align.Center;
+        _due.HAlign = Align.End;
+        _due.VAlign = Align.Center;
+    }
+
+    public override void Update(FrameContext ctx)
+    {
+        base.Update(ctx);
+
+        bool due = _dep.Minutes(_model.Now) == 0 && !_minutes.IsRolling;
+        if (due != _isDue)
+        {
+            _isDue = due;
+            _countdown.Visible = !due;
+            _due.Visible = due;
+        }
+
+        bool tint = _byLine();
+        if (tint != _tinted)
+        {
+            _tinted = tint;
+            _destination.Style = tint ? new TextStyle(Fonts.QuiteSmall, BoardStyles.Tinted(_dep.Color), Shadow: false) : _styles.TinyAmber;
         }
     }
 }

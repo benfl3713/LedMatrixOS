@@ -1,5 +1,6 @@
 using BdfFontParser;
 using LedMatrixOS.Core;
+using LedMatrixOS.Graphics;
 using LedMatrixOS.Graphics.Text;
 using LedMatrixOS.Graphics.UI;
 using SixLabors.ImageSharp;
@@ -23,24 +24,6 @@ internal static class TubeGfx
     }
 
     public static Pixel Scale(Pixel c, float f) => c.WithBrightness(f);
-
-    /// <summary>Filled rounded rectangle (SimpleGraphics' version allocates a closure per call).</summary>
-    public static void FillRound(FrameBuffer frame, Rectangle rect, int radius, Pixel color)
-    {
-        if (rect.Width <= 0 || rect.Height <= 0) return;
-        float rad = Math.Min(radius, Math.Min(rect.Width, rect.Height) / 2f);
-        for (int row = 0; row < rect.Height; row++)
-        {
-            int edge = Math.Min(row, rect.Height - 1 - row);
-            int inset = 0;
-            if (rad > 0 && edge < rad)
-            {
-                float dy = rad - edge - 0.5f;
-                inset = (int)MathF.Round(rad - MathF.Sqrt(Math.Max(0f, rad * rad - dy * dy)), MidpointRounding.AwayFromZero);
-            }
-            frame.Fill(new Rectangle(rect.X + inset, rect.Y + row, rect.Width - inset * 2, 1), color);
-        }
-    }
 
     /// <summary>1px outline with the corner pixels cut off.</summary>
     public static void OutlineRound(FrameBuffer frame, Rectangle rect, Pixel color)
@@ -200,7 +183,7 @@ internal sealed class DueBadge : Node
         if (Filled)
         {
             var plate = Pixel.Lerp(TubeGfx.Amber.WithBrightness(0.55f), new Pixel(255, 214, 80), wave);
-            TubeGfx.FillRound(frame, bounds, 2, plate);
+            frame.FillRoundedRect(bounds, 2, plate);
             _run.Draw(frame, tx, ty, Pixel.Black);
         }
         else
@@ -255,7 +238,7 @@ internal sealed class LinePill : Node
         if (alert) fill = _color.WithBrightness(0.35f + 0.65f * wave);
         else if (_health == Health.Planned) fill = _color.WithBrightness(0.5f);
 
-        TubeGfx.FillRound(frame, bounds, 2, fill);
+        frame.FillRoundedRect(bounds, 2, fill);
 
         if (alert)
         {

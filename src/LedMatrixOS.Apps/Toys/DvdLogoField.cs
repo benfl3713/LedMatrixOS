@@ -42,7 +42,7 @@ public sealed class DvdLogoField : Node
     private readonly GlowEffect _glow = new() { Threshold = 150f, Strength = 0.85f, Radius = 2 };
     private readonly Tween<float> _sx = new(1f), _sy = new(1f), _flash = new(0f), _party = new(0f), _screenFlash = new(0f);
     private readonly Tween<float> _bannerDrop = new(-24f), _bannerAlpha = new(0f);
-    private readonly CachedText[] _letters = new CachedText[BannerText.Length];
+    private readonly TextRun[] _letters = new TextRun[BannerText.Length];
     private readonly Emitter[] _sparks = new Emitter[8];
     private Emitter _rain = null!;
     private Emitter _confetti = null!;
@@ -164,9 +164,9 @@ public sealed class DvdLogoField : Node
     // "DVD" in a faux-bold 9x18 font over a disc swoosh with "VIDEO" knocked out, baked once into a coverage mask.
     private void BuildMask()
     {
-        var big = new CachedText();
+        var big = new TextRun();
         big.Set(Fonts.Big, "DVD");
-        var video = new CachedText();
+        var video = new TextRun();
         video.Set(Fonts.ExtraSmall, "VIDEO");
         int tx = (LogoW - big.Width - 1) / 2;
         for (int y = 0; y < LogoH; y++)
@@ -191,7 +191,7 @@ public sealed class DvdLogoField : Node
         _ctx = ctx;
         if (!_built) return;
         if (_letters[0] is null)
-            for (int i = 0; i < _letters.Length; i++) { _letters[i] = new CachedText(); _letters[i].Set(Fonts.Big, BannerText[i].ToString()); }
+            for (int i = 0; i < _letters.Length; i++) { _letters[i] = new TextRun(); _letters[i].Set(Fonts.Big, BannerText[i].ToString()); }
 
         float dt = Math.Clamp((float)ctx.Delta.TotalSeconds, 0f, 0.1f);
         _time += dt;
@@ -425,7 +425,7 @@ public sealed class DvdLogoField : Node
             int wob = (int)MathF.Round(MathF.Sin(_time * 9f + i * 0.8f) * 2f);
             var c = ToyPalettes.Sample(Rainbow, _time * 1.5f + i / (float)_letters.Length);
             if (alpha < 0.999f) c = c.WithBrightness(alpha);
-            _letters[i].Draw(frame, x, y + wob, c, new Pixel(0, 0, 0).WithBrightness(alpha));
+            _letters[i].Draw(frame, x, y + wob, c, outline: new Pixel(0, 0, 0).WithBrightness(alpha));
             _letters[i].Draw(frame, x + 1, y + wob, c);
             x += _letters[i].Width + 2;
         }

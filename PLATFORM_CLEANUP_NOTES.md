@@ -1,5 +1,18 @@
 # Platform Cleanup Notes
 
+## Status (updated)
+
+Done, with no golden image changed:
+- `SimpleGraphics` shapes no longer allocate (no per-call closure); `FillRoundedRect` uses the span algorithm, checked against the per-pixel definition (`RoundedRectTests`). `TubeGfx.FillRound` is gone.
+- `TextRun` is public (`Graphics/UI`), replaced the Tube copy and the Toys `CachedText`, and gained `outline` and `Ink`.
+- `Fonts.Load()` is idempotent and thread-safe (the suite also halved in run time).
+
+Deliberately not done: rolling digits (`GlyphDigit`, `DigitStrip`, `RollingNumber`), `GlyphLine`/`GlyphAtlas`, and the palette types (`ClockPalette`/`LiveTheme`, `HomeThemes`, `ToyPalettes`). On inspection they are similar in shape but different in behaviour (gradient digits with drop/slide modes versus scaled glyph slots with glow paint; static data versus a live tween versus preset lists). Merging them is a redesign that would change rendering, not a de-duplication, so revisit only if a new app needs one of them.
+
+---
+
+## Original analysis
+
 ## Status
 All 18 apps (except Spotify) have been rewritten on the widget platform. The apps-rewrite branch is complete with 640 tests passing.
 

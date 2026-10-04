@@ -16,9 +16,9 @@ namespace LedMatrixOS.Apps.Commute;
 /// </summary>
 internal sealed class LeaveCard : Node
 {
-    private static readonly Pixel Relaxed = new(96, 230, 130);
-    private static readonly Pixel Soon = new(255, 190, 40);
-    private static readonly Pixel Hurry = new(255, 70, 60);
+    internal static readonly Pixel Relaxed = new(96, 230, 130);
+    internal static readonly Pixel Soon = new(255, 190, 40);
+    internal static readonly Pixel Hurry = new(255, 70, 60);
 
     private const int DigitsWidth = 40;
 
@@ -86,7 +86,7 @@ internal sealed class LeaveCard : Node
         var numberRect = new Rectangle(x, bounds.Y + 10, DigitsWidth, 37);
         if (goNow)
         {
-            TubeGfx.FillRound(frame, new Rectangle(x, numberRect.Y + 2, _go.Width + 6, 33), 3, color);
+            frame.FillRoundedRect(new Rectangle(x, numberRect.Y + 2, _go.Width + 6, 33), 3, color);
             _go.Draw(frame, x + 3, numberRect.Y + 3, Pixel.Black);
         }
         else

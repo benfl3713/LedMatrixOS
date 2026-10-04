@@ -8,8 +8,8 @@ namespace LedMatrixOS.Apps.Visuals;
 /// <summary>
 /// The equalizer engine. Per frame: pick a source (live bands, synthetic demo groove or idle breathing), turn it into per-bar targets, smooth
 /// with fast attack / slow release, run peak-hold caps with gravity, detect beats from the bass bars, then draw in the chosen style with
-/// per-bar vertical gradients, a reflection, beat particles and a bloom whose strength follows the beat. No allocation in steady state
-/// (live audio costs one 64-float copy per frame inside <see cref="AudioDataService.GetFrequencyBands"/>).
+/// per-bar vertical gradients, a reflection, beat particles and a bloom whose strength follows the beat. No allocation in steady state,
+/// live audio included (bands are copied into a cached buffer with <see cref="AudioDataService.CopyFrequencyBands"/>).
 /// </summary>
 internal sealed class EqualizerVisual : VisualNode
 {
@@ -22,6 +22,7 @@ internal sealed class EqualizerVisual : VisualNode
     private readonly GlowEffect _glow = new() { Threshold = 110f, Radius = 2, Strength = 0.6f };
     private readonly Emitter _sparks;
     private readonly Pixel[] _palette = new Pixel[8];
+    private readonly float[] _bands = new float[AudioDataService.FrequencyBandCount];
 
     private ParticleSystem? _particles;
     private int _w, _h, _n;
@@ -85,14 +86,14 @@ internal sealed class EqualizerVisual : VisualNode
         if (live)
         {
             Source = SourceKind.Live;
-            var bands = service!.GetFrequencyBands();
+            int count = service!.CopyFrequencyBands(_bands);
             float gain = 0.4f * _app.Sensitivity;
             for (int i = 0; i < _n; i++)
             {
-                int a = i * bands.Length / _n;
-                int b = Math.Max(a + 1, (i + 1) * bands.Length / _n);
+                int a = i * count / _n;
+                int b = Math.Max(a + 1, (i + 1) * count / _n);
                 float m = 0f;
-                for (int k = a; k < b && k < bands.Length; k++) m = Math.Max(m, bands[k]);
+                for (int k = a; k < b && k < count; k++) m = Math.Max(m, _bands[k]);
                 float f = i / (float)Math.Max(1, _n - 1);
                 _target[i] = Math.Clamp(m * gain * (1f + 0.6f * f), 0f, 1f);
             }

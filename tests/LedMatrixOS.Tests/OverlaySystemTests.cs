@@ -145,4 +145,16 @@ public sealed class OverlaySystemTests
         Assert.Equal(Pixel.Black, frame.GetPixel(0, 0));
         Assert.Equal(Pixel.Black, frame.GetPixel(25, 5));
     }
+
+    [Fact]
+    public void Manager_RemoveDropsOverlayImmediately()
+    {
+        var mgr = new OverlayManager();
+        mgr.Add(new BadgeOverlay("a", new Rectangle(0, 0, 4, 4), Pixel.White));
+        mgr.Add(new BadgeOverlay("b", new Rectangle(0, 0, 4, 4), Pixel.White));
+
+        Assert.True(mgr.Remove("a"));
+        Assert.False(mgr.Remove("a"));
+        Assert.Equal(1, mgr.Count);
+    }
 }

@@ -6,7 +6,7 @@ namespace LedMatrixOS.Core.Overlays;
 /// Manages the active overlays: priority queue, lifetime, rendering, and clipping.
 /// Overlays are rendered in reverse priority order (lower priority first, so higher priority appears on top).
 /// </summary>
-public sealed class OverlayManager
+public sealed class OverlayManager : IOverlayService
 {
     private readonly List<IOverlay> _overlays = new();
     private readonly object _gate = new();
@@ -101,6 +101,26 @@ public sealed class OverlayManager
             }
     }
 
+    /// <summary>Drop every overlay with this id immediately (no fade-out). Returns true if any was removed.</summary>
+    public bool Remove(string id)
+    {
+        lock (_gate) return _overlays.RemoveAll(o => o.Id == id) > 0;
+    }
+
+    /// <summary>Snapshot of the live overlays, highest priority first.</summary>
+    public IReadOnlyList<OverlayInfo> List()
+    {
+        lock (_gate)
+        {
+            return _overlays
+                .OrderByDescending(o => o.Priority)
+                .Select(o => o is OverlayBase b
+                    ? new OverlayInfo(b.Id, b.Kind, b.Text, b.Priority, b.Remaining?.TotalSeconds, b.IsExiting)
+                    : new OverlayInfo(o.Id, "overlay", null, o.Priority, null, o.ShouldDismiss))
+                .ToList();
+        }
+    }
+
     /// <summary>Clear all overlays immediately.</summary>
     public void Clear()
     {
@@ -125,3 +145,6 @@ public sealed class OverlayManager
         }
     }
 }
+
+/// <summary>Public description of a live overlay. RemainingSeconds is null when it stays until dismissed.</summary>
+public sealed record OverlayInfo(string Id, string Kind, string? Text, int Priority, double? RemainingSeconds, bool Exiting);

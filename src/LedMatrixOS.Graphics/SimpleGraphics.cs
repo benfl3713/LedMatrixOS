@@ -50,16 +50,31 @@ public static class SimpleGraphics
     public static void FillRect(this FrameBuffer frame, Rectangle rect, Pixel color) => frame.Fill(rect, color);
 
     public static void DrawRoundedRect(this FrameBuffer frame, Rectangle rect, int radius, Pixel color)
-        => DrawShape(frame, rect, color, (px, py, r) => InRoundedRect(px, py, r, radius), outline: true);
+        => DrawShape(frame, rect, color, radius, outline: true);
 
+    /// <summary>Filled rounded rectangle, one span fill per row (same pixels as testing every pixel against the corner circles).</summary>
     public static void FillRoundedRect(this FrameBuffer frame, Rectangle rect, int radius, Pixel color)
-        => DrawShape(frame, rect, color, (px, py, r) => InRoundedRect(px, py, r, radius), outline: false);
+    {
+        if (rect.Width <= 0 || rect.Height <= 0) return;
+        float rad = Math.Min(radius, Math.Min(rect.Width, rect.Height) / 2f);
+        for (int row = 0; row < rect.Height; row++)
+        {
+            int edge = Math.Min(row, rect.Height - 1 - row);
+            int inset = 0;
+            if (rad > 0 && edge < rad)
+            {
+                float dy = rad - edge - 0.5f;
+                inset = (int)MathF.Round(rad - MathF.Sqrt(Math.Max(0f, rad * rad - dy * dy)), MidpointRounding.AwayFromZero);
+            }
+            frame.Fill(new Rectangle(rect.X + inset, rect.Y + row, rect.Width - inset * 2, 1), color);
+        }
+    }
 
     public static void DrawEllipse(this FrameBuffer frame, Rectangle bounds, Pixel color)
-        => DrawShape(frame, bounds, color, InEllipse, outline: true);
+        => DrawShape(frame, bounds, color, radius: -1, outline: true);
 
     public static void FillEllipse(this FrameBuffer frame, Rectangle bounds, Pixel color)
-        => DrawShape(frame, bounds, color, InEllipse, outline: false);
+        => DrawShape(frame, bounds, color, radius: -1, outline: false);
 
     public static void DrawCircle(this FrameBuffer frame, int cx, int cy, int radius, Pixel color)
         => DrawEllipse(frame, new Rectangle(cx - radius, cy - radius, radius * 2 + 1, radius * 2 + 1), color);
@@ -122,8 +137,9 @@ public static class SimpleGraphics
         frame.Fill(new Rectangle(inner.X + filled, inner.Y, inner.Width - filled, inner.Height), background);
     }
 
-    // Shapes are rasterised per pixel against an inside test; the outline is the shape minus itself inset by 1px.
-    private static void DrawShape(FrameBuffer frame, Rectangle rect, Pixel color, Func<float, float, Rectangle, bool> inside, bool outline)
+    // Shapes are rasterised per pixel against an inside test (no delegates, so nothing is allocated per call); the outline is the shape
+    // minus itself inset by 1px. A radius of -1 selects the ellipse test, anything else the rounded-rectangle test.
+    private static void DrawShape(FrameBuffer frame, Rectangle rect, Pixel color, int radius, bool outline)
     {
         if (rect.Width <= 0 || rect.Height <= 0) return;
         var inner = new Rectangle(rect.X + 1, rect.Y + 1, rect.Width - 2, rect.Height - 2);
@@ -133,12 +149,15 @@ public static class SimpleGraphics
             for (int x = rect.Left; x < rect.Right; x++)
             {
                 float px = x + 0.5f, py = y + 0.5f;
-                if (!inside(px, py, rect)) continue;
-                if (outline && inner.Width > 0 && inner.Height > 0 && inside(px, py, inner)) continue;
+                if (!Inside(px, py, rect, radius)) continue;
+                if (outline && inner.Width > 0 && inner.Height > 0 && Inside(px, py, inner, radius)) continue;
                 frame.SetPixel(x, y, color);
             }
         }
     }
+
+    private static bool Inside(float px, float py, Rectangle r, int radius) =>
+        radius < 0 ? InEllipse(px, py, r) : InRoundedRect(px, py, r, radius);
 
     private static bool InEllipse(float px, float py, Rectangle r)
     {

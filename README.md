@@ -7,48 +7,50 @@ A flexible and extensible LED matrix display system built with .NET 10, designed
 
 ## Features
 
-- 🎨 **Rich Visual Effects** - Multiple built-in apps with stunning animations and effects
-- 🖥️ **Simulator Mode** - Develop and test apps without physical hardware
-- 🔌 **Hardware Support** - Native support for Raspberry Pi RGB LED matrices via rpi-rgb-led-matrix library
-- 🌐 **Web API** - RESTful API for controlling apps, brightness, and settings
-- 🎯 **Extensible Architecture** - Easy-to-use base classes for creating custom apps
-- 🚀 **High Performance** - Optimized rendering engine with configurable FPS
-- 📱 **Web Preview** - Real-time browser preview in simulator mode
+- 🎨 **Animated apps** - Clocks, ambient scenes, visual effects and everyday boards, all built on a widget and animation toolkit
+- 🖥️ **Simulator mode** - Develop and test apps without hardware, with a live browser preview (WebSocket)
+- 🔌 **Hardware support** - Raspberry Pi RGB LED matrices via the rpi-rgb-led-matrix library
+- 🌐 **REST API** - Control apps, brightness, settings, schedules and notifications
+- 🗓️ **Scheduler** - Playlists that rotate apps, and rules such as "weekdays 07:15-08:45: commute" or "23:00-07:00: dim"
+- 🔔 **Overlays** - Toasts, corner badges and alerts drawn over whatever is running
+- 🛡️ **Crash card** - An app that throws shows its error on the panel instead of freezing
+- 📱 **Clients** - Flutter mobile app and a Home Assistant integration
 
 ## Built-in Apps
 
-The system includes several pre-built applications:
+| Group | Apps (id) |
+|---|---|
+| Clocks | Clock (`clock`), Animated Clock (`animated-clock`), Flip Clock (`flip-clock`), Countdown Timer (`countdown-timer`) |
+| Ambient | Home (`home`), Solid Color / mood light (`solid_color`), Scrolling Text (`scrolling-text`) |
+| Visuals | Rainbow Spiral (`rainbow-spiral`), Geometric Patterns (`geometric-patterns`), Bouncing Balls (`bouncing-balls`), DVD Logo (`dvd-logo`), Matrix Rain (`matrix-rain`), Fire (`fire`), Equalizer (`equalizer`) |
+| Everyday | Weather (`weather`, Open-Meteo, no key), Commute (`commute`), Calendar (`calendar`), Home Assistant tiles (`ha-tiles`), Spotify (`spotify`, needs API config) |
+| Tube | Tube Departures (`tube-departures`), Tube Status (`tube-status`), Tube Line (`tube-line`) |
+| Dev | Widget Demo (`widget-demo`) |
 
-### Clock Apps
-- **Clock** (`clock`) - Simple digital clock with decorative stars
-- **Animated Clock** (`animated-clock`) - 7-segment style animated digital clock with smooth transitions
+Apps with settings expose them through `GET /api/apps/{id}/settings`.
 
-### Visual Effects
-- **Rainbow Spiral** (`rainbow-spiral`) - Mesmerizing rainbow-colored spiral animation
-- **Geometric Patterns** (`geometric-patterns`) - Rotating triangles, pulsating circles, and rotating squares
-- **Bouncing Balls** (`bouncing-balls`) - Physics-based bouncing balls with glow effects
-- **DVD Logo** (`dvd-logo`) - Classic DVD screensaver bounce effect with color changes
-- **Matrix Rain** (`matrix-rain`) - The Matrix-style falling characters effect
-- **Solid Color** (`solid_color`) - Simple solid color display
+### Config keys used by the everyday apps
 
-### Information Apps
-- **Weather** (`weather`) - Display current weather information (requires API configuration)
-- **Spotify** (`spotify`) - Display currently playing track from Spotify (requires API configuration)
+| Key | Used by |
+|---|---|
+| `Weather:Location` | Weather, Commute (place name or `lat,lon`) |
+| `TFL:AppKey`, `Commute:StationId`, `Commute:WalkMinutes`, `TubeDeparturesApp:StationId` | Tube apps, Commute |
+| `Calendar:IcsUrl` | Calendar (an `.ics` feed; `webcal://` works) |
+| `HomeAssistant:BaseUrl`, `HomeAssistant:Token`, `HomeAssistant:Entities` | Home Assistant tiles (long-lived access token) |
+| `Display:Width`, `Display:Height` | Display size (default 256x64) |
+
+Put secrets in `appsettings.local.json`, which is not committed.
 
 ## Architecture
 
-The project is organized into several modules:
-
-- **LedMatrixOS** - Main application with ASP.NET Core web server
-- **LedMatrixOS.Core** - Core abstractions and rendering engine
-  - `IMatrixApp` - Interface for creating apps
-  - `MatrixAppBase` - Base class with lifecycle management
-  - `RenderEngine` - High-performance rendering loop
-  - `FrameBuffer` - Pixel buffer for frame composition
-  - `AppManager` - App registration and activation
-- **LedMatrixOS.Apps** - Collection of built-in applications
-- **LedMatrixOS.Hardware.RpiLedMatrix** - Raspberry Pi hardware adapter (native bindings to librgbmatrix.so)
+- **LedMatrixOS** - ASP.NET Core host: DI, device selection, REST endpoints, `ScheduleRunner`, WebSocket preview
+- **LedMatrixOS.Core** - Engine with no hardware or app specifics: `RenderEngine`, `FrameBuffer`, `AppManager`, `FrameContext`, animation (`Easing`, `Tween`, `Timeline`), transitions, `Poll<T>` data, attribute settings, `Scheduling/` (playlists and rules), `Overlays/`, `CrashGuard`, `FrameBroadcaster`
+- **LedMatrixOS.Graphics** - Canvas helpers, fonts and text, the widget layer (`Node`, `Stack`, `Dock`, `Label`, `ListView`, `Pager`, `RollingNumber`, `WidgetApp`), particles and post-effects
+- **LedMatrixOS.Apps** - The built-in apps (register new ones in `Apps.cs`)
+- **LedMatrixOS.Hardware.RpiLedMatrix** - Raspberry Pi adapter (bindings to librgbmatrix.so)
 - **LedMatrixOS.Hardware.Simulator** - Simulated display for development
+- **tests/LedMatrixOS.Tests** - Unit and snapshot (golden PNG) tests
+- **flutter_app/**, **homeassistant/** - Clients of the REST API
 
 ## Requirements
 
@@ -150,19 +152,62 @@ The application exposes a RESTful API for control:
   curl -X POST http://localhost:5005/api/settings/brightness/50
   ```
 
-- `POST /api/settings/fps/{value}` - Set target FPS (1-120)
-  ```bash
-  curl -X POST http://localhost:5005/api/settings/fps/60
-  ```
+### Overlays and notifications
 
-### Simulator Preview
+- `POST /api/overlays/toast` - banner over the running app: `{"message":"Dinner","seconds":4,"color":"#000000","background":"#ffffff"}`
+- `POST /api/overlays/badge` - corner indicator until dismissed: `{"id":"door","color":"#ff3c3c","pulsing":true}`
+- `DELETE /api/overlays/{id}` and `DELETE /api/overlays` - dismiss one / all
+- `POST /api/notifications/message` - full-screen alert, scrolls if long: `{"message":"Washing done","color":{"r":255,"g":160,"b":0}}`
+- `POST /api/notifications` - red flash for 5 seconds
 
+### Schedule
+
+- `POST /api/schedule/reload` - re-read `schedule.json` from the app directory
+- `GET /api/schedule` - what the schedule currently selects
+
+`schedule.json` holds `playlists` (apps with durations, optional per-entry `settings`) and `rules` (time window, `daysMask` where Sun=1, Mon=2, ... Sat=64, optional `brightnessOverride`, `priority`). Times are local. See `src/LedMatrixOS/schedule.example.json`. A manual app switch sticks until the playlist next rotates.
+
+### Health
+
+- `GET /api/health` - status, active app, display size, uptime
+
+### Preview
+
+- `GET /ws/preview` - WebSocket of binary frames: `[width u16 LE][height u16 LE][RGB bytes]`, up to 30 fps, only when the picture changed
 - `GET /preview` - Get current display as PNG (simulator mode only)
   ```bash
   curl http://localhost:5005/preview -o preview.png
   ```
 
 ## Creating Custom Apps
+
+### Widget apps (recommended)
+
+Describe a tree of widgets once; the framework lays it out, animates and draws it. Settings come from attributes and data from `Poll`:
+
+```csharp
+public class HelloApp : WidgetApp
+{
+    public override string Id => "hello";
+    public override string Name => "Hello";
+
+    [Setting("Greeting", Description = "Text to show")]
+    public string Greeting { get; set; } = "HELLO";
+
+    protected override Node Build() => new Stack(Orientation.Vertical)
+    {
+        Children =
+        {
+            new Label(() => Greeting) { Style = new TextStyle(Fonts.Big, new Pixel(120, 220, 240)) },
+            new Clock("HH:mm", Time),
+        },
+    };
+}
+```
+
+Use `Time` and the frame context rather than `DateTime.Now`, so tests can drive the clock. Look at `CommuteApp` or `HomeAssistantTilesApp` for complete examples with polled data, and `tests/LedMatrixOS.Tests/CommuteAppTests.cs` for golden-image and allocation tests. Steady-state rendering should allocate nothing (cache `TextRun`s; rebuild strings only when data changes).
+
+### Low-level apps
 
 To create your own app, inherit from `MatrixAppBase`:
 
@@ -286,11 +331,14 @@ LedMatrixOS/
 │   │   ├── appsettings.json      # Configuration
 │   │   └── wwwroot/
 │   │       └── index.html        # Web preview UI
-│   ├── LedMatrixOS.Core/         # Core engine
-│   │   └── Class1.cs             # Core abstractions
+│   ├── LedMatrixOS.Core/         # Engine, scheduling, overlays, animation
+│   ├── LedMatrixOS.Graphics/     # Canvas, fonts, widget layer, particles
 │   ├── LedMatrixOS.Apps/         # Built-in apps
 │   ├── LedMatrixOS.Hardware.RpiLedMatrix/  # Pi hardware
 │   └── LedMatrixOS.Hardware.Simulator/     # Simulator
+├── tests/LedMatrixOS.Tests/      # Unit and golden-image tests
+├── flutter_app/                  # Mobile client
+├── homeassistant/                # Home Assistant integration
 ├── LedMatrixOS.sln               # Solution file
 └── Directory.Build.props         # Common build settings
 ```
@@ -310,7 +358,9 @@ dotnet build -c Release
 
 ### Testing
 
-The simulator mode is perfect for testing apps without hardware:
+Run the automated tests (including golden-image snapshots) with `dotnet test`. If a visual change is intended, review the images and regenerate with `UPDATE_SNAPSHOTS=1 dotnet test`; set `LED_PREVIEW_DIR` to also write enlarged PNGs you can look at.
+
+The simulator mode is perfect for trying apps without hardware:
 
 1. Set `Matrix:UseSimulator` to `true` in configuration
 2. Run the application

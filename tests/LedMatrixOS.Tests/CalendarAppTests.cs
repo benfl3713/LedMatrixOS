@@ -1,6 +1,7 @@
 using LedMatrixOS.Apps;
 using LedMatrixOS.Apps.Calendar;
 using LedMatrixOS.Graphics.Text;
+using LedMatrixOS.Graphics.UI;
 using Xunit;
 
 namespace LedMatrixOS.Tests;
@@ -50,10 +51,10 @@ public class CalendarAppTests
 
     // ---- app -------------------------------------------------------------------------------------------------------
 
-    private static (CalendarApp App, AppStage Stage) Rig(List<CalEvent>? events, string url = "https://example.com/c.ics", bool showAllDay = true)
+    private static (CalendarApp App, AppStage Stage) Rig(List<CalEvent>? events, string url = "https://example.com/c.ics", bool showAllDay = true, int timelineSeconds = 0)
     {
         Fonts.Load();
-        var app = new CalendarApp(new HttpClient()) { Time = new FakeTime(), Zone = TimeZoneInfo.Utc, ShowAllDay = showAllDay };
+        var app = new CalendarApp(new HttpClient()) { Time = new FakeTime(), Zone = TimeZoneInfo.Utc, ShowAllDay = showAllDay, TimelineSeconds = timelineSeconds };
         app.UseData(new MutableLive<List<CalEvent>> { Value = events }, url);
         var stage = new AppStage(app);
         stage.Step(33, 10);
@@ -80,7 +81,7 @@ public class CalendarAppTests
     {
         var app = new CalendarApp(new HttpClient());
         Assert.Equal("calendar", app.Id);
-        Assert.Equal(["showAllDay"], app.GetSettings().Select(s => s.Key));
+        Assert.Equal(["showAllDay", "timelineSeconds"], app.GetSettings().Select(s => s.Key));
     }
 
     [Fact]
@@ -111,13 +112,184 @@ public class CalendarAppTests
         Golden(stage, "calendar_not_configured");
     }
 
+    // ---- progress, long titles, list animation -------------------------------------------------------------------------
+
+    private static DateTimeOffset At(int hour, int minute = 0) => new DateTimeOffset(Now.Date, TimeSpan.Zero).AddHours(hour).AddMinutes(minute);
+
+    [Fact]
+    public void Golden_EventInProgressShowsHowFarThroughItIs()
+    {
+        var (app, stage) = Rig([Ev("Sprint planning", Now.AddMinutes(-45), 60, "Zoom"), .. Agenda().Skip(1)]);
+        Assert.True(app.Model.ShowProgress);
+        Assert.InRange(app.Model.Progress, 0.74f, 0.76f);
+        Golden(stage, "calendar_now_progress");
+    }
+
+    [Fact]
+    public void ProgressBarOnlyShowsWhileATimedEventIsHappening()
+    {
+        var (app, _) = Rig(Agenda());
+        Assert.False(app.Model.ShowProgress);
+        (app, _) = Rig([Day("Holiday", 0), Ev("Standup", Now.AddHours(1))]);
+        Assert.False(app.Model.ShowProgress);   // all-day events have no meaningful elapsed share
+    }
+
+    [Fact]
+    public void Golden_LongTitleScrollsInsteadOfTruncating()
+    {
+        const string title = "Quarterly planning offsite with the whole platform and data teams";
+        var (app, stage) = Rig([Ev(title, Now.AddMinutes(30), 90, "Conference centre, main hall"), .. Agenda().Skip(1)]);
+        Assert.Equal(title, app.Model.Title);   // the full text goes to the marquee, nothing is cut with an ellipsis
+        stage.Step(100, 35);   // 2s rest, then about 1.5s of scrolling
+        Golden(stage, "calendar_long_title");
+    }
+
+    [Fact]
+    public void NextEventsListAnimatesWhenItChanges()
+    {
+        Fonts.Load();
+        var live = new MutableLive<List<CalEvent>> { Value = Agenda() };
+        var app = new CalendarApp(new HttpClient()) { Time = new FakeTime(), Zone = TimeZoneInfo.Utc };
+        app.UseData(live);
+        var stage = new AppStage(app);
+        stage.Step(33, 10);
+
+        var list = Find<ListView<CalEvent>>(app.Root!)!;
+        Assert.Equal(3, list.Count);
+
+        // the dentist event goes away: its row collapses (still present while animating), then is dropped
+        live.Value = [.. Agenda().Where(e => e.Title != "Dentist")];
+        stage.Step(33, 3);
+        Assert.Equal(2, list.Count);
+        Assert.Equal(3, list.Children.Count);
+        stage.Step(33, 20);
+        Assert.Equal(2, list.Children.Count);
+    }
+
+    private static T? Find<T>(Node node) where T : Node
+    {
+        if (node is T hit) return hit;
+        if (node is Container container)
+            foreach (var child in container.Children)
+                if (Find<T>(child) is { } found) return found;
+        return null;
+    }
+
+    // ---- today timeline --------------------------------------------------------------------------------------------------
+
+    private static (CalendarApp App, AppStage Stage) TimelineRig(List<CalEvent> events)
+    {
+        var (app, stage) = Rig(events, timelineSeconds: 3);
+        stage.Step(100, 40);   // 3s on the board, 0.5s sliding, then settled on the timeline
+        Assert.Equal(1, app.Pages!.PageIndex);
+        return (app, stage);
+    }
+
+    private static List<CalEvent> BusyDay() =>
+    [
+        Day("Team offsite", 0),
+        Ev("Standup", At(9), 15),
+        Ev("Design review", At(11), 90, "Room 4"),
+        Ev("Lunch and learn", At(12, 30), 90),
+        Ev("1:1 Sam", At(15, 45), 30),
+        Ev("Team dinner", At(19), 120, "The Crown"),
+        Ev("Tomorrow thing", At(10).AddDays(1), 60),
+    ];
+
+    private static List<CalEvent> OverlappingDay() =>
+    [
+        Day("Birthday cake", 0),
+        Day("Bank holiday", 0),
+        Ev("Planning", At(10), 120),
+        Ev("Design review", At(10, 30), 60),
+        Ev("Interview", At(11), 90),
+        Ev("Lunch", At(13), 60),
+        Ev("Call with Priya", At(13, 30), 60),
+        Ev("Gym", At(18), 60),
+        Ev("Late shipment", At(21), 180),   // runs past midnight, so the axis stretches to the end of the day
+    ];
+
+    [Fact]
+    public void Golden_TodayTimeline()
+    {
+        var (_, stage) = TimelineRig(BusyDay());
+        Golden(stage, "calendar_timeline");
+    }
+
+    [Fact]
+    public void Golden_TodayTimelineOverlappingEventsStackInLanes()
+    {
+        var (app, stage) = TimelineRig(OverlappingDay());
+        Assert.Equal(3, app.Model.Lanes);
+        Assert.Equal(2, app.Model.AllDayCount);
+        Golden(stage, "calendar_timeline_overlap");
+    }
+
+    [Fact]
+    public void Timeline_LaysOutLanesAndWindow()
+    {
+        var (app, _) = Rig(OverlappingDay());
+        var m = app.Model;
+        Assert.Equal(7, m.BarCount);
+        Assert.Equal([0, 1, 2, 0, 1, 0, 0], m.Bars.Take(m.BarCount).Select(b => b.Lane));
+        Assert.Equal(7f, m.StartHour);
+        Assert.Equal(24f, m.EndHour);
+        Assert.Equal("Birthday cake, Bank holiday", m.AllDayText);
+
+        (app, _) = Rig(BusyDay());
+        Assert.Equal(7f, app.Model.StartHour);
+        Assert.Equal(23f, app.Model.EndHour);
+        Assert.Equal(1, app.Model.Lanes);
+        Assert.Equal(5, app.Model.BarCount);   // tomorrow's event is not on today's axis
+
+        (app, _) = Rig([Ev("Early flight", At(5), 60), Ev("Tomorrow", At(10).AddDays(1))]);
+        Assert.Equal(5f, app.Model.StartHour);
+        (app, _) = Rig([Ev("Tomorrow", At(10).AddDays(1))]);
+        Assert.Equal(0, app.Model.BarCount);
+        Assert.Equal("Nothing scheduled", app.Model.AllDayText);
+    }
+
+    [Fact]
+    public void TimelineSeconds_TurnsThePagerOnAndOff()
+    {
+        var (app, stage) = Rig(Agenda());
+        Assert.Equal(1, app.Pages!.PageCount);
+
+        app.TimelineSeconds = 4;
+        stage.Step(33, 2);
+        Assert.Equal(2, app.Pages.PageCount);
+        Assert.Equal(TimeSpan.FromSeconds(4), app.Pages.Interval);
+
+        app.TimelineSeconds = 0;
+        stage.Step(33, 2);
+        Assert.Equal(1, app.Pages.PageCount);
+        Assert.Equal(0, app.Pages.PageIndex);
+    }
+
+    [Fact]
+    public void Timeline_SteadyState_DoesNotAllocate()
+    {
+        var (_, stage) = Rig(BusyDay(), timelineSeconds: 5);
+        stage.Step(100, 60);   // onto the timeline page
+        for (int i = 0; i < 20; i++) { stage.Step(33); stage.Render(); }
+
+        long least = long.MaxValue;
+        for (int window = 0; window < 6; window++)
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 30; i++) { stage.Step(33); stage.Render(); }
+            least = Math.Min(least, GC.GetAllocatedBytesForCurrentThread() - before);
+        }
+        Assert.True(least < 256, $"least allocation: {least} bytes");
+    }
+
     [Fact]
     public void HidingAllDayEventsRemovesThemFromTheList()
     {
         var (app, stage) = Rig([Day("Holiday", 0), Ev("Standup", Now.AddHours(1))], showAllDay: false);
         stage.Step(33);
-        Assert.Single(app.Board!.Events);
-        Assert.Equal("Standup", app.Board.Events[0].Title);
+        Assert.Single(app.Model.Events);
+        Assert.Equal("Standup", app.Model.Events[0].Title);
     }
 
     [Fact]

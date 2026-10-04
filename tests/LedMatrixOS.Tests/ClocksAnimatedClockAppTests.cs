@@ -6,9 +6,9 @@ namespace LedMatrixOS.Tests;
 
 public class ClocksAnimatedClockAppTests
 {
-    private static ClocksHarness Make(DateTimeOffset start, Action<AnimatedClockApp>? configure = null)
+    private static ClocksHarness Make(DateTimeOffset start, Action<ClockApp>? configure = null)
     {
-        var app = new AnimatedClockApp();
+        var app = new ClockApp { Style = "Animated" };
         configure?.Invoke(app);
         var h = new ClocksHarness(app, start);
         h.Step(16);

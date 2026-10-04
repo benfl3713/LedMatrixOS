@@ -17,7 +17,11 @@ public sealed class ScheduleRule
     /// <summary>End time (HH:MM). Null = midnight (23:59, wraps to next day if needed).</summary>
     public TimeSpan? EndTime { get; set; }
 
-    /// <summary>Optional context trigger: "spotify_playing", "line_disrupted", "event_starting", etc.</summary>
+    /// <summary>
+    /// Optional context trigger, evaluated by <see cref="AttentionEvaluator"/> on top of the time window:
+    /// "spotify_playing", "line_disrupted:&lt;lineId&gt;", "bus_due:&lt;stopId&gt;" or "ha_state:&lt;entity&gt;=&lt;value&gt;".
+    /// A rule whose condition has no registered source never matches.
+    /// </summary>
     public string? Condition { get; set; }
 
     /// <summary>Brightness to set when this rule is active (0-255). Null = no change.</summary>

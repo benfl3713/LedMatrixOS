@@ -21,7 +21,7 @@ public sealed class OpenMeteoWeatherSource(HttpClient http) : IWeatherSource
         "https://api.open-meteo.com/v1/forecast" +
         $"?latitude={lat.ToString(CultureInfo.InvariantCulture)}&longitude={lon.ToString(CultureInfo.InvariantCulture)}" +
         "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,is_day" +
-        "&hourly=temperature_2m,weather_code,precipitation_probability,is_day" +
+        "&hourly=temperature_2m,weather_code,precipitation_probability,is_day,wind_speed_10m" +
         "&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max" +
         "&timezone=auto&forecast_days=4" +
         (fahrenheit ? "&temperature_unit=fahrenheit&wind_speed_unit=mph" : "&wind_speed_unit=kmh");
@@ -64,7 +64,7 @@ public sealed class OpenMeteoWeatherSource(HttpClient http) : IWeatherSource
             var t = ParseLocal(times[i].GetString()!);
             if (t < nowLocal.Date.AddHours(nowLocal.Hour)) continue;
             hours.Add(new HourlyPoint(t, hourly.GetProperty("temperature_2m")[i].GetDouble(),
-                IntAt(hourly, "weather_code", i), IntAt(hourly, "is_day", i) == 1, IntAt(hourly, "precipitation_probability", i)));
+                IntAt(hourly, "weather_code", i), IntAt(hourly, "is_day", i) == 1, IntAt(hourly, "precipitation_probability", i), DoubleAt(hourly, "wind_speed_10m", i)));
         }
 
         var daily = root.GetProperty("daily");
@@ -86,12 +86,15 @@ public sealed class OpenMeteoWeatherSource(HttpClient http) : IWeatherSource
 
     private static DateTime ParseLocal(string s) => DateTime.Parse(s, CultureInfo.InvariantCulture, DateTimeStyles.None);
 
+    private static double DoubleAt(JsonElement obj, string prop, int i) =>
+        obj.TryGetProperty(prop, out var a) && i < a.GetArrayLength() && a[i].ValueKind == JsonValueKind.Number ? a[i].GetDouble() : 0;
+
     private static int IntAt(JsonElement obj, string prop, int i) =>
         obj.TryGetProperty(prop, out var a) && i < a.GetArrayLength() && a[i].ValueKind == JsonValueKind.Number ? (int)Math.Round(a[i].GetDouble()) : 0;
 }
 
 /// <summary>Deterministic stand-in: the same input always gives the same forecast. Used by tests and for offline demos (config Weather:Source = Fake).</summary>
-public sealed class FakeWeatherSource(int code = 0, bool isDay = true, double tempC = 21, string location = "London", Func<bool>? fail = null) : IWeatherSource
+public sealed class FakeWeatherSource(int code = 0, bool isDay = true, double tempC = 21, string location = "London", Func<bool>? fail = null, bool dry = false, double windKmh = 12) : IWeatherSource
 {
     public static readonly DateTime Epoch = new(2026, 1, 2, 13, 0, 0);
 
@@ -105,7 +108,7 @@ public sealed class FakeWeatherSource(int code = 0, bool isDay = true, double te
         {
             var t = Epoch.AddHours(i);
             int hc = i % 5 == 4 ? 61 : i % 3 == 2 ? 3 : i > 8 ? 2 : code;
-            hours.Add(new HourlyPoint(t, Conv(tempC + 3 * Math.Sin(i / 3.0)), hc, t.Hour is >= 7 and < 19, i % 5 == 4 ? 60 : i * 3 % 40));
+            hours.Add(new HourlyPoint(t, Conv(tempC + 3 * Math.Sin(i / 3.0)), hc, t.Hour is >= 7 and < 19, dry ? (i % 4 == 0 ? 10 : 0) : i % 5 == 4 ? 60 : i * 3 % 40, query.Fahrenheit ? windKmh / 1.609 : windKmh));
         }
 
         int[] dayCodes = [code, 61, 2, 71];

@@ -13,22 +13,33 @@ public static class BuiltInApps
         yield return typeof(BouncingBallsApp);
         yield return typeof(MatrixRainApp);
         yield return typeof(GeometricPatternsApp);
-        yield return typeof(AnimatedClockApp);
         yield return typeof(DvdLogoApp);
         yield return typeof(WeatherApp);
         yield return typeof(SpotifyApp);
-        yield return typeof(FlipClockApp);
         yield return typeof(CountdownTimerApp);
-        //yield return typeof(PongApp);
         yield return typeof(ScrollingTextApp);
         yield return typeof(EqualizerApp);
         yield return typeof(FireApp);
         yield return typeof(TubeStatusApp);
         yield return typeof(TubeLineApp);
         yield return typeof(TubeDeparturesApp);
+        yield return typeof(BusArrivalsApp);
+        yield return typeof(RailDeparturesApp);
+        yield return typeof(CycleHubApp);
+        yield return typeof(PlaneSpotterApp);
+        yield return typeof(JourneyApp);
+        yield return typeof(BinDayApp);
+        yield return typeof(MorningBriefingApp);
         yield return typeof(CommuteApp);
         yield return typeof(HomeAssistantTilesApp);
         yield return typeof(CalendarApp);
         yield return typeof(WidgetDemoApp);
+    }
+
+    /// <summary>Retired app ids that still work in schedules, the API and persisted settings: (alias, target id, preset settings).</summary>
+    public static IEnumerable<(string Alias, string TargetId, IReadOnlyDictionary<string, object> Preset)> Aliases()
+    {
+        yield return ("animated-clock", "clock", new Dictionary<string, object> { ["style"] = "Animated" });
+        yield return ("flip-clock", "clock", new Dictionary<string, object> { ["style"] = "Flip" });
     }
 }

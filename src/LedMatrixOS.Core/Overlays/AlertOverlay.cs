@@ -14,10 +14,12 @@ public sealed class AlertOverlay : OverlayBase
     private readonly bool _drawBorder;
     private readonly Action<FrameBuffer, FrameContext> _renderContent;
 
+    public override string Kind => "alert";
+
     /// <summary>
     /// Create an alert overlay.
     /// renderContent: callback to draw the alert content (message, icon, etc.).
-    /// drawBorder: if true, draws a colored border around the alert.
+    /// drawBorder: if true, draws a colored border around the alert. bounds defaults to a 256x64 screen.
     /// </summary>
     public AlertOverlay(
         TimeSpan duration,
@@ -25,8 +27,10 @@ public sealed class AlertOverlay : OverlayBase
         Pixel? bgColor = null,
         Pixel? borderColor = null,
         bool drawBorder = true,
-        int priority = 200)
-        : base("alert", priority, new Rectangle(0, 0, 256, 64))
+        int priority = 200,
+        Rectangle? bounds = null,
+        string id = "alert")
+        : base(id, priority, bounds ?? new Rectangle(0, 0, 256, 64))
     {
         _bgColor = bgColor ?? Pixel.Black;
         _borderColor = borderColor ?? Pixel.White;

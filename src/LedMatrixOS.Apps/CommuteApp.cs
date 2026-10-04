@@ -25,7 +25,11 @@ public class CommuteApp : WidgetApp
 
     private static readonly IReadOnlyList<LineStatus> NoStatuses = [];
 
-    [Setting("Station ID", Description = "TfL Naptan ID of your station (find it in the Tube Departures app).")]
+
+    [Setting("Station Search", Description = "Type a station name (e.g. Baker Street), then choose it in Station Select.")]
+    public string StationSearch { get; set; } = "";
+
+    [Setting("Station ID", Description = "TfL Naptan ID (filled in when you choose a result from Station Select).")]
     public string StationId { get; set; } = "";
 
     [Setting("Platform Filter", Description = "Only trains whose platform contains this text (e.g. 'Eastbound'). Leave empty for all.")]
@@ -50,6 +54,8 @@ public class CommuteApp : WidgetApp
     private CancellationTokenSource? _stationCts, _weatherCts;
     private bool _active, _locationFromUser;
 
+    private readonly TflStopPicker _picker;
+
     private LeaveCard? _card;
     private WeatherChip? _chip;
     private StateScreen? _state;
@@ -61,6 +67,12 @@ public class CommuteApp : WidgetApp
         httpClient.Timeout = TimeSpan.FromSeconds(10);
         _api = new TflApi(httpClient);
         _weatherSource = new OpenMeteoWeatherSource(httpClient);
+        _picker = new TflStopPicker("stationSearch", "stationSelect", "Station Select", "Choose a result to set the station automatically.",
+            () => StationSearch, _api.SearchStationsAsync, id =>
+            {
+                StationId = id;
+                if (_active) RestartStationPolling();
+            }, RunInBackground);
     }
 
     // ---- view -------------------------------------------------------------------------------------------------------------------
@@ -88,6 +100,8 @@ public class CommuteApp : WidgetApp
                 new Block(new Pixel(14, 14, 20)),
                 new Stack(Orientation.Horizontal, gap: 3)
                 {
+                    HAlign = Align.Stretch,
+                    VAlign = Align.Stretch,
                     CrossAlign = Align.Center,
                     Padding = new Thickness(2, 1, 3, 1),
                     Children =
@@ -170,8 +184,17 @@ public class CommuteApp : WidgetApp
         await base.OnDeactivatedAsync(cancellationToken);
     }
 
+    // stationSelect has options that change as the user types, so it is not a [Setting] property.
+    public override IEnumerable<AppSetting> GetSettings() => _picker.WithSelect(base.GetSettings());
+
+    public override void UpdateSetting(string key, object value)
+    {
+        if (!_picker.TryUpdate(key, value)) base.UpdateSetting(key, value);
+    }
+
     protected override void OnSettingChanged(string key)
     {
+        if (key == "stationSearch") _picker.OnQueryChanged();
         if (!_active) return;
         switch (key)
         {
@@ -196,19 +219,8 @@ public class CommuteApp : WidgetApp
         var cts = _stationCts = new CancellationTokenSource();
         var arrivals = Poll(TimeSpan.FromSeconds(30), ct => _api.GetArrivalsAsync(stationId, ct), cts.Token);
         _arrivals = arrivals;
-        _lineStatuses = Poll(TimeSpan.FromMinutes(5), ct => FetchLineStatusesAsync(arrivals, ct), cts.Token);
+        _lineStatuses = Poll(TimeSpan.FromMinutes(5), ct => TflStopPicker.FetchLineStatusesAsync(_api, arrivals, ct), cts.Token);
     }
-
-    private async Task<LineStatus[]> FetchLineStatusesAsync(ILiveData<TflArrival[]> arrivals, CancellationToken ct)
-    {
-        string[] lineIds;
-        while ((lineIds = LineIdsOf(arrivals.Value)).Length == 0) await Task.Delay(250, ct);
-        return await _api.GetLineStatusesAsync(lineIds, ct);
-    }
-
-    private static string[] LineIdsOf(TflArrival[]? arrivals) => (arrivals ?? [])
-        .Where(a => !string.IsNullOrWhiteSpace(a.LineId)).Select(a => a.LineId)
-        .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(id => id).ToArray();
 
     private void RestartWeatherPolling()
     {

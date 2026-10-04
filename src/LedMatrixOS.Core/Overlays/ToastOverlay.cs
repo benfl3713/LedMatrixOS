@@ -20,14 +20,17 @@ public sealed class ToastOverlay : OverlayBase
         TimeSpan duration,
         Action<FrameBuffer, FrameContext> renderContent,
         Pixel? bgColor = null,
-        Rectangle? bounds = null)
-        : base("toast", priority: 100, bounds: bounds ?? new Rectangle(0, 0, 256, 8))
+        Rectangle? bounds = null,
+        string id = "toast")
+        : base(id, priority: 100, bounds: bounds ?? new Rectangle(0, 0, 256, 8))
     {
         _bgColor = bgColor ?? Pixel.White;
         _renderContent = renderContent ?? ((_, _) => { });
         Duration = duration;
         TransitionDuration = TimeSpan.FromMilliseconds(150);
     }
+
+    public override string Kind => "toast";
 
     public override void Render(FrameBuffer frame, FrameContext context)
     {
