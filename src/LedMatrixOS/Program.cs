@@ -41,7 +41,12 @@ builder.Services.AddSingleton<AppManager>(sp =>
     var settingsStorage = sp.GetRequiredService<AppSettingsStorage>();
     return new AppManager(sp, builder.Configuration, height, width, settingsStorage);
 });
-builder.Services.AddSingleton<LedMatrixOS.Core.Screens.IScreenStore, LedMatrixOS.Core.Screens.ScreenStore>();
+builder.Services.AddSingleton<LedMatrixOS.Core.Screens.ScreenStore>();
+builder.Services.AddSingleton<LedMatrixOS.Core.Screens.IScreenStore>(sp => sp.GetRequiredService<LedMatrixOS.Core.Screens.ScreenStore>());
+builder.Services.AddSingleton(sp => new LedMatrixOS.Core.Screens.ScreenCatalog(
+    sp.GetRequiredService<LedMatrixOS.Core.Screens.ScreenStore>(),
+    sp.GetRequiredService<AppManager>(),
+    Path.Combine(AppContext.BaseDirectory, "screens.json")));
 builder.Services.AddSingleton<AudioDataService>();
 builder.Services.AddSingleton<InterruptService>();
 var schedulePath = Path.Combine(AppContext.BaseDirectory, "schedule.json");
@@ -104,6 +109,9 @@ var appManager = app.Services.GetRequiredService<AppManager>();
 var attention = app.Services.GetRequiredService<AttentionCoordinator>();
 attention.Start();
 app.Lifetime.ApplicationStopping.Register(attention.Dispose);
+
+foreach (var error in app.Services.GetRequiredService<LedMatrixOS.Core.Screens.ScreenCatalog>().Load())
+    app.Logger.LogError("screens.json: {Path} {Message}", error.Path, error.Message);
 
 await appManager.ActivateAsync("home", CancellationToken.None);
 engine.Start();
@@ -280,6 +288,7 @@ app.MapGet("/api/audio/status", (AudioDataService audioService) =>
 
 app.MapNotificationEndpoints();
 app.MapOverlayEndpoints(schedulePath);
+app.MapScreenEndpoints();
 
 app.Run();
 

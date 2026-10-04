@@ -48,14 +48,33 @@ public sealed class ScreenApp : WidgetApp, IPollHost
     public override async Task OnActivatedAsync((int height, int width) dimensions, IConfiguration configuration, CancellationToken cancellationToken)
     {
         _config = configuration;
+        _store.Changed -= OnStoreChanged;
+        _store.Changed += OnStoreChanged;
         await base.OnActivatedAsync(dimensions, configuration, cancellationToken);
     }
 
     public override async Task OnDeactivatedAsync(CancellationToken cancellationToken)
     {
+        _store.Changed -= OnStoreChanged;
         _pollCts?.Cancel();
         _pollCts = null;
         await base.OnDeactivatedAsync(cancellationToken);
+    }
+
+    private int _dirty;
+
+    // Raised on whichever thread edited the store; the rebuild itself happens on the render thread in Update.
+    private void OnStoreChanged() => Volatile.Write(ref _dirty, 1);
+
+    public override void Update(FrameContext context, CancellationToken cancellationToken)
+    {
+        if (Interlocked.Exchange(ref _dirty, 0) == 1)
+        {
+            _pollCts?.Cancel();
+            _pollCts = null;
+            InvalidateTree();
+        }
+        base.Update(context, cancellationToken);
     }
 
     /// <summary>Number of distinct binding sources the last build created (shared weather counts once per field).</summary>
