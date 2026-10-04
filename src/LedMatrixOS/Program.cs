@@ -111,8 +111,9 @@ app.Lifetime.ApplicationStopping.Register(engine.Stop);
 // API endpoints
 app.MapGet("/api/apps", (AppManager appManager) => 
 {
-    var apps = appManager.AppInfos.Select(i => new { i.Id, i.Name, i.HasSettings }).ToList();
-    return Results.Ok(new { apps, activeApp = appManager.ActiveApp?.Id });
+    var apps = appManager.AppInfos.Select(i => new { i.Id, i.Name, i.HasSettings, isScreen = false })
+        .Concat(appManager.Screens.Select(s => new { s.Id, s.Name, s.HasSettings, isScreen = true })).ToList();
+    return Results.Ok(new { apps, activeApp = appManager.ActiveAppId });
 });
 
 app.MapPost("/api/apps/{id}", async (string id, AppManager appManager, CancellationToken ct) =>
@@ -147,7 +148,7 @@ app.MapGet("/api/health", (RenderEngine eng, IMatrixDevice device, AppManager ap
     Results.Ok(new
     {
         status = eng.IsRunning ? "ok" : "stopped",
-        activeApp = apps.ActiveApp?.Id,
+        activeApp = apps.ActiveAppId,
         device.IsEnabled,
         device.Width,
         device.Height,
