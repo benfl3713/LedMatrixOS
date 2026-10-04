@@ -171,6 +171,7 @@ class AppSetting {
     this.currentLabels,
     this.browse = false,
     this.advanced = false,
+    this.editor,
   });
 
   final String key;
@@ -193,6 +194,10 @@ class AppSetting {
 
   /// Rarely used or raw setting; clients group these under "Advanced".
   final bool advanced;
+
+  /// Structured editor the server suggests for this string setting (`ha_entities`, `bins`, `reminders`); null or an editor this
+  /// client does not know means a plain text field.
+  final String? editor;
 
   /// Differs from [defaultValue] (a setting without a default is never modified).
   bool get isModified {
@@ -231,6 +236,7 @@ class AppSetting {
       currentLabels: labels is List ? labels.map((e) => e.toString()).toList() : null,
       browse: json['browse'] == true,
       advanced: json['advanced'] == true,
+      editor: json['editor'] is String && (json['editor'] as String).isNotEmpty ? json['editor'] as String : null,
     );
   }
 
@@ -248,5 +254,6 @@ class AppSetting {
         currentLabels: currentLabels ?? this.currentLabels,
         browse: browse,
         advanced: advanced,
+        editor: editor,
       );
 }

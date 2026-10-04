@@ -34,6 +34,8 @@ public sealed class SettingAttribute : Attribute
     public bool Browse { get; set; }
     /// <summary>Rarely used or raw setting: clients may hide it under an "Advanced" section.</summary>
     public bool Advanced { get; set; }
+    /// <summary>Hint for clients: use this structured editor (e.g. "ha_entities", "bins", "reminders") instead of a plain text field. The stored value stays a string; unknown editors fall back to text.</summary>
+    public string? Editor { get; set; }
 }
 
 /// <summary>

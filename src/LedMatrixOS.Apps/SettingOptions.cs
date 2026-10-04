@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using LedMatrixOS.Apps.HomeAssistant;
 using LedMatrixOS.Apps.PlaneSpotter;
 using LedMatrixOS.Apps.Tube;
 using LedMatrixOS.Core.Settings;
@@ -23,7 +24,10 @@ public static class BuiltInSettingOptions
         var routes = new TflRouteOptions(tfl);
         registry.Register("tube-departures", "routes", routes);
         registry.Register("commute", "routes", routes);
-        registry.Register("bus-arrivals", "stopIds", new TflBusStopOptions(tfl));
+        var busStops = new TflBusStopOptions(tfl);
+        registry.Register("bus-arrivals", "stopIds", busStops);
+        registry.Register("home", "chipStopId", busStops);
+        registry.Register("ha-tiles", "entities", new HaEntityOptions(new HaApi(http), configuration));
         registry.Register("cycle-hub", "dockIds", new TflDockOptions(tfl));
 
         var geocoder = new PlaceGeocoder(http);

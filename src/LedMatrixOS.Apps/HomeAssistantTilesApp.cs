@@ -18,7 +18,7 @@ public class HomeAssistantTilesApp : WidgetApp
     public override string Name => "Home Assistant";
     public override int FrameRate => 20;
 
-    [Setting("Entities", Description = "Comma separated entities as id|Label|flags (label and flags optional): sensor.lounge_temp|Lounge|spark, light.kitchen|Kitchen|icon. Flags: icon = pixel glyph for light, switch, lock and door/window/motion sensors; spark = 24h history line for numeric sensors. Unknown flags are ignored.")]
+    [Setting("Entities", Editor = "ha_entities", Description = "Comma separated entities as id|Label|flags (label and flags optional): sensor.lounge_temp|Lounge|spark, light.kitchen|Kitchen|icon. Flags: icon = pixel glyph for light, switch, lock and door/window/motion sensors; spark = 24h history line for numeric sensors. Unknown flags are ignored.")]
     public string Entities { get; set; } = "";
 
     [Setting("Page Seconds", Description = "How long each page of four tiles stays up.", Min = 3, Max = 30)]

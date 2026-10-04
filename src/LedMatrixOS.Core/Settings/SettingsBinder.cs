@@ -30,7 +30,7 @@ public static class SettingsBinder
             var fallback = defaults != null && defaults.TryGetValue(e.Key, out var d) ? d : current;
             yield return new AppSetting(
                 e.Key, e.Attribute.Name, e.Attribute.Description, e.Type,
-                fallback, current, e.Attribute.Min, e.Attribute.Max, e.Attribute.Options, Browse: e.Attribute.Browse, Advanced: e.Attribute.Advanced);
+                fallback, current, e.Attribute.Min, e.Attribute.Max, e.Attribute.Options, Browse: e.Attribute.Browse, Advanced: e.Attribute.Advanced, Editor: e.Attribute.Editor);
         }
     }
 

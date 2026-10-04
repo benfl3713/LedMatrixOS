@@ -183,6 +183,20 @@ internal sealed class HaApi(HttpClient http)
 
     public bool IsConfigured => BaseUrl.Length > 0 && Token.Length > 0;
 
+    /// <summary>Every entity Home Assistant knows (for the entity picker). Throws on a failed request; callers decide how to show that.</summary>
+    public async Task<IReadOnlyList<HaState>> GetAllStatesAsync(CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl.TrimEnd('/')}/api/states");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+        using var response = await http.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var list = new List<HaState>();
+        foreach (var item in doc.RootElement.EnumerateArray())
+            list.Add(HaFormat.ParseState(item.GetRawText()));
+        return list;
+    }
+
     /// <summary>Fetches every entity; one that fails comes back as null so its tile shows N/A instead of hiding the others.</summary>
     public async Task<HaState?[]> GetStatesAsync(IReadOnlyList<EntityRef> entities, CancellationToken ct) =>
         await Task.WhenAll(entities.Select(e => GetOneAsync(e.EntityId, ct)));

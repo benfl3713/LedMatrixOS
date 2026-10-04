@@ -10,6 +10,7 @@ import 'color_picker.dart';
 import 'named_colors.dart';
 import 'search_setting.dart';
 import 'select_settings.dart';
+import 'structured_settings.dart';
 
 /// Opens the settings of [app] in a draggable sheet. Works for active and inactive apps.
 Future<void> showAppSettingsSheet(BuildContext context, MatrixApp app) {
@@ -334,6 +335,11 @@ class SettingTile extends StatelessWidget {
         );
 
       case AppSettingType.string:
+        // A structured editor for the syntax strings (the stored format is unchanged); unknown editors stay a text field
+        if (appId != null && s.editor != null) {
+          final editor = buildStructuredEditor(s, appId: appId!, onChanged: onChanged);
+          if (editor != null) return editor;
+        }
         return _TextSetting(setting: s, onSubmitted: onChanged);
 
       case AppSettingType.select:
