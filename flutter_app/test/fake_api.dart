@@ -23,6 +23,13 @@ class FakeApi implements LedApi {
 
   final List<String> calls = [];
   final List<Map<String, Object?>> settingUpdates = [];
+  final List<String> optionQueries = [];
+
+  /// Answers option searches; defaults to no results.
+  Future<Result<List<SettingOption>>> Function(String key, String q)? optionsHandler;
+
+  /// Labels the fake reports for picked ids (falls back to the id).
+  final Map<String, String> knownLabels = {};
 
   final apps = const [
     MatrixApp(id: 'clock', name: 'Clock', hasSettings: true),
@@ -62,7 +69,27 @@ class FakeApi implements LedApi {
   @override
   Future<Result<void>> updateAppSettings(String id, Map<String, Object?> values) async {
     settingUpdates.add(values);
+    for (var i = 0; i < settings.length; i++) {
+      final s = settings[i];
+      if (!values.containsKey(s.key)) continue;
+      final v = values[s.key];
+      settings[i] = s.type == AppSettingType.search
+          ? s.copyWith(currentValue: v, currentLabel: v == '' ? '' : (knownLabels['$v'] ?? '$v'))
+          : s.type == AppSettingType.multiSearch
+              ? s.copyWith(currentValue: v, currentLabels: [
+                  for (final id in '$v'.split(',').where((e) => e.isNotEmpty)) knownLabels[id] ?? id
+                ])
+              : s.copyWith(currentValue: v);
+    }
     return const Ok(null);
+  }
+
+  @override
+  Future<Result<List<SettingOption>>> getSettingOptions(String appId, String key, String q) async {
+    optionQueries.add(q);
+    final h = optionsHandler;
+    if (h == null) return const Ok(<SettingOption>[]);
+    return h(key, q);
   }
 
   @override

@@ -16,6 +16,9 @@ abstract class LedApi {
   Future<Result<void>> activateApp(String id);
   Future<Result<List<AppSetting>>> getAppSettings(String id);
   Future<Result<void>> updateAppSettings(String id, Map<String, Object?> values);
+
+  /// Live options for a Search/MultiSearch setting; empty for queries under 2 characters.
+  Future<Result<List<SettingOption>>> getSettingOptions(String appId, String key, String q);
   Future<Result<DeviceSettings>> getSettings();
   Future<Result<void>> setBrightness(int value);
   Future<Result<void>> setPower(bool enabled);
@@ -161,6 +164,13 @@ class HttpLedApi implements LedApi {
         () => _client.post(_uri('/api/apps/${Uri.encodeComponent(id)}/settings'),
             headers: _json, body: jsonEncode(values)),
         (_) {},
+      );
+
+  @override
+  Future<Result<List<SettingOption>>> getSettingOptions(String appId, String key, String q) => _send(
+        () => _client.get(_uri(
+            '/api/apps/${Uri.encodeComponent(appId)}/settings/${Uri.encodeComponent(key)}/options?q=${Uri.encodeQueryComponent(q)}')),
+        (b) => (jsonDecode(b) as List).map((e) => SettingOption.fromJson(e as Map<String, dynamic>)).toList(),
       );
 
   @override

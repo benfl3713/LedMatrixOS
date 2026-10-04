@@ -47,10 +47,13 @@ class AppSettingsNotifier extends AsyncNotifier<List<AppSetting>> {
     );
   }
 
-  void edit(String key, Object value) {
+  void edit(String key, Object value, {String? label, List<String>? labels}) {
     final current = state.value;
     if (current == null) return;
-    state = AsyncData([for (final s in current) s.key == key ? s.copyWith(currentValue: value) : s]);
+    state = AsyncData([
+      for (final s in current)
+        s.key == key ? s.copyWith(currentValue: value, currentLabel: label, currentLabels: labels) : s
+    ]);
     _pending[key] = value;
     _debounce?.cancel();
     _debounce = Timer(saveDelay, _flush);
@@ -68,6 +71,8 @@ class AppSettingsNotifier extends AsyncNotifier<List<AppSetting>> {
     if (error != null) {
       ref.read(errorBusProvider.notifier).report(error);
       await reload(); // show what the device actually has
+    } else if (_pending.isEmpty) {
+      await reload(); // refresh labels and dependent values
     }
   }
 }

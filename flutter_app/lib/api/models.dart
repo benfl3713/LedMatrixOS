@@ -139,7 +139,22 @@ class Health {
       );
 }
 
-enum AppSettingType { boolean, integer, string, color, select }
+enum AppSettingType { boolean, integer, string, color, select, search, multiSearch }
+
+/// One hit from `GET /api/apps/{id}/settings/{key}/options`.
+class SettingOption {
+  const SettingOption({required this.value, required this.label, this.subtitle});
+
+  final String value;
+  final String label;
+  final String? subtitle;
+
+  factory SettingOption.fromJson(Map<String, dynamic> json) => SettingOption(
+        value: (json['value'] ?? '').toString(),
+        label: (json['label'] ?? json['value'] ?? '').toString(),
+        subtitle: json['subtitle'] is String && (json['subtitle'] as String).isNotEmpty ? json['subtitle'] as String : null,
+      );
+}
 
 class AppSetting {
   const AppSetting({
@@ -152,6 +167,8 @@ class AppSetting {
     this.minValue,
     this.maxValue,
     this.options,
+    this.currentLabel,
+    this.currentLabels,
   });
 
   final String key;
@@ -164,12 +181,24 @@ class AppSetting {
   final num? maxValue;
   final List<String>? options;
 
+  /// Search: label of the picked id. MultiSearch: labels in the order of the comma separated ids.
+  final String? currentLabel;
+  final List<String>? currentLabels;
+
+  /// Picked ids of a MultiSearch setting.
+  List<String> get currentIds => (currentValue?.toString() ?? '')
+      .split(',')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
+
   factory AppSetting.fromJson(Map<String, dynamic> json) {
     final rawType = json['type'];
     final type = rawType is int && rawType >= 0 && rawType < AppSettingType.values.length
         ? AppSettingType.values[rawType]
         : AppSettingType.string;
     final options = json['options'];
+    final labels = json['currentLabels'];
     return AppSetting(
       key: (json['key'] ?? '') as String,
       name: (json['name'] ?? '') as String,
@@ -180,10 +209,12 @@ class AppSetting {
       minValue: json['minValue'] is num ? json['minValue'] as num : null,
       maxValue: json['maxValue'] is num ? json['maxValue'] as num : null,
       options: options is List ? options.map((e) => e.toString()).toList() : null,
+      currentLabel: json['currentLabel'] as String?,
+      currentLabels: labels is List ? labels.map((e) => e.toString()).toList() : null,
     );
   }
 
-  AppSetting copyWith({Object? currentValue}) => AppSetting(
+  AppSetting copyWith({Object? currentValue, String? currentLabel, List<String>? currentLabels}) => AppSetting(
         key: key,
         name: name,
         description: description,
@@ -193,5 +224,7 @@ class AppSetting {
         minValue: minValue,
         maxValue: maxValue,
         options: options,
+        currentLabel: currentLabel ?? this.currentLabel,
+        currentLabels: currentLabels ?? this.currentLabels,
       );
 }

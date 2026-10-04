@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import 'app_settings_provider.dart';
 import 'color_picker.dart';
+import 'search_setting.dart';
 
 /// Opens the settings of [app] in a draggable sheet. Works for active and inactive apps.
 Future<void> showAppSettingsSheet(BuildContext context, MatrixApp app) {
@@ -75,7 +76,10 @@ class AppSettingsView extends ConsumerWidget {
                         child: SettingTile(
                           key: ValueKey(s.key),
                           setting: s,
+                          appId: app.id,
                           onChanged: (v) => ref.read(appSettingsProvider(app.id).notifier).edit(s.key, v),
+                          onSearchChanged: (v, {label, labels}) =>
+                              ref.read(appSettingsProvider(app.id).notifier).edit(s.key, v, label: label, labels: labels),
                         ),
                       ),
                   ],
@@ -88,10 +92,14 @@ class AppSettingsView extends ConsumerWidget {
 
 /// One editor for one setting, chosen by its type.
 class SettingTile extends StatelessWidget {
-  const SettingTile({super.key, required this.setting, required this.onChanged});
+  const SettingTile({super.key, required this.setting, required this.onChanged, this.appId, this.onSearchChanged});
 
   final AppSetting setting;
   final ValueChanged<Object> onChanged;
+
+  /// Needed for Search/MultiSearch settings, which query the options endpoint.
+  final String? appId;
+  final SearchChanged? onSearchChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -150,6 +158,8 @@ class SettingTile extends StatelessWidget {
         final current = s.currentValue?.toString();
         if (options.isEmpty) return _TextSetting(setting: s, onSubmitted: onChanged);
         return DropdownButtonFormField<String>(
+          // initialValue is only read on creation; re-key so changed options/values rebuild it.
+          key: ValueKey('${s.key}|$current|${options.join(',')}'),
           initialValue: options.contains(current) ? current : null,
           isExpanded: true,
           decoration: InputDecoration(labelText: s.name, helperText: s.description.isEmpty ? null : s.description, border: const OutlineInputBorder()),
@@ -157,6 +167,15 @@ class SettingTile extends StatelessWidget {
           onChanged: (v) {
             if (v != null) onChanged(v);
           },
+        );
+
+      case AppSettingType.search:
+      case AppSettingType.multiSearch:
+        if (appId == null) return _TextSetting(setting: s, onSubmitted: onChanged);
+        return SearchSetting(
+          setting: s,
+          appId: appId!,
+          onChanged: onSearchChanged ?? (v, {label, labels}) => onChanged(v),
         );
 
       case AppSettingType.color:
