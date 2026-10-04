@@ -35,6 +35,7 @@ public static class BuiltInSettingOptions
         var places = new PlaceOptions(geocoder);
         registry.Register("weather", "location", places);
         registry.Register("commute", "location", places);
+        registry.Register("air-quality", "location", places);
         registry.Register("plane-spotter", "location", places);
 
         var journeyPoints = new JourneyPointOptions(geocoder, tfl);

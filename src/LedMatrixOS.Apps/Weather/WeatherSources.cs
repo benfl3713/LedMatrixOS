@@ -6,13 +6,13 @@ namespace LedMatrixOS.Apps.Weather;
 /// <summary>Real data from Open-Meteo (free, no key): one geocoding call per place (cached) and one forecast call per poll.</summary>
 public sealed class OpenMeteoWeatherSource(HttpClient http) : IWeatherSource
 {
-    private readonly Dictionary<string, (string Name, double Lat, double Lon)> _places = new(StringComparer.OrdinalIgnoreCase);
+    private readonly PlaceResolver _places = new(http);
 
     public async Task<WeatherSnapshot> GetAsync(WeatherQuery query, CancellationToken ct)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(15));
-        var place = await ResolveAsync(query.Location, timeout.Token);
+        var place = await _places.ResolveAsync(query.Location, timeout.Token);
         var json = await http.GetStringAsync(ForecastUrl(place.Lat, place.Lon, query.Fahrenheit), timeout.Token);
         return Parse(json, place.Name, query.Fahrenheit);
     }
@@ -25,31 +25,6 @@ public sealed class OpenMeteoWeatherSource(HttpClient http) : IWeatherSource
         "&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max" +
         "&timezone=auto&forecast_days=4" +
         (fahrenheit ? "&temperature_unit=fahrenheit&wind_speed_unit=mph" : "&wind_speed_unit=kmh");
-
-    private async Task<(string Name, double Lat, double Lon)> ResolveAsync(string location, CancellationToken ct)
-    {
-        location = location.Trim();
-        if (_places.TryGetValue(location, out var cached)) return cached;
-
-        // A place picked in the app ("London|51.5085,-0.1257") carries its coordinates.
-        if (PlaneSpotter.PlaceGeocoder.TryParseEncoded(location, out var pickedName, out var picked))
-            return _places[location] = (pickedName, picked.Lat, picked.Lon);
-
-        // "51.5,-0.12" skips geocoding.
-        var parts = location.Split(',');
-        if (parts.Length == 2 &&
-            double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var la) &&
-            double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var lo))
-            return _places[location] = (location, la, lo);
-
-        var url = "https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=" + Uri.EscapeDataString(location);
-        using var doc = JsonDocument.Parse(await http.GetStringAsync(url, ct));
-        if (!doc.RootElement.TryGetProperty("results", out var results) || results.GetArrayLength() == 0)
-            throw new LocationNotFoundException(location);
-        var first = results[0];
-        return _places[location] = (first.GetProperty("name").GetString() ?? location,
-            first.GetProperty("latitude").GetDouble(), first.GetProperty("longitude").GetDouble());
-    }
 
     /// <summary>Turns an Open-Meteo forecast response into a snapshot. Times are the place's local times (timezone=auto).</summary>
     public static WeatherSnapshot Parse(string json, string name, bool fahrenheit)
