@@ -29,6 +29,7 @@ public static class BuiltInSettingOptions
         registry.Register("home", "chipStopId", busStops);
         registry.Register("ha-tiles", "entities", new HaEntityOptions(new HaApi(http), configuration));
         registry.Register("cycle-hub", "dockIds", new TflDockOptions(tfl));
+        registry.Register("road-disruptions", "corridors", new TflRoadOptions(tfl));
 
         var geocoder = new PlaceGeocoder(http);
         var places = new PlaceOptions(geocoder);

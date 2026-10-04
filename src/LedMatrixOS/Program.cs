@@ -61,6 +61,7 @@ var schedulePath = Path.Combine(AppContext.BaseDirectory, "schedule.json");
 // poll while a schedule rule references their condition.
 builder.Services.AddSingleton<IAttentionSource, SpotifyPlayingSource>();
 builder.Services.AddSingleton<IAttentionSource, LineDisruptionSource>();
+builder.Services.AddSingleton<IAttentionSource, RoadDisruptionSource>();
 builder.Services.AddSingleton<IAttentionSource, BusDueSource>();
 builder.Services.AddSingleton<IAttentionSource, HomeAssistantStateSource>();
 builder.Services.AddSingleton<IAttentionSource, BinDayDueSource>();
