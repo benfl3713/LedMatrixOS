@@ -20,6 +20,10 @@ Phases 1-4 are implemented and merged on `transport-apps` (full `dotnet test` an
 | 4 Flutter rewrite | Done | Riverpod + go_router; Now, Apps, Schedule, Notify and Settings screens. |
 | 5 Stretch | Declarative screens done | User-defined JSON screens (`ScreenApp`, `/api/screens`, Flutter editor, `screens.json`). **Open:** `QrCode` node + Party Mode, gallery page, platform gaps. Screens are verified against the simulator only. |
 
+## v3 status (2026-10-04, branch `live-pickers`)
+Done: live pickers (`GET /api/apps/{id}/settings/{key}/options`, Search/MultiSearch settings, typeahead and chips in the phone app); Tube/Commute `routes` filter replacing platform-first boards; settings sheet polish (reset, Advanced section, save indicator, searchable select, colour swatches, structured HA/Bin Day editors); new apps Air Quality, Road Disruptions (+ `road_disrupted:` condition), ISS Tracker.
+Open: Tides/Waves, RSS ticker, sports/stocks (check provider terms), `DataDir` setting for the daemon-user write problem, push and PR, prune old branches/worktrees, small visual fixes, hardware verification.
+
 ### Known follow-ups
 - **Rail Departures** uses `HardcodedRailSource`; the real integration goes behind `IRailDepartureSource`.
 - **Not yet verified on hardware:** frame time on the Raspberry Pi, the Flutter app on Android/iOS devices (verified only as a web build against the simulator), and the Home Assistant integration inside a real HA instance (it compiles and follows the existing code, but has no test harness).
