@@ -137,6 +137,21 @@ public sealed class ScheduleDocumentTests
         Assert.Equal("rule", s.NextChangeReason);
     }
 
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"playlists\": null}")]
+    [InlineData("{\"playlists\": null, \"rules\": null}")]
+    public void NullOrMissingLists_ParseAsEmpty_AndValidateWithoutThrowing(string json)
+    {
+        var doc = ScheduleDocument.TryParse(json, out var error);
+
+        Assert.NotNull(doc);
+        Assert.Null(error);
+        Assert.Empty(doc!.Playlists);
+        Assert.Empty(doc.Rules);
+        Assert.Empty(doc.Validate());
+    }
+
     [Fact]
     public void Status_NoRules_IsEmpty()
     {
