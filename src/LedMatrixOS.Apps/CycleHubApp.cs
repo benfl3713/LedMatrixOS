@@ -59,7 +59,6 @@ public class CycleHubApp : WidgetApp
     private CycleStyles _styles = null!;
     private Pager? _pager;
     private Label? _message, _verdict;
-    private Pill? _pill;
     private bool _entered, _boardShown;
 
     [ActivatorUtilitiesConstructor]
@@ -111,7 +110,6 @@ public class CycleHubApp : WidgetApp
             },
         };
 
-        _pill = new Pill("--", CycleStyles.Neutral.WithBrightness(0.6f)) { Style = styles.PillText, Height = 9, Width = 40 };
         var strip = new Panel
         {
             HAlign = Align.Stretch,
@@ -129,7 +127,6 @@ public class CycleHubApp : WidgetApp
                     {
                         new Clock("HH:mm", Time) { Style = styles.Clock },
                         new Label("Santander Cycles") { Style = styles.Muted, Grow = 1 },
-                        _pill,
                     },
                 },
             },
@@ -177,16 +174,6 @@ public class CycleHubApp : WidgetApp
         if (style == _verdictStyle) return;
         _verdictStyle = style;
         _verdict!.Style = _styles.Verdict[style];
-        if (_outlook is { } outlook)
-        {
-            _pill!.Text = RideVerdict.Label(outlook.Ride);
-            _pill.Background = RideVerdict.ColorOf(outlook.Ride).WithBrightness(0.75f);
-        }
-        else
-        {
-            _pill!.Text = "--";
-            _pill.Background = CycleStyles.Neutral.WithBrightness(0.6f);
-        }
     }
 
     private string VerdictText() =>

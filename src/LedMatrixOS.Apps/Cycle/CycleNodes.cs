@@ -71,7 +71,7 @@ internal sealed class DockPage : Stack
 
         BikePointInfo? Info() => _feed.Info?.Value;
 
-        var name = new Memo<BikePointInfo?>(Info, i => i?.Name ?? "");
+        var name = new Memo<BikePointInfo?>(Info, i => ShortName(i?.Name ?? ""));
         var eBikes = new Memo<int>(() => Info()?.NbEBikes ?? 0, n => n + (n == 1 ? " e-bike" : " e-bikes"));
         var free = new Memo<int>(() => Info()?.NbEmptyDocks ?? 0, n => n + " free docks");
 
@@ -102,6 +102,20 @@ internal sealed class DockPage : Stack
                 },
             },
         });
+    }
+
+    /// <summary>
+    /// TfL names read "Hyde Park Corner, Hyde Park": when the part after the comma only repeats the first part, drop it so the name fits.
+    /// A distinct area ("River Street, Clerkenwell") is kept.
+    /// </summary>
+    internal static string ShortName(string name)
+    {
+        int comma = name.IndexOf(',');
+        if (comma <= 0) return name;
+        var head = name[..comma].Trim();
+        var area = name[(comma + 1)..].Trim();
+        if (area.Length == 0 || head.Contains(area, StringComparison.OrdinalIgnoreCase)) return head;
+        return name;
     }
 
     public override void Update(FrameContext ctx)

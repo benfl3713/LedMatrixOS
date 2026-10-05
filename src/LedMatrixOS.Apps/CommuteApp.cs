@@ -46,8 +46,15 @@ public class CommuteApp : WidgetApp
     [Setting("Units", Description = "Temperature units.", Options = ["Celsius", "Fahrenheit"])]
     public string Units { get; set; } = "Celsius";
 
+    [Setting("Show Line Chips", Description = "Show a status chip for each line in the bottom strip. With Routes chosen, only those lines get one.")]
+    public bool ShowLineChips { get; set; } = true;
+
     private readonly TflApi _api;
     private IWeatherSource _weatherSource;
+    private LineStatus[]? _chipsSeen;
+    private string? _chipsRoutes;
+    private bool _chipsEnabled = true;
+    private IReadOnlyList<LineStatus> _chips = NoStatuses;
     private readonly DepartureBoardModel _model = new();
 
     private volatile ILiveData<TflArrival[]>? _arrivals;
@@ -100,7 +107,7 @@ public class CommuteApp : WidgetApp
                     Padding = new Thickness(2, 1, 3, 1),
                     Children =
                     {
-                        new ListView<LineStatus>(() => _lineStatuses?.Value ?? NoStatuses, s => new LinePill(s, Fonts.QuiteSmall), s => s.LineId)
+                        new ListView<LineStatus>(() => _chips, s => new LinePill(s, Fonts.QuiteSmall), s => s.LineId)
                             { Orientation = Orientation.Horizontal, Gap = 1, CrossAlign = Align.Center, EnterOffset = 6, ItemChanged = (n, s) => ((LinePill)n).Apply(s) },
                         new Panel { Grow = 1 },
                         new Clock("HH:mm", Time) { Style = clock },
@@ -118,6 +125,8 @@ public class CommuteApp : WidgetApp
     {
         _ = Host;   // builds the tree on the first frame
         _model.Refresh(context.Time, _arrivals?.Value, PlatformFilter, 12, routes: Routes);
+
+        UpdateChips();
 
         bool hasTrains = _model.Visible.Count > 0;
         _card!.Plan = CommutePlanner.Plan(_model.Visible, context.Time, WalkMinutes);
@@ -139,6 +148,25 @@ public class CommuteApp : WidgetApp
             Motion.SlideIn(_strip!, Animator, new Vector2(0, 14), 150.Ms());
             Motion.SlideIn(_state, Animator, new Vector2(-120, 0), TimeSpan.Zero, 500.Ms(), Easing.OutBack);
         }
+    }
+
+    // The strip shows the lines serving the station; once routes are chosen, only the lines of those routes. Rebuilt only when an input changes.
+    private void UpdateChips()
+    {
+        var statuses = _lineStatuses?.Value;
+        if (ReferenceEquals(statuses, _chipsSeen) && Routes == _chipsRoutes && ShowLineChips == _chipsEnabled) return;
+        _chipsSeen = statuses;
+        _chipsRoutes = Routes;
+        _chipsEnabled = ShowLineChips;
+        _chips = !ShowLineChips || statuses is null ? NoStatuses : ChipsFor(statuses, Routes);
+    }
+
+    // Separate method: the lambda's closure would otherwise be allocated on every call of the per-frame check above.
+    private static IReadOnlyList<LineStatus> ChipsFor(LineStatus[] statuses, string routes)
+    {
+        var lines = (routes ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(k => TubeColors.Normalize(k.Split('|')[0])).ToHashSet();
+        return lines.Count == 0 ? statuses : statuses.Where(l => lines.Contains(TubeColors.Normalize(l.LineId))).ToArray();
     }
 
     private BoardState StateFor()
@@ -215,6 +243,7 @@ public class CommuteApp : WidgetApp
 
     internal CommutePlan CurrentPlan => _card?.Plan ?? CommutePlan.None;
     internal DepartureBoardModel Board => _model;
+    internal IReadOnlyList<LineStatus> ChipLines => _chips;
 
     /// <summary>Test seam: replaces the polled data with fixed sources (call before the first frame).</summary>
     internal void UseData(ILiveData<TflArrival[]>? arrivals, ILiveData<LineStatus[]>? statuses, ILiveData<WeatherSnapshot>? weather)

@@ -101,7 +101,7 @@ public class CommuteAppTests(ITestOutputHelper output)
         Fonts.Load();
         var app = new CommuteApp(new HttpClient(new TflStubHandler()));
         Assert.Equal("commute", app.Id);
-        Assert.Equal(new[] { "stationId", "routes", "platformFilter", "walkMinutes", "location", "units" }, app.GetSettings().Select(s => s.Key).ToArray());
+        Assert.Equal(new[] { "stationId", "routes", "platformFilter", "walkMinutes", "location", "units", "showLineChips" }, app.GetSettings().Select(s => s.Key).ToArray());
         var routes = app.GetSettings().Single(s => s.Key == "routes");
         Assert.Equal(AppSettingType.MultiSearch, routes.Type);
         Assert.True(routes.Browse);
@@ -160,6 +160,26 @@ public class CommuteAppTests(ITestOutputHelper output)
         if (name == "commute_go_now") while (LedMatrixOS.Apps.Tube.TubeGfx.Wave(stage.Time, 0.6) < 0.95) stage.Step(10);   // land on the bright part of the flash
         Golden(stage, name);
     }
+
+    [Fact]
+    public void LineChips_FollowRoutes_AndCanBeHidden()
+    {
+        var (app, stage) = Board(walk: 0);
+        stage.Render();
+        Assert.Equal(5, ChipCount(app));
+
+        app.UpdateSetting("routes", "victoria|Southbound");
+        stage.Step(33, 6);
+        Assert.Equal(1, ChipCount(app));
+        Golden(stage, "commute_chips_routes_only");
+
+        app.UpdateSetting("showLineChips", false);
+        stage.Step(33, 6);
+        Assert.Equal(0, ChipCount(app));
+        Golden(stage, "commute_no_chips");
+    }
+
+    private static int ChipCount(CommuteApp app) => app.ChipLines.Count;
 
     [Fact]
     public void Golden_Fahrenheit()
