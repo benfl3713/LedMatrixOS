@@ -129,7 +129,7 @@ public sealed class QrApp : WidgetApp
             // Spec says 4 modules of quiet zone; trade down when it buys a larger integer scale on a 64 pixel tall display.
             int size = _code.Matrix?.Size ?? 0;
             _code.QuietZone = size == 0 ? 2 : (64 / (size + 4) < 64 / (size + 2) ? 1 : 2);
-            _hint.Text = _code.Matrix is null ? (_payload.Length == 0 ? "" : "TOO LONG") : wifi ? "Join Wi-Fi" : "";
+            _hint.Text = _code.Matrix is null ? (_payload.Length == 0 ? "" : "TOO LONG") : wifi ? Security + " network" : "";
             _hint.Visible = _hint.Text.Length > 0;
         }
 

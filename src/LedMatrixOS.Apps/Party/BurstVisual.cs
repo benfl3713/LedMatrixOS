@@ -23,8 +23,9 @@ internal sealed class BurstVisual : VisualNode
         _burst = new Emitter
         {
             Rate = 0f,
-            LifetimeMin = 0.7f, LifetimeMax = 1.5f,
-            SpeedMin = 14f, SpeedMax = 70f,
+            LifetimeMin = 0.9f, LifetimeMax = 1.8f,
+            SpeedMin = 14f, SpeedMax = 90f,
+            Size = 2f,
             Angle = 0f, Spread = 360f,
             GravityY = 40f,
             AlphaStart = 1f, AlphaEnd = 0f,

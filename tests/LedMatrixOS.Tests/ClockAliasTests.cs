@@ -24,6 +24,7 @@ public sealed class ClockAliasTests : IDisposable
         Fonts.Load();
         var mgr = new AppManager(new EmptyServices(), new ConfigurationBuilder().Build(), 64, 256, new AppSettingsStorage(_file));
         mgr.Register(typeof(ClockApp));
+        mgr.Register(typeof(QrApp));
         foreach (var (alias, target, preset) in BuiltInApps.Aliases()) mgr.RegisterAlias(alias, target, preset);
         return mgr;
     }
@@ -34,7 +35,8 @@ public sealed class ClockAliasTests : IDisposable
     public void Aliases_AreNotListed_ButAreKnown()
     {
         var mgr = Create();
-        Assert.Equal(["clock"], mgr.AppInfos.Select(i => i.Id));
+        Assert.Equal(["clock", "qr"], mgr.AppInfos.Select(i => i.Id));
+        Assert.Contains("wifi", mgr.AliasIds);
         Assert.Contains("animated-clock", mgr.AliasIds);
         Assert.Contains("flip-clock", mgr.AliasIds);
     }
