@@ -74,6 +74,8 @@ internal sealed class HeroNode : Stack
 {
     private readonly CalendarModel _model;
     private readonly ProgressBar _progress;
+    private readonly MarqueeLabel _title, _place;
+    private readonly WrapLabel _wrapTitle;
 
     public HeroNode(CalendarModel model, CalendarStyles styles) : base(Orientation.Vertical)
     {
@@ -92,8 +94,12 @@ internal sealed class HeroNode : Stack
 
         Add(new Label(() => model.Caption) { Style = styles.Caption });
         Add(new TintedText(Fonts.Big, () => model.When, () => model.HeroColor, shadow: true) { Margin = new Thickness(0, 2, 0, 0) });
-        Add(new MarqueeLabel(() => model.Title) { Style = styles.Title, Margin = new Thickness(0, 4, 0, 0) });
-        Add(new MarqueeLabel(() => model.Place) { Style = styles.Caption, Margin = new Thickness(0, 3, 0, 0) });
+        _title = new MarqueeLabel(() => model.Title) { Style = styles.Title, Margin = new Thickness(0, 4, 0, 0) };
+        _wrapTitle = new WrapLabel(Fonts.Small, () => model.Title, () => CalendarStyles.Ink, () => model.Place.Length == 0 ? 2 : 1) { Margin = new Thickness(0, 4, 0, 0), Visible = false };
+        _place = new MarqueeLabel(() => model.Place) { Style = styles.Caption, Margin = new Thickness(0, 3, 0, 0) };
+        Add(_title);
+        Add(_wrapTitle);
+        Add(_place);
         Add(_progress);
     }
 
@@ -101,6 +107,13 @@ internal sealed class HeroNode : Stack
     {
         base.Update(ctx);
         _progress.Visible = _model.ShowProgress;
+
+        // Title Overflow: Scroll marquees a long title, Clip leaves it cut off, Wrap uses a second line when the place line is hidden.
+        bool wrap = _model.TitleOverflow == "Wrap";
+        _title.Visible = !wrap;
+        _wrapTitle.Visible = wrap;
+        _title.Speed = _model.TitleOverflow == "Clip" ? 0f : 30f;
+        _place.Visible = _model.Place.Length > 0;
     }
 }
 
@@ -108,11 +121,13 @@ internal sealed class HeroNode : Stack
 internal sealed class EventRow : Stack
 {
     public const int RowHeight = 15;
+    private const int TitleWidth = 90;
 
     private readonly CalendarModel _model;
     private CalEvent _event;
     private long _minute = long.MinValue;
     private string _when = "", _title = "";
+    private readonly MarqueeLabel _titleLabel;
 
     public EventRow(CalEvent ev, CalendarModel model, CalendarStyles styles) : base(Orientation.Vertical)
     {
@@ -120,7 +135,8 @@ internal sealed class EventRow : Stack
         _event = ev;
         CrossAlign = Align.Stretch;
         Add(new Label(() => _when) { Style = styles.NextTime });
-        Add(new MarqueeLabel(() => _title) { Style = styles.Tiny, Margin = new Thickness(0, 1, 0, 0) });
+        _titleLabel = new MarqueeLabel(() => _title) { Style = styles.Tiny, Margin = new Thickness(0, 1, 0, 0) };
+        Add(_titleLabel);
         Refresh();
     }
 
@@ -139,10 +155,12 @@ internal sealed class EventRow : Stack
 
     private void Refresh()
     {
-        if (_minute == _model.Minute) return;
-        _minute = _model.Minute;
-        _when = CalendarFormat.When(_event, _model.Now).Text;
-        _title = _event.Title;
+        // Title Overflow here: Scroll marquees, Clip cuts the text off, Wrap shortens it with an ellipsis (a row has no room for a second line).
+        _titleLabel.Speed = _model.TitleOverflow == "Clip" ? 0f : 30f;
+        if (_minute == _model.RefreshKey) return;
+        _minute = _model.RefreshKey;
+        _when = CalendarFormat.When(_event, _model.Now, _model.Hour24).Text;
+        _title = _model.TitleOverflow == "Wrap" ? Fonts.QuiteSmall.TruncateWithEllipsis(_event.Title, TitleWidth) : _event.Title;
     }
 }
 
@@ -160,6 +178,7 @@ internal sealed class TimelineCanvas : Node
 
     private readonly CalendarModel _model;
     private readonly TextRun[] _hours = new TextRun[25];
+    private readonly TextRun[] _hours12 = new TextRun[25];
 
     public TimelineCanvas(CalendarModel model)
     {
@@ -170,6 +189,9 @@ internal sealed class TimelineCanvas : Node
         {
             _hours[h] = new TextRun();
             _hours[h].Set(Fonts.QuiteSmall, h.ToString("00", System.Globalization.CultureInfo.InvariantCulture));
+            _hours12[h] = new TextRun();
+            int h12 = h % 12 == 0 ? 12 : h % 12;
+            _hours12[h].Set(Fonts.QuiteSmall, h12 + (h is 0 or 24 or < 12 ? "a" : "p"));
         }
     }
 
@@ -218,7 +240,7 @@ internal sealed class TimelineCanvas : Node
 
         // axis, ticks and labels
         frame.Fill(new Rectangle(x0, top + AxisY, w + 1, 1), AxisColor);
-        int step = perHour >= 13f ? 1 : 2;
+        int step = perHour >= (m.Hour24 ? 13f : 16f) ? 1 : 2;
         for (int h = first; h <= last; h++)
         {
             int x = XOf(x0, h, start, perHour);
@@ -226,7 +248,7 @@ internal sealed class TimelineCanvas : Node
             frame.Fill(new Rectangle(x, top + AxisY + 1, 1, labelled ? 3 : 2), AxisColor);
             if (labelled)
             {
-                var run = _hours[Math.Clamp(h, 0, 24)];
+                var run = (m.Hour24 ? _hours : _hours12)[Math.Clamp(h, 0, 24)];
                 run.Draw(frame, x - run.Width / 2, top + AxisY + 5, LabelColor);
             }
         }
@@ -251,4 +273,91 @@ internal sealed class TimelineCanvas : Node
     }
 
     private static int XOf(int x0, float hour, float start, float perHour) => x0 + (int)MathF.Round((hour - start) * perHour);
+}
+
+/// <summary>
+/// A text block that word-wraps to the width it is given, up to <c>maxLines</c> lines; whatever does not fit ends the last line with an ellipsis.
+/// Lines are rebuilt only when the text, the width or the line limit changes.
+/// </summary>
+internal sealed class WrapLabel : Node
+{
+    private const int MaxRuns = 3;
+    private readonly BdfFont _font;
+    private readonly Func<string> _text;
+    private readonly Func<Pixel> _color;
+    private readonly Func<int> _maxLines;
+    private readonly TextRun[] _runs = new TextRun[MaxRuns];
+    private string _laidOutText = "\u0001";
+    private int _laidOutWidth = -1, _laidOutLines = -1, _count;
+    private int _width;
+
+    public WrapLabel(BdfFont font, Func<string> text, Func<Pixel> color, Func<int> maxLines)
+    {
+        _font = font;
+        _text = text;
+        _color = color;
+        _maxLines = maxLines;
+        for (int i = 0; i < MaxRuns; i++) _runs[i] = new TextRun();
+    }
+
+    public int LineCount => _count;
+
+    private void Layout(int width)
+    {
+        string text = _text();
+        int lines = Math.Clamp(_maxLines(), 1, MaxRuns);
+        if (width == _laidOutWidth && lines == _laidOutLines && string.Equals(text, _laidOutText, StringComparison.Ordinal)) return;
+        _laidOutWidth = width;
+        _laidOutLines = lines;
+        _laidOutText = text;
+        _width = width;
+
+        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        int count = 0, i = 0;
+        string current = "";
+        while (i < words.Length)
+        {
+            string candidate = current.Length == 0 ? words[i] : current + " " + words[i];
+            if (current.Length == 0 || _font.MeasureText(candidate) <= width)
+            {
+                current = candidate;
+                i++;
+                continue;
+            }
+            if (count == lines - 1) break;   // the last line takes everything that is left and is cut with an ellipsis
+            _runs[count++].Set(_font, _font.TruncateWithEllipsis(current, width));
+            current = "";
+        }
+
+        string last = current;
+        for (int j = i; j < words.Length; j++) last += (last.Length == 0 ? "" : " ") + words[j];
+        if (last.Length > 0) _runs[count++].Set(_font, _font.TruncateWithEllipsis(last, width));
+        _count = count;
+        for (int k = count; k < MaxRuns; k++) _runs[k].Set(_font, "");
+    }
+
+    protected override Size MeasureCore(int availW, int availH)
+    {
+        Layout(Math.Max(8, availW));
+        return new Size(Math.Max(8, availW), Math.Max(1, _count) * _font.BoundingBox.Y);
+    }
+
+    public override void Update(FrameContext ctx)
+    {
+        base.Update(ctx);
+        string text = _text();
+        int lines = Math.Clamp(_maxLines(), 1, MaxRuns);
+        if (_width > 0 && (lines != _laidOutLines || !string.Equals(text, _laidOutText, StringComparison.Ordinal)))
+        {
+            Layout(_width);
+            InvalidateLayout();
+        }
+    }
+
+    protected override void OnRender(FrameBuffer frame, Rectangle bounds)
+    {
+        var color = _color();
+        int lineHeight = _font.BoundingBox.Y;
+        for (int i = 0; i < _count; i++) _runs[i].Draw(frame, bounds.X, bounds.Y + i * lineHeight, color);
+    }
 }

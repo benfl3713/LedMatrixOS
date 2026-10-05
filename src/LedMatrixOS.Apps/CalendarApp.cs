@@ -29,6 +29,24 @@ public class CalendarApp : WidgetApp
     [Setting("Timeline Seconds", Description = "Alternate with a Today timeline page, each page staying this long. 0 keeps the next-event board only.", Min = 0, Max = 60)]
     public int TimelineSeconds { get; set; }
 
+    [Setting("Title Overflow", Description = "What happens to a title too long for its space: Scroll marquees it, Wrap uses two lines when the location line is hidden (otherwise it is cut with an ellipsis), Clip cuts it off.", Options = ["Scroll", "Wrap", "Clip"])]
+    public string TitleOverflow { get; set; } = "Scroll";
+
+    [Setting("Max Events", Description = "How many upcoming events to show in all, the big one plus the list beside it (1-8). The list shows three at a time and rotates when there are more.", Min = 1, Max = 8)]
+    public int MaxEvents { get; set; } = 4;
+
+    [Setting("Look Ahead Days", Description = "Ignore events further away than this many days (1-14).", Min = 1, Max = 14)]
+    public int LookAheadDays { get; set; } = 14;
+
+    [Setting("Hide Declined", Description = "Hide events you declined. Set Calendar:SelfEmail in config so your own answer is the one that counts; without it only events every attendee declined are hidden.")]
+    public bool HideDeclined { get; set; }
+
+    [Setting("Show Location", Description = "Show the location (or the end time) under the title.")]
+    public bool ShowLocation { get; set; } = true;
+
+    [Setting("24-Hour Format", Description = "Times as 14:30 instead of 2:30 PM.")]
+    public bool Show24Hour { get; set; } = true;
+
     private static readonly IReadOnlyList<CalEvent> None = [];
     private static readonly IReadOnlyList<CalPage> BoardOnly = [CalPage.Board], BoardAndTimeline = [CalPage.Board, CalPage.Timeline];
 
@@ -44,7 +62,10 @@ public class CalendarApp : WidgetApp
     private int _appliedTimelineSeconds = -1;
     private List<CalEvent>? _lastSource;
     private IReadOnlyList<CalEvent> _filtered = None;
-    private bool _lastShowAll = true;
+    private bool _lastShowAll = true, _lastHideDeclined;
+    private int _lastLookAhead = -1;
+    private DateTime _lastDay;
+    private string _selfEmail = "";
 
     /// <summary>Zone events are shown in; replaced by tests for deterministic output.</summary>
     internal TimeZoneInfo Zone { get; set; } = TimeZoneInfo.Local;
@@ -128,14 +149,23 @@ public class CalendarApp : WidgetApp
         _ = Host;
         var data = _data;
         var source = data?.Value;
-        if (!ReferenceEquals(source, _lastSource) || ShowAllDay != _lastShowAll)
+        var now = TimeZoneInfo.ConvertTime(Time.GetUtcNow(), Zone);
+        int lookAhead = Math.Clamp(LookAheadDays, 1, 14);
+        if (!ReferenceEquals(source, _lastSource) || ShowAllDay != _lastShowAll || HideDeclined != _lastHideDeclined
+            || lookAhead != _lastLookAhead || now.Date != _lastDay)
         {
             _lastSource = source;
             _lastShowAll = ShowAllDay;
-            _filtered = source == null ? None : ShowAllDay ? source : source.Where(e => !e.AllDay).ToList();
+            _lastHideDeclined = HideDeclined;
+            _lastLookAhead = lookAhead;
+            _lastDay = now.Date;
+            var horizon = now.Date.AddDays(lookAhead + 1);
+            bool allDay = ShowAllDay, hideDeclined = HideDeclined;
+            _filtered = source == null ? None
+                : source.Where(e => (allDay || !e.AllDay) && !(hideDeclined && e.Declined) && e.Start.DateTime < horizon).ToList();
         }
 
-        var now = TimeZoneInfo.ConvertTime(Time.GetUtcNow(), Zone);
+        _model.Configure(MaxEvents, Show24Hour, ShowLocation, TitleOverflow);
         var message =
             _url.Length == 0 ? BoardMessage.NotConfigured :
             source == null ? (data is { Error: not null } ? BoardMessage.Offline : BoardMessage.Loading) :
@@ -160,6 +190,7 @@ public class CalendarApp : WidgetApp
     {
         await base.OnActivatedAsync(dimensions, configuration, cancellationToken);
         _url = (configuration["Calendar:IcsUrl"] ?? "").Trim();
+        _selfEmail = (configuration["Calendar:SelfEmail"] ?? "").Trim();
         CancelPoll(ref _pollCts);
         _data = null;
         _lastSource = null;
@@ -179,7 +210,7 @@ public class CalendarApp : WidgetApp
     {
         var text = await _http.GetStringAsync(url, ct);
         var now = DateTimeOffset.UtcNow;
-        return IcsParser.Parse(text, now.AddDays(-1), now.AddDays(30), Zone);
+        return IcsParser.Parse(text, now.AddDays(-1), now.AddDays(30), Zone, _selfEmail);
     }
 
     internal CalendarModel Model => _model;

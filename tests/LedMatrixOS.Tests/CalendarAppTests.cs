@@ -81,7 +81,109 @@ public class CalendarAppTests
     {
         var app = new CalendarApp(new HttpClient());
         Assert.Equal("calendar", app.Id);
-        Assert.Equal(["showAllDay", "timelineSeconds"], app.GetSettings().Select(s => s.Key));
+        Assert.Equal(["showAllDay", "timelineSeconds", "titleOverflow", "maxEvents", "lookAheadDays", "hideDeclined", "showLocation", "show24Hour"], app.GetSettings().Select(s => s.Key));
+    }
+
+    private static (CalendarApp App, AppStage Stage) Configured(List<CalEvent> events, Action<CalendarApp> configure)
+    {
+        Fonts.Load();
+        var app = new CalendarApp(new HttpClient()) { Time = new FakeTime(), Zone = TimeZoneInfo.Utc };
+        configure(app);
+        app.UseData(new MutableLive<List<CalEvent>> { Value = events }, "https://example.com/c.ics");
+        var stage = new AppStage(app);
+        stage.Step(33, 10);
+        return (app, stage);
+    }
+
+    private const string LongTitle = "Design review with the platform team and friends";
+
+    [Fact]
+    public void Golden_TitleOverflowWrap_TwoLinesWithoutLocation()
+    {
+        var (_, stage) = Configured([Ev(LongTitle, Now.AddMinutes(30), 45, "Room 4"), .. Agenda().Skip(1)], a => { a.TitleOverflow = "Wrap"; a.ShowLocation = false; });
+        Golden(stage, "calendar_wrap_two_lines");
+    }
+
+    [Fact]
+    public void Golden_TitleOverflowWrap_EllipsisWithLocation()
+    {
+        var (_, stage) = Configured([Ev(LongTitle, Now.AddMinutes(30), 45, "Room 4"), .. Agenda().Skip(1)], a => a.TitleOverflow = "Wrap");
+        Golden(stage, "calendar_wrap_ellipsis");
+    }
+
+    [Fact]
+    public void Golden_TitleOverflowClip()
+    {
+        var (_, stage) = Configured([Ev(LongTitle, Now.AddMinutes(30), 45, "Room 4"), .. Agenda().Skip(1)], a => a.TitleOverflow = "Clip");
+        stage.Step(100, 40);   // a marquee would have moved by now; Clip stays put
+        Golden(stage, "calendar_clip");
+    }
+
+    [Fact]
+    public void Golden_TwelveHourClock()
+    {
+        var (_, stage) = Configured(Agenda(), a => a.Show24Hour = false);
+        Golden(stage, "calendar_12h");
+    }
+
+    [Fact]
+    public void Golden_TwelveHourTimeline()
+    {
+        var (_, stage) = Configured(Agenda().Take(2).ToList(), a => { a.Show24Hour = false; a.TimelineSeconds = 5; });
+        stage.Step(100, 60);
+        Golden(stage, "calendar_12h_timeline");
+    }
+
+    [Fact]
+    public void LookAhead_HidesFarEvents()
+    {
+        var events = new List<CalEvent> { Ev("soon", Now.AddHours(2)), Ev("far", Now.AddDays(10)) };
+        var (app, _) = Configured(events, a => a.LookAheadDays = 3);
+        Assert.Equal(0, app.Model.Next.Count);
+        (app, _) = Configured(events, a => a.LookAheadDays = 14);
+        Assert.Single(app.Model.Next);
+    }
+
+    [Fact]
+    public void HideDeclined_RemovesDeclinedEvents()
+    {
+        var declined = Ev("skip me", Now.AddHours(1)) with { Declined = true };
+        var events = new List<CalEvent> { declined, Ev("keep me", Now.AddHours(2)) };
+        var (app, _) = Configured(events, a => { });
+        Assert.Equal("skip me", app.Model.Title);
+        (app, _) = Configured(events, a => a.HideDeclined = true);
+        Assert.Equal("keep me", app.Model.Title);
+    }
+
+    [Fact]
+    public void MaxEvents_LimitsAndRotatesTheList()
+    {
+        var events = Enumerable.Range(0, 9).Select(i => Ev("event " + i, Now.AddHours(1 + i))).ToList();
+        var (one, _) = Configured(events, a => a.MaxEvents = 1);
+        Assert.Empty(one.Model.Next);
+        var (four, _) = Configured(events, a => a.MaxEvents = 4);
+        Assert.Equal(3, four.Model.Next.Count);
+        var (eight, stage) = Configured(events, a => a.MaxEvents = 8);
+        Assert.Equal("event 1", eight.Model.Next[0].Title);
+        stage.Step(1000, 7);   // past the page time: the next window of the list
+        Assert.Equal("event 4", eight.Model.Next[0].Title);
+        Assert.Equal(3, eight.Model.Next.Count);
+    }
+
+    [Fact]
+    public void IcsParser_FlagsDeclinedEvents()
+    {
+        const string ics = "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:1\nDTSTART:20260103T100000Z\nDTEND:20260103T110000Z\nSUMMARY:Mine\n" +
+            "ATTENDEE;PARTSTAT=DECLINED:mailto:me@example.com\nATTENDEE;PARTSTAT=ACCEPTED:mailto:you@example.com\nEND:VEVENT\n" +
+            "BEGIN:VEVENT\nUID:2\nDTSTART:20260103T120000Z\nDTEND:20260103T130000Z\nSUMMARY:Solo\nATTENDEE;PARTSTAT=DECLINED:mailto:me@example.com\nEND:VEVENT\nEND:VCALENDAR\n";
+        var from = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var to = from.AddDays(10);
+        var withSelf = IcsParser.Parse(ics, from, to, TimeZoneInfo.Utc, "me@example.com");
+        Assert.True(withSelf.Single(e => e.Title == "Mine").Declined);
+        Assert.True(withSelf.Single(e => e.Title == "Solo").Declined);
+        var noSelf = IcsParser.Parse(ics, from, to, TimeZoneInfo.Utc);
+        Assert.False(noSelf.Single(e => e.Title == "Mine").Declined);   // one decline among several is somebody else's
+        Assert.True(noSelf.Single(e => e.Title == "Solo").Declined);
     }
 
     [Fact]
