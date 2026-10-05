@@ -45,6 +45,7 @@ public static class BuiltInApps
         yield return typeof(StocksApp);
         yield return typeof(PetApp);
         yield return typeof(InputTestApp);
+        yield return typeof(TetrisApp);
         yield return typeof(WidgetDemoApp);
         yield return typeof(Screens.ScreenApp);
     }
