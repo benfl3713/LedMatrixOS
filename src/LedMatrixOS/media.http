@@ -1,0 +1,42 @@
+### What can the server do? { video: bool (needs ffmpeg), maxBytes }
+GET http://localhost:5005/api/media/capabilities
+
+### Upload a picture, GIF, WebP, BMP, JPEG or (with ffmpeg) video. 201 -> { id, name, kind, width, height, frames, durationMs }
+### 400 unsupported/corrupt, 413 too big (Media:MaxBytes, default 25 MB), 503 video without ffmpeg, 507 library full (Media:MaxLibraryBytes)
+POST http://localhost:5005/api/media
+Content-Type: multipart/form-data; boundary=ledboundary
+
+--ledboundary
+Content-Disposition: form-data; name="name"
+
+My animation
+--ledboundary
+Content-Disposition: form-data; name="file"; filename="anim.gif"
+Content-Type: image/gif
+
+< ./anim.gif
+--ledboundary--
+
+### curl equivalent
+# curl -F "file=@anim.gif" -F "name=My animation" http://localhost:5005/api/media
+
+### List the library
+GET http://localhost:5005/api/media
+
+### Thumbnail (PNG, at most 128 px wide, first frame)
+GET http://localhost:5005/api/media/{{id}}/thumb
+
+### Delete (204)
+DELETE http://localhost:5005/api/media/{{id}}
+
+### Play it: pick the app, then choose items (comma separated ids; empty = everything) and how to show them
+POST http://localhost:5005/api/apps/media
+
+###
+POST http://localhost:5005/api/apps/media/settings
+Content-Type: application/json
+
+{ "items": "{{id}}", "mode": "Fit", "seconds": 10, "loops": 0, "speed": 100, "background": "#000000", "shuffle": false, "brightness": 100 }
+
+### The picker behind the Items setting (lists the library; q narrows by name)
+GET http://localhost:5005/api/apps/media/settings/items/options?q=

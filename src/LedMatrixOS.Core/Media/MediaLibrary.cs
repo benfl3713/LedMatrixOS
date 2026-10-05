@@ -184,7 +184,7 @@ public sealed class MediaLibrary
         try { info = Image.Identify(temp); }
         catch (Exception ex) when (ex is not OperationCanceledException) { throw Corrupt(ex); }
 
-        int frames = info.FrameMetadataCollection.Count;
+        int frames = Math.Max(1, info.FrameMetadataCollection.Count);   // a still can report no frame metadata at all
         if (info.Width <= 0 || info.Height <= 0 || info.Width > Config.MaxDimension || info.Height > Config.MaxDimension)
             throw new MediaException(MediaError.Unsupported, $"Pictures larger than {Config.MaxDimension}x{Config.MaxDimension} are not supported.");
         if (frames > Config.MaxFrames)
@@ -242,7 +242,7 @@ public sealed class MediaLibrary
     private static MediaException Corrupt(Exception ex) => new(MediaError.Unsupported, "The file is corrupt or not a supported picture or video (" + ex.GetType().Name + ").");
 
     /// <summary>Display name: a client supplied name or file name reduced to a plain, bounded label. It is only ever shown, never used as a path.</summary>
-    internal static string DisplayName(string? name)
+    public static string DisplayName(string? name)
     {
         var text = new StringBuilder();
         foreach (char c in name ?? "")

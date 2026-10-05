@@ -87,7 +87,10 @@ public sealed class MediaApp : SettingsAppBase
     public string? CurrentId => _clipId;
 
     /// <summary>The prepare or prefetch in flight, if any (tests wait on it).</summary>
-    public Task? Loading => _pending;
+    public Task? PendingLoad => _pending;
+
+    /// <summary>True while the item to show next is being prepared (as opposed to a prefetch waiting for the current item to end).</summary>
+    public bool IsPreparing => _pending is not null && _pendingIsReload;
 
     public override async Task OnActivatedAsync((int height, int width) dimensions, IConfiguration configuration, CancellationToken cancellationToken)
     {
