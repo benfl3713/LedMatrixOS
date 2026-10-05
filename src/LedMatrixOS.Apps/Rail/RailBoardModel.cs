@@ -1,3 +1,5 @@
+using LedMatrixOS.Apps.Tube;
+
 namespace LedMatrixOS.Apps.Rail;
 
 /// <summary>
@@ -15,6 +17,31 @@ internal sealed class RailRow
 
     public DateTimeOffset DepartsAt => Service.DepartsAt;
 
+    private string _scheduled = "";
+    private int _timeKey = int.MinValue;
+
+    /// <summary>
+    /// Rewrites <see cref="Time"/> for the chosen arrival format: the scheduled clock time, the minutes away ("5 min", "Due"), or both ("5 min 14:07").
+    /// Only reformats when the minute or the format changes, and bumps <see cref="Version"/> so the row restyles.
+    /// </summary>
+    public void FormatTime(ArrivalFormat format, int dueSeconds, DateTimeOffset now)
+    {
+        if (format == ArrivalFormat.Clock)
+        {
+            if (_timeKey != -1) { _timeKey = -1; Time = _scheduled; Version++; }
+            return;
+        }
+
+        double remaining = (DepartsAt - now).TotalSeconds;
+        int minutes = remaining < dueSeconds ? 0 : Math.Max(1, (int)(remaining / 60));
+        int key = minutes * 4 + (int)format;
+        if (key == _timeKey) return;
+        _timeKey = key;
+        string away = minutes == 0 ? "Due" : minutes + " min";
+        Time = format == ArrivalFormat.Both ? away + " " + _scheduled : away;
+        Version++;
+    }
+
     public void Set(RailService service)
     {
         if (ReferenceEquals(Service, service) || (Service is not null && Service.Equals(service))) return;
@@ -22,7 +49,8 @@ internal sealed class RailRow
         Service = service;
         Key = service.Key;
         State = service.Status;
-        Time = service.ScheduledTime.ToString("HH:mm");
+        Time = _scheduled = service.ScheduledTime.ToString("HH:mm");
+        _timeKey = int.MinValue;
         Destination = service.Destination;
         Platform = service.Platform;
         Status = service.Status switch
@@ -78,7 +106,7 @@ internal sealed class RailBoardModel
     public IReadOnlyList<RailPageToken> Pages => _tokens;
     public IReadOnlyList<RailRow> Page(int index) => index >= 0 && index < _pages.Length ? _pages[index] : [];
 
-    public void Refresh(DateTimeOffset now, RailService[]? source, string? platformFilter, int max)
+    public void Refresh(DateTimeOffset now, RailService[]? source, string? platformFilter, int max, ArrivalFormat format = ArrivalFormat.Clock, int dueSeconds = 60)
     {
         platformFilter ??= "";
         if (!ReferenceEquals(source, _source) || max != _max || platformFilter != _filter)
@@ -98,6 +126,7 @@ internal sealed class RailBoardModel
         }
 
         if (!SameAs(_visible, _scratch) || _dirty) Publish();
+        foreach (var row in _visible) row.FormatTime(format, dueSeconds, now);
     }
 
     /// <summary>

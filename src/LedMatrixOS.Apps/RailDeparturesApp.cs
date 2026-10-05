@@ -42,6 +42,23 @@ public class RailDeparturesApp : WidgetApp
     [Setting("Page Seconds", Description = "How long each page of services stays before sliding to the next.", Min = 3, Max = 30)]
     public int PageSeconds { get; set; } = 6;
 
+    [Setting("Arrival Format", Description = "How each departure time reads: the clock time, the minutes away, or both.", Options = [ArrivalOptions.ClockOption, ArrivalOptions.MinutesOption, ArrivalOptions.BothOption])]
+    public string ArrivalFormat { get; set; } = ArrivalOptions.ClockOption;
+
+    [Setting("Show Destination", Description = "Show where each service is heading.")]
+    public bool ShowDestination { get; set; } = true;
+
+    [Setting("Due Threshold", Description = "Seconds away under which a departure shows Due (when showing minutes).", Min = ArrivalOptions.MinDueSeconds, Max = ArrivalOptions.MaxDueSeconds)]
+    public int DueThreshold { get; set; } = ArrivalOptions.DefaultDueSeconds;
+
+    [Setting("Show Calling Points", Description = "Scroll the calling points under the next train.")]
+    public bool ShowCallingPoints { get; set; } = true;
+
+    [Setting("Show Platform", Description = "Show the platform of each service.")]
+    public bool ShowPlatform { get; set; } = true;
+
+    private readonly RailOptions _options = new();
+
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(15);
 
     private readonly IRailDepartureSource _source;
@@ -91,7 +108,7 @@ public class RailDeparturesApp : WidgetApp
             },
         };
 
-        var hero = new ListView<RailRow>(() => _model.Hero, r => new ScrollSlot(new RailHeroNode(r, styles), RailHeroNode.RowHeight), r => r.Key)
+        var hero = new ListView<RailRow>(() => _model.Hero, r => new ScrollSlot(new RailHeroNode(r, styles, _options), RailHeroNode.RowHeight), r => r.Key)
             { HAlign = Align.Stretch, EnterOffset = 0, EnterDuration = 350.Ms(), ExitDuration = 350.Ms() };
 
         _pager = new Pager(pageSize: 1, interval: PageSeconds.Seconds(), transition: new SlideTransition(MoveDirection.Left) { Duration = 500.Ms() }, easing: Easing.InOutCubic)
@@ -160,7 +177,7 @@ public class RailDeparturesApp : WidgetApp
     private int _nextMinutes;
 
     private Node BuildPage(RailPageToken token, RailStyles styles) => new ListView<RailRow>(
-        () => _model.Page(token.Index), r => new ScrollSlot(new RailRowNode(r, styles), RailRowNode.RowHeight), r => r.Key)
+        () => _model.Page(token.Index), r => new ScrollSlot(new RailRowNode(r, styles, _options), RailRowNode.RowHeight), r => r.Key)
         { HAlign = Align.Stretch, EnterOffset = 0, EnterDuration = 350.Ms(), ExitDuration = 350.Ms() };
 
     // ---- per frame ----------------------------------------------------------------------------------------------------------------
@@ -170,7 +187,12 @@ public class RailDeparturesApp : WidgetApp
         _ = Host;   // builds the tree on the first frame
 
         var now = Time.GetLocalNow();
-        _model.Refresh(now, _services?.Value, PlatformFilter, Math.Clamp(MaxServices, 1, MaxServicesLimit));
+        var format = ArrivalOptions.Parse(ArrivalFormat);
+        _options.Format = format;
+        _options.ShowDestination = ShowDestination;
+        _options.ShowPlatform = ShowPlatform;
+        _options.ShowCallingPoints = ShowCallingPoints;
+        _model.Refresh(now, _services?.Value, PlatformFilter, Math.Clamp(MaxServices, 1, MaxServicesLimit), format, Math.Clamp(DueThreshold, ArrivalOptions.MinDueSeconds, ArrivalOptions.MaxDueSeconds));
 
         bool any = _model.Visible.Count > 0;
         _message!.Visible = !any;

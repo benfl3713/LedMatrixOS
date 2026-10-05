@@ -33,30 +33,27 @@ internal sealed class HeroRow : Stack
     private readonly DepartureBoardModel _model;
     private readonly Func<bool> _byLine;
     private readonly BoardStyles _styles;
+    private readonly ArrivalOptions _options;
     private readonly MarqueeLabel _destination;
-    private readonly RollingNumber _minutes;
-    private readonly Stack _countdown;
-    private readonly DueBadge _due;
-    private readonly Label _unit;
+    private readonly ArrivalCell _arrival;
     private readonly Pill _platform;
     private bool _tinted;
-    private bool _isDue;
     private bool _platformShown;
+    private bool _destinationShown = true;
     private TimeSpan _time;
 
-    public HeroRow(Departure dep, DepartureBoardModel model, BoardStyles styles, Func<bool> byLine) : base(Orientation.Horizontal)
+    public HeroRow(Departure dep, DepartureBoardModel model, BoardStyles styles, Func<bool> byLine, ArrivalOptions? options = null) : base(Orientation.Horizontal)
     {
         _dep = dep;
         _model = model;
         _styles = styles;
         _byLine = byLine;
+        _options = options ?? new ArrivalOptions();
         CrossAlign = Align.Center;
 
         _destination = new MarqueeLabel(dep.Destination) { Style = styles.Big, Grow = 1, Margin = new Thickness(8, 0, 4, 0) };
-        _minutes = new RollingNumber(() => dep.Minutes(model.Now)) { Style = styles.BigAmber };
-        _unit = new Label("min") { Style = styles.TinyAmber, VAlign = Align.End, Margin = new Thickness(2, 0, 0, 4) };
-        _countdown = new Stack(Orientation.Horizontal) { Children = { _minutes, _unit } };
-        _due = new DueBadge(Fonts.Big, filled: true) { Visible = false };
+        _arrival = new ArrivalCell(dep, model, _options, styles.BigAmber, styles.TinyAmber, new Thickness(2, 0, 0, 4), Fonts.Big, dueFilled: true, baseWidth: 66)
+            { Margin = new Thickness(0, 0, 4, 0) };
 
         Add(new Block(dep.Color, width: 4));
         // The platform badge only appears where the route is served from several platforms
@@ -73,17 +70,19 @@ internal sealed class HeroRow : Stack
         Add(_platform);
 
         Add(_destination);
-        Add(new Panel { Width = 66, Margin = new Thickness(0, 0, 4, 0), Children = { _countdown, _due } });
-        _countdown.HAlign = Align.End;
-        _countdown.VAlign = Align.Center;
-        _due.HAlign = Align.End;
-        _due.VAlign = Align.Center;
+        Add(_arrival);
     }
 
     public override void Update(FrameContext ctx)
     {
         base.Update(ctx);
         _time = ctx.Time;
+
+        if (_options.ShowDestination != _destinationShown)
+        {
+            _destinationShown = _options.ShowDestination;
+            _destination.Text = _destinationShown ? _dep.Destination : "";
+        }
 
         bool showPlatform = _dep.ShowPlatform && _dep.PlatformNumber.Length > 0;
         if (showPlatform != _platformShown)
@@ -93,28 +92,20 @@ internal sealed class HeroRow : Stack
             _destination.Margin = showPlatform ? new Thickness(7, 0, 4, 0) : new Thickness(8, 0, 4, 0);
         }
 
-        bool due = _dep.Minutes(_model.Now) == 0 && !_minutes.IsRolling;
-        if (due != _isDue)
-        {
-            _isDue = due;
-            _countdown.Visible = !due;
-            _due.Visible = due;
-        }
-
         bool tint = _byLine();
         if (tint != _tinted)
         {
             _tinted = tint;
             var accent = BoardStyles.Tinted(_dep.Color);
             _destination.Style = tint ? new TextStyle(Fonts.Big, accent) : _styles.Big;
-            _minutes.Style = tint ? new TextStyle(Fonts.Big, accent) : _styles.BigAmber;
+            _arrival.SetStyles(tint ? new TextStyle(Fonts.Big, accent) : _styles.BigAmber);
         }
     }
 
     protected override void OnRender(FrameBuffer frame, Rectangle bounds)
     {
         float strength = _tinted ? 0.55f : 0.36f;
-        if (_isDue) strength *= 0.85f + 0.75f * TubeGfx.Wave(_time, 0.9);
+        if (_arrival.IsDue) strength *= 0.85f + 0.75f * TubeGfx.Wave(_time, 0.9);
         TubeGfx.FillRamp(frame, bounds, _dep.Color.WithBrightness(strength), new Pixel(6, 6, 8), 0.8f);
     }
 }
@@ -128,47 +119,46 @@ internal sealed class CompactRow : Stack
     private readonly DepartureBoardModel _model;
     private readonly Func<bool> _byLine;
     private readonly BoardStyles _styles;
-    private readonly MarqueeLabel _destination;
-    private readonly RollingNumber _minutes;
-    private readonly Stack _countdown;
-    private readonly DueBadge _due;
+    private readonly ArrivalOptions _options;
+    private readonly FitLabel _destination;
+    private readonly ArrivalCell _arrival;
     private readonly Label _platform;
     private bool _tinted;
-    private bool _isDue;
     private bool _platformShown;
+    private bool _destinationShown = true;
 
-    public CompactRow(Departure dep, DepartureBoardModel model, BoardStyles styles, Func<bool> byLine, int countdownWidth = 48, int platformWidth = 13)
+    public CompactRow(Departure dep, DepartureBoardModel model, BoardStyles styles, Func<bool> byLine, int countdownWidth = 48, int platformWidth = 13, ArrivalOptions? options = null)
         : base(Orientation.Horizontal)
     {
         _dep = dep;
         _model = model;
         _styles = styles;
         _byLine = byLine;
+        _options = options ?? new ArrivalOptions();
         CrossAlign = Align.Center;
 
-        _destination = new MarqueeLabel(dep.Destination) { Style = styles.Small, Grow = 1, Margin = new Thickness(4, 0, 4, 0) };
-        _minutes = new RollingNumber(() => dep.Minutes(model.Now)) { Style = styles.SmallAmber };
-        _countdown = new Stack(Orientation.Horizontal)
-        {
-            Children = { _minutes, new Label("min") { Style = styles.TinyAmber, VAlign = Align.End, Margin = new Thickness(2, 0, 0, 1) } },
-        };
-        _due = new DueBadge(Fonts.Small, filled: false) { Visible = false };
+        // A destination that does not fit is abbreviated ("Walthamstow C.") rather than cut mid-word.
+        _destination = new FitLabel(dep.Destination, styles.Small) { Grow = 1, Margin = new Thickness(4, 0, 4, 0) };
+        _arrival = new ArrivalCell(dep, model, _options, styles.SmallAmber, styles.TinyAmber, new Thickness(2, 0, 0, 1), Fonts.Small, dueFilled: false, baseWidth: countdownWidth)
+            { Margin = new Thickness(0, 0, 4, 0) };
 
         Add(new Block(dep.Color, width: 3) { Margin = new Thickness(0, 1, 0, 1) });
         // The platform only takes room where the route is served from several platforms
         _platform = new Label(dep.PlatformNumber) { Style = styles.Tiny, TextAlignment = TextAlign.Center, Width = platformWidth, Visible = false };
         Add(_platform);
         Add(_destination);
-        Add(new Panel { Width = countdownWidth, Margin = new Thickness(0, 0, 4, 0), Children = { _countdown, _due } });
-        _countdown.HAlign = Align.End;
-        _countdown.VAlign = Align.Center;
-        _due.HAlign = Align.End;
-        _due.VAlign = Align.Center;
+        Add(_arrival);
     }
 
     public override void Update(FrameContext ctx)
     {
         base.Update(ctx);
+
+        if (_options.ShowDestination != _destinationShown)
+        {
+            _destinationShown = _options.ShowDestination;
+            _destination.Text = _destinationShown ? _dep.Destination : "";
+        }
 
         bool showPlatform = _dep.ShowPlatform && _dep.PlatformNumber.Length > 0;
         if (showPlatform != _platformShown)
@@ -178,21 +168,13 @@ internal sealed class CompactRow : Stack
             _destination.Margin = showPlatform ? new Thickness(2, 0, 4, 0) : new Thickness(4, 0, 4, 0);
         }
 
-        bool due = _dep.Minutes(_model.Now) == 0 && !_minutes.IsRolling;
-        if (due != _isDue)
-        {
-            _isDue = due;
-            _countdown.Visible = !due;
-            _due.Visible = due;
-        }
-
         bool tint = _byLine();
         if (tint != _tinted)
         {
             _tinted = tint;
             var accent = BoardStyles.Tinted(_dep.Color);
             _destination.Style = tint ? new TextStyle(Fonts.Small, accent, Shadow: false) : _styles.Small;
-            _minutes.Style = tint ? new TextStyle(Fonts.Small, accent, Shadow: false) : _styles.SmallAmber;
+            _arrival.SetStyles(tint ? new TextStyle(Fonts.Small, accent, Shadow: false) : _styles.SmallAmber);
         }
     }
 }
@@ -209,52 +191,42 @@ internal sealed class PlatformRow : Stack
     private readonly DepartureBoardModel _model;
     private readonly Func<bool> _byLine;
     private readonly BoardStyles _styles;
+    private readonly ArrivalOptions _options;
     private readonly MarqueeLabel _destination;
-    private readonly RollingNumber _minutes;
-    private readonly Stack _countdown;
-    private readonly DueBadge _due;
+    private readonly ArrivalCell _arrival;
     private readonly Label _platform;
     private bool _tinted;
-    private bool _isDue;
+    private bool _destinationShown = true;
 
-    public PlatformRow(Departure dep, DepartureBoardModel model, BoardStyles styles, Func<bool> byLine) : base(Orientation.Horizontal)
+    public PlatformRow(Departure dep, DepartureBoardModel model, BoardStyles styles, Func<bool> byLine, ArrivalOptions? options = null) : base(Orientation.Horizontal)
     {
         _dep = dep;
         _model = model;
         _styles = styles;
         _byLine = byLine;
+        _options = options ?? new ArrivalOptions();
         CrossAlign = Align.Center;
 
         _destination = new MarqueeLabel(dep.Destination) { Style = styles.TinyAmber, Grow = 1, Margin = new Thickness(0, 0, 4, 0), VAlign = Align.Center };
-        _minutes = new RollingNumber(() => dep.Minutes(model.Now)) { Style = styles.TinyAmber };
-        _countdown = new Stack(Orientation.Horizontal, gap: 2)
-        {
-            Children = { _minutes, new Label("min") { Style = styles.TinyAmber } },
-        };
-        _due = new DueBadge(Fonts.QuiteSmall, filled: false) { Visible = false };
+        _arrival = new ArrivalCell(dep, model, _options, styles.TinyAmber, styles.TinyAmber, new Thickness(2, 0, 0, 0), Fonts.QuiteSmall, dueFilled: false, baseWidth: 40)
+            { Margin = new Thickness(0, 0, 6, 0) };
 
         // Line colour stripe, then a platform cell that is only filled where the route is served from several platforms
         Add(new Block(dep.Color.WithBrightness(0.8f), width: 2) { Margin = new Thickness(6, 1, 0, 1) });
         _platform = new Label(() => _dep.ShowPlatform ? _dep.PlatformNumber : "") { Style = styles.TinyAmber, Width = 12, TextAlignment = TextAlign.Center, VAlign = Align.Center };
         Add(_platform);
         Add(_destination);
-        Add(new Panel { Width = 40, Margin = new Thickness(0, 0, 6, 0), Children = { _countdown, _due } });
-        _countdown.HAlign = Align.End;
-        _countdown.VAlign = Align.Center;
-        _due.HAlign = Align.End;
-        _due.VAlign = Align.Center;
+        Add(_arrival);
     }
 
     public override void Update(FrameContext ctx)
     {
         base.Update(ctx);
 
-        bool due = _dep.Minutes(_model.Now) == 0 && !_minutes.IsRolling;
-        if (due != _isDue)
+        if (_options.ShowDestination != _destinationShown)
         {
-            _isDue = due;
-            _countdown.Visible = !due;
-            _due.Visible = due;
+            _destinationShown = _options.ShowDestination;
+            _destination.Text = _destinationShown ? _dep.Destination : "";
         }
 
         bool tint = _byLine();

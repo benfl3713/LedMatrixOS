@@ -67,10 +67,10 @@ public class TubeDeparturesAppTests(ITestOutputHelper output)
         var settings = NewApp().GetSettings().ToList();
 
         Assert.Equal(
-            new[] { "stationId", "routes", "platformFilter", "boardStyle", "maxDepartures", "colorDeparturesByLine", "pageSeconds" },
+            new[] { "stationId", "routes", "platformFilter", "boardStyle", "maxDepartures", "colorDeparturesByLine", "pageSeconds", "arrivalFormat", "showDestination", "dueThreshold" },
             settings.Select(s => s.Key).ToArray());
         Assert.Equal(
-            new[] { AppSettingType.Search, AppSettingType.MultiSearch, AppSettingType.String, AppSettingType.Select, AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Integer },
+            new[] { AppSettingType.Search, AppSettingType.MultiSearch, AppSettingType.String, AppSettingType.Select, AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Integer, AppSettingType.Select, AppSettingType.Boolean, AppSettingType.Integer },
             settings.Select(s => s.Type).ToArray());
 
         var max = settings.Single(s => s.Key == "maxDepartures");
@@ -354,6 +354,50 @@ public class TubeDeparturesAppTests(ITestOutputHelper output)
     {
         var (_, stage, _) = Board(style: "Split");
         Golden(stage, "tube_departures_split");
+    }
+
+    [Fact]
+    public void Golden_ArrivalFormats_AndHiddenDestination()
+    {
+        var (clock, stage, _) = Board(style: "Split");
+        clock.ArrivalFormat = "Clock time";
+        stage.Step(33, 6);
+        Golden(stage, "tube_departures_split_clock_time");
+
+        var (both, bothStage, _) = Board(style: "Split");
+        both.ArrivalFormat = "Both";
+        bothStage.Step(33, 6);
+        Golden(bothStage, "tube_departures_split_both");
+
+        var (hero, heroStage, _) = Board(style: "Hero");
+        hero.ArrivalFormat = "Both";
+        hero.ShowDestination = false;
+        heroStage.Step(33, 6);
+        Golden(heroStage, "tube_departures_hero_both_no_destination");
+    }
+
+    [Fact]
+    public void DueThreshold_MakesEarlierTrainsDue()
+    {
+        var (app, stage, _) = Board(CommuteBoard(100), style: "Split");
+        Assert.Equal(1, app.Board.MinutesOf(app.Board.Visible[0]));
+        app.DueThreshold = 120;
+        stage.Step(33, 3);
+        Assert.Equal(0, app.Board.MinutesOf(app.Board.Visible[0]));
+    }
+
+    [Fact]
+    public void FitLabel_AbbreviatesInsteadOfCuttingMidWord()
+    {
+        Fonts.Load();
+        var font = Fonts.Small;
+        var full = "Walthamstow Central";
+        int width = font.MeasureText(full) - 3;
+        var fitted = LedMatrixOS.Apps.Tube.FitLabel.Fit(font, full, width);
+        Assert.Equal("Walthamstow C.", fitted);
+        Assert.Equal("Walthamstow", LedMatrixOS.Apps.Tube.FitLabel.Fit(font, full, font.MeasureText("Walthamstow") + 1));
+        Assert.EndsWith("...", LedMatrixOS.Apps.Tube.FitLabel.Fit(font, full, font.MeasureText("Walt") + 2));
+        Assert.Equal(full, LedMatrixOS.Apps.Tube.FitLabel.Fit(font, full, 200));
     }
 
     [Fact]

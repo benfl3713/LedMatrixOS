@@ -69,12 +69,27 @@ public class BusArrivalsAppTests(ITestOutputHelper output)
         var app = NewApp();
         var settings = app.GetSettings().ToList();
 
-        Assert.Equal(new[] { "stopIds", "routeFilter", "maxBuses", "pageSeconds" }, settings.Select(s => s.Key).ToArray());
+        Assert.Equal(new[] { "stopIds", "routeFilter", "maxBuses", "pageSeconds", "arrivalFormat", "showDestination", "dueThreshold" }, settings.Select(s => s.Key).ToArray());
         Assert.Equal(
-            new[] { AppSettingType.MultiSearch, AppSettingType.String, AppSettingType.Integer, AppSettingType.Integer },
+            new[] { AppSettingType.MultiSearch, AppSettingType.String, AppSettingType.Integer, AppSettingType.Integer, AppSettingType.Select, AppSettingType.Boolean, AppSettingType.Integer },
             settings.Select(s => s.Type).ToArray());
         Assert.Equal(4, settings.Single(s => s.Key == "maxBuses").MaxValue);
         Assert.Equal("bus-arrivals", app.Id);
+    }
+
+    [Fact]
+    public void Golden_ClockTimeAndBoth()
+    {
+        var (clock, clockStage) = Board(1500, ("B", VictoriaStopB(), "Victoria Station"));
+        clock.ArrivalFormat = "Clock time";
+        clockStage.Step(33, 6);
+        Golden(clockStage, "bus_arrivals_clock_time");
+
+        var (both, bothStage) = Board(1500, ("B", VictoriaStopB(), "Victoria Station"));
+        both.ArrivalFormat = "Both";
+        both.ShowDestination = false;
+        bothStage.Step(33, 6);
+        Golden(bothStage, "bus_arrivals_both_no_destination");
     }
 
     [Fact]

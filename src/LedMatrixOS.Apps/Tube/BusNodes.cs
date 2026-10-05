@@ -28,16 +28,14 @@ internal sealed class BusRow : Stack
     public const int RowHeight = 13;
 
     private readonly Departure _dep;
-    private readonly DepartureBoardModel _model;
-    private readonly RollingNumber _minutes;
-    private readonly Stack _countdown;
-    private readonly DueBadge _due;
-    private bool _isDue;
+    private readonly ArrivalOptions _options;
+    private readonly MarqueeLabel _destination;
+    private bool _destinationShown = true;
 
-    public BusRow(Departure dep, DepartureBoardModel model, BoardStyles styles) : base(Orientation.Horizontal)
+    public BusRow(Departure dep, DepartureBoardModel model, BoardStyles styles, ArrivalOptions? options = null) : base(Orientation.Horizontal)
     {
         _dep = dep;
-        _model = model;
+        _options = options ?? new ArrivalOptions();
         CrossAlign = Align.Center;
 
         var badge = new Pill(dep.LineName, BusColors.For(dep.LineName))
@@ -50,31 +48,19 @@ internal sealed class BusRow : Stack
             Margin = new Thickness(2, 0, 0, 0),
         };
 
-        _minutes = new RollingNumber(() => dep.Minutes(model.Now)) { Style = styles.SmallAmber };
-        _countdown = new Stack(Orientation.Horizontal)
-        {
-            Children = { _minutes, new Label("min") { Style = styles.TinyAmber, VAlign = Align.End, Margin = new Thickness(2, 0, 0, 1) } },
-        };
-        _due = new DueBadge(Fonts.Small, filled: false) { Visible = false };
-
+        _destination = new MarqueeLabel(dep.Destination) { Style = styles.Small, Grow = 1, Margin = new Thickness(4, 0, 4, 0) };
         Add(badge);
-        Add(new MarqueeLabel(dep.Destination) { Style = styles.Small, Grow = 1, Margin = new Thickness(4, 0, 4, 0) });
-        Add(new Panel { Width = 44, Margin = new Thickness(0, 0, 4, 0), Children = { _countdown, _due } });
-        _countdown.HAlign = Align.End;
-        _countdown.VAlign = Align.Center;
-        _due.HAlign = Align.End;
-        _due.VAlign = Align.Center;
+        Add(_destination);
+        Add(new ArrivalCell(dep, model, _options, styles.SmallAmber, styles.TinyAmber, new Thickness(2, 0, 0, 1), Fonts.Small, dueFilled: false, baseWidth: 44)
+            { Margin = new Thickness(0, 0, 4, 0) });
     }
 
     public override void Update(FrameContext ctx)
     {
         base.Update(ctx);
-
-        bool due = _dep.Minutes(_model.Now) == 0 && !_minutes.IsRolling;
-        if (due == _isDue) return;
-        _isDue = due;
-        _countdown.Visible = !due;
-        _due.Visible = due;
+        if (_options.ShowDestination == _destinationShown) return;
+        _destinationShown = _options.ShowDestination;
+        _destination.Text = _destinationShown ? _dep.Destination : "";
     }
 }
 
