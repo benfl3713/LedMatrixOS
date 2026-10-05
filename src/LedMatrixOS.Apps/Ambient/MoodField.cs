@@ -57,7 +57,7 @@ internal sealed class MoodField : Node
         if (look.Mode == "Sparkle")
         {
             _twinkle.Gradient[0] = Pixel.White;
-            _twinkle.Gradient[1] = Gfx.Mix(Current(), Pixel.White, 0.55f);
+            _twinkle.Gradient[1] = Pixel.Lerp(Current(), Pixel.White, 0.55f);
             _twinkle.Rate = 75f * look.Speed;
             _sparkles.Update(_dt);
         }
@@ -163,7 +163,7 @@ internal sealed class MoodField : Node
         {
             // A little warmer and brighter towards the bottom, like a flame pooling light.
             float rowBias = 0.78f + 0.22f * (y / (float)(bounds.Height - 1));
-            var color = Gfx.Mix(c, new Pixel(255, 150, 40), 0.18f * (y / (float)bounds.Height));
+            var color = Pixel.Lerp(c, new Pixel(255, 150, 40), 0.18f * (y / (float)bounds.Height));
             frame.Fill(new Rectangle(bounds.X, bounds.Y + y, bounds.Width, 1), color.WithBrightness(flicker * rowBias * lvl));
         }
     }

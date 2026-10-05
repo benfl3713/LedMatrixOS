@@ -7,8 +7,6 @@ namespace LedMatrixOS.Apps.Ambient;
 /// <summary>Small colour and drawing helpers shared by the ambient apps. Everything here is allocation free.</summary>
 internal static class Gfx
 {
-    public static Pixel Mix(Pixel a, Pixel b, float t) => Pixel.Lerp(a, b, t);
-
     /// <summary>Blends through hue (shortest way round the wheel) so a cyan to amber fade stays vivid instead of passing through grey.</summary>
     public static Pixel HueMix(Pixel a, Pixel b, float t)
     {

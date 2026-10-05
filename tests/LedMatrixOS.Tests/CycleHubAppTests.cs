@@ -264,27 +264,9 @@ public class CycleHubAppTests(ITestOutputHelper output)
         var (app, stage) = Board(Live(GoodDay()), 1500,
             ("BikePoints_42", Dock("BikePoints_42", "Hyde Park Corner, Hyde Park", 12, 7, 3)),
             ("BikePoints_7", Dock("BikePoints_7", "Park Lane, Mayfair", 2, 22, 1)));
-        for (int i = 0; i < 400; i++) { stage.Step(33); stage.Render(); }
+        var run = stage.MeasureSteadyAllocation(windows: 12, warmFrames: 400, beginWindow: () => { int page = app.DockPager!.PageIndex; return () => page == app.DockPager.PageIndex && !app.DockPager.IsTransitioning; });
 
-        int measured = 0;
-        long least = long.MaxValue;
-        double ms = 0;
-        for (int window = 0; window < 12; window++)
-        {
-            int page = app.DockPager!.PageIndex;
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            var sw = Stopwatch.StartNew();
-            for (int i = 0; i < 60; i++) { stage.Step(33); stage.Render(); }
-            sw.Stop();
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            if (page != app.DockPager.PageIndex || app.DockPager.IsTransitioning) continue;
-            measured++;
-            ms = sw.Elapsed.TotalMilliseconds / 60;
-            least = Math.Min(least, allocated);
-        }
-
-        output.WriteLine($"cycle hub: {ms:F3} ms/frame, {measured} steady windows");
-        Assert.True(measured >= 3);
-        Assert.True(least < 256, $"least allocation in a steady window: {least} bytes");
-    }
+        output.WriteLine($"cycle hub: {run.MsPerFrame:F3} ms/frame, {run.Measured} steady windows");
+        Assert.True(run.Measured >= 3);
+        Assert.True(run.Least < 256, $"least allocation in a steady window: {run.Least} bytes");    }
 }

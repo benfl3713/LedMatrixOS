@@ -162,7 +162,7 @@ internal sealed class HomeBackdrop : Node
     private void DrawStarfield(FrameBuffer frame)
     {
         var p = _s.Pal;
-        Gfx.VerticalGradient(frame, new Rectangle(0, 0, 256, 64), Gfx.Mix(p.Sky0, Pixel.Black, 0.4f), Gfx.Mix(p.Sky1, p.Sky0, 0.5f));
+        Gfx.VerticalGradient(frame, new Rectangle(0, 0, 256, 64), Pixel.Lerp(p.Sky0, Pixel.Black, 0.4f), Pixel.Lerp(p.Sky1, p.Sky0, 0.5f));
         // A faint band of galaxy light slowly turning behind the stars.
         float t = _s.T * _s.Speed;
         Gfx.GlowEllipse(frame, 128f + 60f * MathF.Sin(t * 0.04f), 30f + 8f * MathF.Sin(t * 0.07f), 150f, 14f, Gfx.Dim(p.A3, 0.5f), 0.22f);
@@ -216,7 +216,7 @@ internal sealed class HomeBackdrop : Node
             float back = i * 2.6f;
             float px = sx + dx * (dist - back), py = sy + dy * (dist - back);
             float a = (1f - i / 14f) * fade;
-            var c = i < 2 ? Pixel.White : Gfx.Mix(p.Star, p.A2, i / 14f);
+            var c = i < 2 ? Pixel.White : Pixel.Lerp(p.Star, p.A2, i / 14f);
             frame.BlendPixel((int)MathF.Round(px), (int)MathF.Round(py), c, a);
             if (i < 4) frame.BlendPixel((int)MathF.Round(px), (int)MathF.Round(py) + 1, c, a * 0.4f);
         }
@@ -227,7 +227,7 @@ internal sealed class HomeBackdrop : Node
     private void DrawEmbers(FrameBuffer frame)
     {
         var p = _s.Pal;
-        Gfx.VerticalGradient(frame, new Rectangle(0, 0, 256, 64), Gfx.Mix(p.Sky0, Pixel.Black, 0.5f), Gfx.Mix(p.Sky1, p.Sky0, 0.35f));
+        Gfx.VerticalGradient(frame, new Rectangle(0, 0, 256, 64), Pixel.Lerp(p.Sky0, Pixel.Black, 0.5f), Pixel.Lerp(p.Sky1, p.Sky0, 0.35f));
         float t = _s.T * _s.Speed;
         float breathe = 0.7f + 0.3f * MathF.Sin(t * 0.5f);
         Gfx.GlowEllipse(frame, 128f + 30f * MathF.Sin(t * 0.13f), 70f, 190f, 34f, Gfx.Dim(p.A1, 0.7f), 0.48f * breathe);
@@ -240,7 +240,7 @@ internal sealed class HomeBackdrop : Node
     private void DrawWaves(FrameBuffer frame)
     {
         var p = _s.Pal;
-        Gfx.VerticalGradient(frame, new Rectangle(0, 0, 256, 64), Gfx.Mix(p.Sky0, Pixel.Black, 0.2f), p.Sky1);
+        Gfx.VerticalGradient(frame, new Rectangle(0, 0, 256, 64), Pixel.Lerp(p.Sky0, Pixel.Black, 0.2f), p.Sky1);
         DrawStars(frame, p.Star, 0.35f, 0f);
         float t = _s.T * _s.Speed;
 
@@ -251,9 +251,9 @@ internal sealed class HomeBackdrop : Node
             float w1 = 0.45f + layer * 0.17f, w2 = 0.31f + layer * 0.11f;
             float k1 = 0.035f + layer * 0.008f, k2 = 0.09f - layer * 0.01f;
             float dir = layer % 2 == 0 ? 1f : -1f;
-            var body = Gfx.Dim(Gfx.Mix(p.Sky1, layer % 2 == 0 ? p.A1 : p.A2, 0.30f + layer * 0.13f), 0.55f + layer * 0.11f);
-            var crest = Gfx.Mix(body, p.A3, 0.7f);
-            var foam = Gfx.Mix(crest, Pixel.White, 0.35f);
+            var body = Gfx.Dim(Pixel.Lerp(p.Sky1, layer % 2 == 0 ? p.A1 : p.A2, 0.30f + layer * 0.13f), 0.55f + layer * 0.11f);
+            var crest = Pixel.Lerp(body, p.A3, 0.7f);
+            var foam = Pixel.Lerp(crest, Pixel.White, 0.35f);
 
             for (int x = 0; x < 256; x++)
             {
@@ -305,10 +305,10 @@ internal sealed class HomeBackdrop : Node
             float sx = 14f + Gfx.Saturate(sunT) * 228f;
             float sy = 58f - MathF.Sin(Gfx.Saturate(sunT) * MathF.PI) * 44f;
             float low = 1f - MathF.Sin(Gfx.Saturate(sunT) * MathF.PI);
-            var warm = Gfx.Mix(new Pixel(255, 244, 205), new Pixel(255, 120, 40), low);
+            var warm = Pixel.Lerp(new Pixel(255, 244, 205), new Pixel(255, 120, 40), low);
             Gfx.GlowDisc(frame, sx, sy, 22f, warm, 0.55f);
-            Gfx.GlowDisc(frame, sx, sy, 9f, Gfx.Mix(warm, Pixel.White, 0.4f), 0.8f);
-            Gfx.Disc(frame, (int)sx, (int)sy, 3, Gfx.Mix(warm, Pixel.White, 0.6f));
+            Gfx.GlowDisc(frame, sx, sy, 9f, Pixel.Lerp(warm, Pixel.White, 0.4f), 0.8f);
+            Gfx.Disc(frame, (int)sx, (int)sy, 3, Pixel.Lerp(warm, Pixel.White, 0.6f));
         }
 
         float moonT = (h >= 18f ? h - 18f : h + 6f) / 12f;
@@ -330,7 +330,7 @@ internal sealed class HomeBackdrop : Node
             float cx = (Gfx.Hash(i + 90) * 330f + _s.T * _s.Speed * speed) % 330f - 40f;
             float cy = 8f + Gfx.Hash(i + 120) * 30f;
             float rx = 22f + Gfx.Hash(i + 150) * 16f, ry = 3.5f + Gfx.Hash(i + 180) * 3f;
-            var tint = Gfx.Mix(Pixel.White, bottom, 0.45f + night * 0.3f);
+            var tint = Pixel.Lerp(Pixel.White, bottom, 0.45f + night * 0.3f);
             BlendEllipse(frame, cx, cy, rx, ry, tint, cloudAlpha);
             BlendEllipse(frame, cx - rx * 0.35f, cy - ry * 0.6f, rx * 0.55f, ry * 0.9f, tint, cloudAlpha * 0.9f);
         }
@@ -359,7 +359,7 @@ internal sealed class HomeBackdrop : Node
     private void DrawMinimal(FrameBuffer frame)
     {
         var p = _s.Pal;
-        Gfx.VerticalGradient(frame, new Rectangle(0, 0, 256, 64), Gfx.Dim(p.Sky0, 0.8f), Gfx.Mix(p.Sky0, p.Sky1, 0.55f));
+        Gfx.VerticalGradient(frame, new Rectangle(0, 0, 256, 64), Gfx.Dim(p.Sky0, 0.8f), Pixel.Lerp(p.Sky0, p.Sky1, 0.55f));
         float t = _s.T * _s.Speed;
         float breathe = 0.5f + 0.5f * MathF.Sin(t * 0.55f);
         Gfx.GlowEllipse(frame, 78f, 32f, 120f, 30f, Gfx.Dim(p.A1, 0.7f), 0.20f + 0.12f * breathe);

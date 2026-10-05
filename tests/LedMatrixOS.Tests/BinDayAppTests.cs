@@ -135,23 +135,14 @@ public class BinDayAppTests(ITestOutputHelper output)
         foreach (var local in new[] { new DateTime(2026, 10, 3, 10, 0, 0), new DateTime(2026, 10, 4, 18, 0, 0), new DateTime(2026, 10, 5, 9, 0, 0) })
         {
             var (app, stage) = Rig(local, reminders: local.Day == 5 ? "Take pills|08:00|20:00" : "", warmFrames: 300);
-            for (int i = 0; i < 300; i++) { stage.Step(33); stage.Render(); }
-
-            long least = long.MaxValue;
-            double ms = 0;
-            for (int window = 0; window < 12; window++)
+            var run = stage.MeasureSteadyAllocation(windows: 12, warmFrames: 300, beginWindow: () =>
             {
                 int page = app.Pager!.PageIndex;
-                long before = GC.GetAllocatedBytesForCurrentThread();
-                var sw = Stopwatch.StartNew();
-                for (int i = 0; i < 60; i++) { stage.Step(33); stage.Render(); }
-                if (page != app.Pager.PageIndex || app.Pager.IsTransitioning) continue;
-                ms = sw.Elapsed.TotalMilliseconds / 60;
-                least = Math.Min(least, GC.GetAllocatedBytesForCurrentThread() - before);
-            }
+                return () => page == app.Pager.PageIndex && !app.Pager.IsTransitioning;
+            });
 
-            output.WriteLine($"bin day {local:d MMM HH:mm}: {ms:F3} ms/frame, least window {least} bytes");
-            if (least >= 256) failures.Add($"{local}: {least} bytes");
+            output.WriteLine($"bin day {local:d MMM HH:mm}: {run.MsPerFrame:F3} ms/frame, least window {run.Least} bytes");
+            if (run.Least >= 256) failures.Add($"{local}: {run.Least} bytes");
         }
         Assert.Empty(failures);
     }
