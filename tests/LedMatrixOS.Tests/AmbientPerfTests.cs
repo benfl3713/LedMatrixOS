@@ -19,7 +19,7 @@ public class AmbientPerfTests(ITestOutputHelper output)
         "home-daysky" => new HomePageApp { DisplayMode = "Day Night Sky" },
         "home-minimal" => new HomePageApp { DisplayMode = "Minimal" },
         "countdown-final" => new CountdownTimerApp { DurationMinutes = 1 },
-        "ticker-huge-rainbow-wave" => new ScrollingTextApp { FontSize = 48, TextEffect = "Rainbow Wave", Decor = "Chase Lights" },
+        "ticker-huge-rainbow-wave" => new ScrollingTextApp { FontSize = "Huge", TextEffect = "Rainbow Wave", Decor = "Chase Lights" },
         "ticker-default" => new ScrollingTextApp(),
         "solid-aurora" => new SolidColorApp { Mode = "Aurora" },
         "solid-sparkle" => new SolidColorApp { Mode = "Sparkle" },

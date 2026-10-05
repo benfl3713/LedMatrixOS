@@ -77,7 +77,7 @@ public class AmbientScrollingTextTests
         app.UpdateSetting("fontStyle", Json("\"Regular\""));
         app.UpdateSetting("textColor", Json("\"Cyan\""));
         app.UpdateSetting("backgroundColor", Json("\"Navy\""));
-        Assert.Equal(("Welcome home", 55, 40, "Regular", "Cyan", "Navy"),
+        Assert.Equal(("Welcome home", 55, "Huge", "Regular", "Cyan", "Navy"),
             (app.Message, app.ScrollSpeed, app.FontSize, app.FontStyle, app.TextColor, app.BackgroundColor));
         app.UpdateSetting("scrollSpeed", 5);
         Assert.Equal(10, app.ScrollSpeed);
@@ -90,7 +90,7 @@ public class AmbientScrollingTextTests
         app.UpdateSetting("decor", "Chase Lights");
         Assert.Equal(("Rainbow Wave", "Heart", false, "Chase Lights"), (app.TextEffect, app.Separator, app.Loop, app.Decor));
 
-        Assert.Equal(["message", "scrollSpeed", "fontSize", "fontStyle", "textColor", "backgroundColor", "textEffect", "separator", "loop", "decor"],
+        Assert.Equal(["message", "scrollSpeed", "fontSize", "direction", "verticalAlign", "outline", "fontStyle", "textColor", "backgroundColor", "textEffect", "separator", "loop", "decor"],
             app.GetSettings().Select(s => s.Key).ToArray());
     }
 
@@ -101,7 +101,7 @@ public class AmbientScrollingTextTests
     [InlineData(48)]
     public void AllFontSizes_Render(int size)
     {
-        Assert.False(SnapshotHelper.IsBlank(Rig(a => { a.FontSize = size; a.Message = "Size test"; }).Advance(2500).Copy()));
+        Assert.False(SnapshotHelper.IsBlank(Rig(a => { a.FontSize = ScrollingTextApp.SizeFromNumber(size); a.Message = "Size test"; }).Advance(2500).Copy()));
     }
 
     [Theory]
@@ -116,8 +116,31 @@ public class AmbientScrollingTextTests
         var rig = Rig(a =>
         {
             a.Message = "Welcome to the LED matrix!";
-            a.FontSize = size; a.TextEffect = effect; a.Separator = sep; a.Decor = decor; a.TextColor = color; a.ScrollSpeed = 60;
+            a.FontSize = ScrollingTextApp.SizeFromNumber(size); a.TextEffect = effect; a.Separator = sep; a.Decor = decor; a.TextColor = color; a.ScrollSpeed = 60;
         });
+        SnapshotHelper.AssertMatchesSnapshot(rig.Advance(ms, 25).Copy(), $"ambient_ticker_{name}");
+    }
+
+    [Fact]
+    public void Snapshot_MessageSwapMidAnimation_Placeholder() { }
+
+    [Theory]
+    [InlineData("Right", "Middle", false)]
+    [InlineData("Up", "Middle", false)]
+    [InlineData("Left", "Top", true)]
+    [InlineData("Left", "Bottom", false)]
+    public void NewOptions_RenderAndAllocateNothing(string dir, string valign, bool outline)
+    {
+        Rig(a => { a.Direction = dir; a.VerticalAlign = valign; a.Outline = outline; a.Message = "Welcome to the LED matrix! More words here"; }).AssertNoAllocationsPerFrame();
+    }
+
+    [Theory]
+    [InlineData("right_medium", "Right", "Top", false, "Medium", 3000)]
+    [InlineData("up_wrapped", "Up", "Middle", false, "Medium", 1500)]
+    [InlineData("left_outline_bottom", "Left", "Bottom", true, "Large", 3000)]
+    public void NewOptionSnapshots(string name, string dir, string valign, bool outline, string size, int ms)
+    {
+        var rig = Rig(a => { a.Message = "Welcome to the LED matrix! Read me from afar"; a.Direction = dir; a.VerticalAlign = valign; a.Outline = outline; a.FontSize = size; a.ScrollSpeed = 40; a.Decor = "None"; a.TextEffect = "Solid"; a.TextColor = "Yellow"; });
         SnapshotHelper.AssertMatchesSnapshot(rig.Advance(ms, 25).Copy(), $"ambient_ticker_{name}");
     }
 
@@ -135,5 +158,5 @@ public class AmbientScrollingTextTests
     [InlineData("Rainbow Wave", "Edge Glow", 48)]
     [InlineData("Fire", "None", 16)]
     public void SteadyState_AllocatesNothingPerFrame(string effect, string decor, int size) =>
-        Rig(a => { a.TextEffect = effect; a.Decor = decor; a.FontSize = size; a.Message = "Steady state ticker text"; }).AssertNoAllocationsPerFrame();
+        Rig(a => { a.TextEffect = effect; a.Decor = decor; a.FontSize = ScrollingTextApp.SizeFromNumber(size); a.Message = "Steady state ticker text"; }).AssertNoAllocationsPerFrame();
 }
