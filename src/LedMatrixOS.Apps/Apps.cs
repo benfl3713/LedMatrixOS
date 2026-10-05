@@ -34,6 +34,8 @@ public static class BuiltInApps
         yield return typeof(BinDayApp);
         yield return typeof(MorningBriefingApp);
         yield return typeof(CommuteApp);
+        yield return typeof(SkyClockApp);
+        yield return typeof(TidesApp);
         yield return typeof(HomeAssistantTilesApp);
         yield return typeof(CalendarApp);
         yield return typeof(WidgetDemoApp);

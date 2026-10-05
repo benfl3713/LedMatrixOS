@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 IconData iconForApp(String appId) {
   final id = appId.toLowerCase();
   const rules = <(List<String>, IconData)>[
+    (['sky-clock'], Icons.wb_twilight_rounded),
+    (['tides'], Icons.waves_rounded),
     (['flip'], Icons.flip_rounded),
     (['countdown', 'timer'], Icons.timer_rounded),
     (['clock', 'time'], Icons.schedule_rounded),
