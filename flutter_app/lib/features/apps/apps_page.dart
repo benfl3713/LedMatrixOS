@@ -55,6 +55,20 @@ class _AppsPageState extends ConsumerState<AppsPage> {
                   ),
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Card(
+                  margin: EdgeInsets.zero,
+                  child: ListTile(
+                    key: const Key('gamepad-entry'),
+                    leading: const Icon(Icons.sports_esports_rounded),
+                    title: const Text('Gamepad'),
+                    subtitle: const Text('Control games on the display'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/gamepad'),
+                  ),
+                ),
+              ),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () => ref.read(appListProvider.notifier).refresh(),
