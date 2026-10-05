@@ -68,6 +68,7 @@ internal sealed class SpotifyFeed
             IsSaved = d.IsSavedSong == true,
             NextTitle = d.NextTrackName,
             Art = _art,
+            ArtLoading = d.Artwork is null,
             Palette = palette,
         });
     }

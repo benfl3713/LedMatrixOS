@@ -28,7 +28,7 @@ public class SpotifyAppTests(ITestOutputHelper output)
     private static readonly Pixel[] Palette = [new(40, 40, 170), new(250, 220, 90), new(60, 90, 220), new(20, 20, 90)];
 
     private static NowPlaying Track(string title = "Midnight City", string artist = "M83", bool playing = true, bool saved = true,
-        string? next = "Wait", int progress = 83000, bool art = true) => new()
+        string? next = "Wait", int progress = 83000, bool art = true, bool artLoading = false) => new()
     {
         Title = title,
         Artist = artist,
@@ -38,6 +38,7 @@ public class SpotifyAppTests(ITestOutputHelper output)
         IsSaved = saved,
         NextTitle = next,
         Art = art ? FakeArt() : null,
+        ArtLoading = artLoading,
         Palette = Palette,
     };
 
@@ -65,7 +66,7 @@ public class SpotifyAppTests(ITestOutputHelper output)
         Fonts.Load();
         var app = new SpotifyApp(new HttpClient());
         Assert.Equal("spotify", app.Id);
-        Assert.Equal(new[] { "showNextTrack", "showVisualiser", "background" }, app.GetSettings().Select(s => s.Key).ToArray());
+        Assert.Equal(new[] { "showNextTrack", "showVisualiser", "background", "textSize", "albumArt", "showProgress", "scrollSpeed", "dimWhenPaused" }, app.GetSettings().Select(s => s.Key).ToArray());
         Assert.Equal(new[] { "Waves", "Gradient", "Off" }, app.GetSettings().Single(s => s.Key == "background").Options);
     }
 
@@ -217,6 +218,60 @@ public class SpotifyAppTests(ITestOutputHelper output)
     {
         var (_, stage, _) = Make(null, authMissing: true);
         Golden(stage, "spotify_no_login");
+    }
+
+    [Fact]
+    public void Golden_LargeText()
+    {
+        var (_, stage, _) = Make(Track(title: "Midnight City", artist: "M83"), steps: 1);
+        stage.Step(33, 1);
+        ((SpotifyApp)stage.App).UpdateSetting("textSize", "Large");
+        stage.Step(33, 45);
+        Golden(stage, "spotify_large_text");
+    }
+
+    [Fact]
+    public void Golden_ArtHidden_NoProgress()
+    {
+        var (app, stage, _) = Make(Track(title: "Midnight City", artist: "M83"));
+        app.UpdateSetting("albumArt", "Hide");
+        app.UpdateSetting("showProgress", false);
+        stage.Step(33, 45);
+        Golden(stage, "spotify_art_hidden_no_progress");
+    }
+
+    [Fact]
+    public void Golden_ArtLoading_ThenFailed()
+    {
+        var (_, stage, _) = Make(Track(art: false, artLoading: true), steps: 20);
+        Golden(stage, "spotify_art_loading");
+        stage.Step(33, 240);   // past the 6s grace: treated as failed, the note placeholder
+        Golden(stage, "spotify_art_failed_after_loading");
+    }
+
+    [Fact]
+    public void Golden_PausedDimSetting()
+    {
+        var (app, stage, _) = Make(Track(playing: false), steps: 1);
+        app.UpdateSetting("dimWhenPaused", 0);
+        stage.Step(33, 45);
+        Golden(stage, "spotify_paused_no_dim");
+    }
+
+    [Fact]
+    public void PausedAndLarge_DoNotAllocate()
+    {
+        var (app, stage, _) = Make(Track(title: "A rather long title that has to scroll along the screen", playing: false, progress: 10000));
+        app.UpdateSetting("textSize", "Large");
+        for (int i = 0; i < 150; i++) { stage.Step(33); stage.Render(); }
+        long least = long.MaxValue;
+        for (int window = 0; window < 8; window++)
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 20; i++) { stage.Step(33); stage.Render(); }
+            least = Math.Min(least, GC.GetAllocatedBytesForCurrentThread() - before);
+        }
+        Assert.True(least < 256, $"least allocation in a steady window: {least} bytes");
     }
 
     // ---- allocation -------------------------------------------------------------------------------------------------------------

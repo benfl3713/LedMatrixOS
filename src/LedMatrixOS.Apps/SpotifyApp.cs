@@ -32,6 +32,21 @@ public sealed class SpotifyApp : WidgetApp
     [Setting("Background", Description = "Backdrop behind the text, coloured from the album art.", Options = ["Waves", "Gradient", "Off"])]
     public string Background { get; set; } = "Waves";
 
+    [Setting("Text Size", Description = "Normal shows title, artist and the next track; Large enlarges the title and artist and drops the next line.", Options = ["Normal", "Large"])]
+    public string TextSize { get; set; } = "Normal";
+
+    [Setting("Album Art", Description = "Hide the album art to give the text the full width.", Options = ["Show", "Hide"])]
+    public string AlbumArt { get; set; } = "Show";
+
+    [Setting("Show Progress", Description = "Show the progress bar along the bottom.")]
+    public bool ShowProgress { get; set; } = true;
+
+    [Setting("Scroll Speed", Description = "How fast long titles scroll, in pixels per second.", Min = 10, Max = 100)]
+    public int ScrollSpeed { get; set; } = 30;
+
+    [Setting("Dim When Paused", Description = "How much the display dims while playback is paused (0-100 percent).", Min = 0, Max = 100)]
+    public int DimWhenPaused { get; set; } = 40;
+
     private readonly HttpClient _http;
     private readonly AudioDataService? _audio;
     private readonly SpotifyFeed _feed = new();
@@ -40,7 +55,7 @@ public sealed class SpotifyApp : WidgetApp
 
     // View
     private BackdropNode? _backdrop;
-    private Node? _playing;
+    private Node? _playing, _scene, _artPanel;
     private StateCard? _card;
     private Clock? _idleClock;
     private Icon? _art;
@@ -60,6 +75,10 @@ public sealed class SpotifyApp : WidgetApp
     private string _timeText = "";
     private int _shownSecond = -1;
     private int _durationMs;
+    private string _appliedSize = "", _appliedArt = "";
+    private float _appliedOpacity = -1f;
+    private TimeSpan _trackStart;
+    private bool _artLoading;
 
     // Progress interpolation: the position at an anchor time, advanced by the app clock while playing
     private NowPlaying? _lastSnapshot;
@@ -96,12 +115,13 @@ public sealed class SpotifyApp : WidgetApp
         _placeholder = new ArtPlaceholder();
         _pauseBadge = new PauseBadge { HAlign = Align.End, VAlign = Align.End, Margin = new Thickness(0, 0, 3, 3), Visible = false };
         var artPanel = new Panel { Width = NowPlaying.ArtSize, Height = NowPlaying.ArtSize, Children = { _placeholder, _art, _pauseBadge } };
+        _artPanel = artPanel;
 
         _title = new MarqueeLabel(() => _titleText) { Style = new TextStyle(Fonts.Big, Pixel.White) };
         _artist = new MarqueeLabel(() => _artistText) { Style = Muted(SpotifyColors.SpotifyGreen) };
-        _next = new MarqueeLabel(() => _nextText) { Style = new TextStyle(Fonts.QuiteSmall, new Pixel(150, 150, 160), Shadow: false), Margin = new Thickness(0, 1, 0, 0) };
+        _next = new MarqueeLabel(() => _nextText) { Style = new TextStyle(Fonts.QuiteSmall, new Pixel(205, 205, 215), Shadow: false), Margin = new Thickness(0, 1, 0, 0) };
 
-        _timeLabel = new Label(() => _timeText) { Style = new TextStyle(Fonts.QuiteSmall, new Pixel(200, 200, 205), Shadow: false), VAlign = Align.Center };
+        _timeLabel = new Label(() => _timeText) { Style = new TextStyle(Fonts.QuiteSmall, new Pixel(232, 232, 236), Shadow: false), VAlign = Align.Center };
         _heart = new HeartNode { VAlign = Align.Center, Margin = new Thickness(5, 0, 0, 0) };
         _visualiser = new VisualiserNode { Audio = _audio, VAlign = Align.End };
         _bottomRow = new Stack(Orientation.Horizontal)
@@ -110,7 +130,7 @@ public sealed class SpotifyApp : WidgetApp
             Children = { _timeLabel, _heart, new Panel { Grow = 1 }, _visualiser },
         };
 
-        _bar = new ProgressBar(() => Progress01()) { Thickness = 3, Background = new Pixel(30, 30, 34) };
+        _bar = new ProgressBar(() => Progress01()) { Thickness = 4, Background = new Pixel(64, 64, 74) };
 
         var info = new Stack(Orientation.Vertical)
         {
@@ -132,10 +152,14 @@ public sealed class SpotifyApp : WidgetApp
             Margin = new Thickness(0, 4, 6, 0),
         };
 
-        return new Panel { _backdrop, _playing, _card, _idleClock };
+        // The backdrop and the track view share one group so pausing can dim them together.
+        _scene = new Panel { HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { _backdrop, _playing } };
+        _appliedSize = _appliedArt = "";
+        _appliedOpacity = -1f;
+        return new Panel { _scene, _card, _idleClock };
     }
 
-    private static TextStyle Muted(Pixel accent) => new(Fonts.Small, Pixel.Lerp(accent, Pixel.White, 0.35f), Shadow: false);
+    private TextStyle Muted(Pixel accent) => new(Large ? Fonts.Big : Fonts.Small, Pixel.Lerp(accent, Pixel.White, 0.35f), Shadow: false);
 
     private float Progress01() => _durationMs > 0 ? Math.Clamp(PositionMs / (float)_durationMs, 0f, 1f) : 0f;
 
@@ -152,6 +176,7 @@ public sealed class SpotifyApp : WidgetApp
         if (State == SpotifyState.Playing) Follow(np!);
 
         bool playing = State == SpotifyState.Playing;
+        ApplyLayoutSettings();
         _playing!.Visible = playing;
         _card!.Visible = !playing;
         _card.State = State;
@@ -159,8 +184,12 @@ public sealed class SpotifyApp : WidgetApp
 
         if (playing)
         {
-            _pauseBadge!.Visible = !_isPlaying;
-            _next!.Visible = ShowNextTrack && _nextText.Length > 0;
+            _pauseBadge!.Visible = !_isPlaying && ShowAlbum;
+            _next!.Visible = ShowNextTrack && _nextText.Length > 0 && !Large;
+            _bar!.Visible = ShowProgress;
+            _placeholder!.Loading = _artLoading && _lastSnapshot!.Art is null && _now - _trackStart < ArtLoadingGrace;
+            float opacity = _isPlaying ? 1f : 1f - Math.Clamp(DimWhenPaused, 0, 100) / 100f;
+            if (opacity != _appliedOpacity) { _appliedOpacity = opacity; _scene!.Opacity = opacity; }
             _heart!.Visible = _lastSnapshot!.IsSaved;
             _visualiser!.Visible = ShowVisualiser;
             _visualiser.Active = _isPlaying;
@@ -170,6 +199,35 @@ public sealed class SpotifyApp : WidgetApp
         _backdrop!.Style = Background;
 
         base.Update(context, cancellationToken);
+    }
+
+    private static readonly TimeSpan ArtLoadingGrace = TimeSpan.FromSeconds(6);
+
+    private bool Large => TextSize == "Large";
+    private bool ShowAlbum => AlbumArt != "Hide";
+
+    /// <summary>Applies Text Size, Album Art and Scroll Speed; the heavier parts only when the setting actually changed.</summary>
+    private void ApplyLayoutSettings()
+    {
+        if (_title is null) return;
+        int speed = Math.Clamp(ScrollSpeed, 10, 100);
+        _title.Speed = speed;
+        _artist!.Speed = speed;
+        _next!.Speed = speed;
+
+        if (!string.Equals(_appliedSize, TextSize, StringComparison.Ordinal))
+        {
+            _appliedSize = TextSize;
+            _title.Style = new TextStyle(Large ? SpotifyFonts.Large : Fonts.Big, Pixel.White);
+            _artist.Style = Muted(_colors.Accent);
+        }
+
+        if (!string.Equals(_appliedArt, AlbumArt, StringComparison.Ordinal))
+        {
+            _appliedArt = AlbumArt;
+            _artPanel!.Visible = ShowAlbum;
+            _backdrop!.StartX = ShowAlbum ? NowPlaying.ArtSize : 0;
+        }
     }
 
     private SpotifyState StateFor(ILiveData<NowPlaying>? data, NowPlaying? np)
@@ -213,6 +271,8 @@ public sealed class SpotifyApp : WidgetApp
         _colors = SpotifyColors.From(np.Palette);
 
         _art!.Sprite = np.Art;
+        _trackStart = _now;
+        _artLoading = np.ArtLoading;
         _placeholder!.Visible = np.Art is null;
         _placeholder.Colors = _colors;
         _artist!.Style = Muted(_colors.Accent);

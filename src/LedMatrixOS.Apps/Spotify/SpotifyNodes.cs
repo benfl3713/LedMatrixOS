@@ -161,8 +161,32 @@ internal sealed class ArtPlaceholder : Node
 
     public SpotifyColors Colors { get; set; } = SpotifyColors.Default;
 
+    /// <summary>True while the artwork is still being fetched: a breathing gradient with three travelling dots instead of the note.</summary>
+    public bool Loading { get; set; }
+
+    private TimeSpan _time;
+
+    public override void Update(FrameContext ctx)
+    {
+        base.Update(ctx);
+        _time = ctx.Time;
+    }
+
     protected override void OnRender(FrameBuffer frame, Rectangle bounds)
     {
+        if (Loading)
+        {
+            float t = (float)_time.TotalSeconds;
+            float breathe = 0.7f + 0.3f * MathF.Sin(t * 3f);
+            frame.FillLinearGradient(bounds, Colors.A.WithBrightness(0.45f * breathe), Colors.B.WithBrightness(0.25f * breathe), vertical: true);
+            for (int i = 0; i < 3; i++)
+            {
+                float k = MathF.Max(0f, MathF.Sin(t * 5f - i * 1.1f));
+                frame.FillCircle(bounds.X + bounds.Width / 2 - 10 + i * 10, bounds.Y + bounds.Height / 2, 2, Colors.Accent.WithBrightness(0.25f + 0.75f * k));
+            }
+            return;
+        }
+
         frame.FillLinearGradient(bounds, Colors.A.WithBrightness(0.55f), Colors.B.WithBrightness(0.3f), vertical: true);
         int cx = bounds.X + bounds.Width / 2, cy = bounds.Y + bounds.Height / 2;
         var ink = Colors.Accent;
@@ -262,5 +286,27 @@ internal sealed class StateCard : Node
         int top = cy - (_title.Height + 3 + _subtitle.Height) / 2;
         _title.Draw(frame, x, top, color, shadow: true);
         _subtitle.Draw(frame, x, top + _title.Height + 3, new Pixel(150, 150, 160));
+    }
+}
+
+/// <summary>Fonts only the Spotify app needs.</summary>
+internal static class SpotifyFonts
+{
+    private static BdfFontParser.BdfFont? _large;
+    private static BdfFontParser.BdfFont? _largeFor;
+
+    /// <summary>The 10x20 font for the large title (falls back to the regular big font when the file is missing).</summary>
+    public static BdfFontParser.BdfFont Large
+    {
+        get
+        {
+            if (_large is null || !ReferenceEquals(_largeFor, Fonts.Big))
+            {
+                _largeFor = Fonts.Big;
+                var path = Path.Combine(Path.GetDirectoryName(typeof(Fonts).Assembly.Location)!, "Text", "Fonts", "10x20.bdf");
+                _large = File.Exists(path) ? new BdfFontParser.BdfFont(path) : Fonts.Big;
+            }
+            return _large;
+        }
     }
 }
