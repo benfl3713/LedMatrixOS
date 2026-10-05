@@ -47,6 +47,8 @@ public static class BuiltInApps
         yield return typeof(InputTestApp);
         yield return typeof(QrApp);
         yield return typeof(PartyModeApp);
+        yield return typeof(SnakeApp);
+        yield return typeof(BreakoutApp);
         yield return typeof(WidgetDemoApp);
         yield return typeof(Screens.ScreenApp);
     }
