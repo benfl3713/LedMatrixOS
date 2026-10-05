@@ -16,6 +16,33 @@ public class ClocksClockAppTests
     }
 
     [Fact]
+    public void TimeZone_ShiftsTheTime_AndInvalidFallsBackToLocal()
+    {
+        // 09:30 UTC is 10:30 in London (BST) and 18:30 in Tokyo.
+        var start = ClocksHarness.At(9, 30, 0);
+        var tokyo = Make(start, a => a.TimeZone = "Asia/Tokyo");
+        tokyo.Step(16, 200);
+        var local = Make(start);
+        local.Step(16, 200);
+        Assert.False(Stage.Same(tokyo.Snapshot(), local.Snapshot()));
+
+        var bad = Make(start, a => a.TimeZone = "Not/AZone");
+        bad.Step(16, 200);
+        Assert.True(Stage.Same(bad.Snapshot(), local.Snapshot()));
+        ClocksHarness.Verify(tokyo.Snapshot(), "clock_timezone_tokyo");
+    }
+
+    [Theory]
+    [InlineData("DD/MM", "clock_date_ddmm")]
+    [InlineData("MM/DD", "clock_date_mmdd")]
+    public void DateFormat_Snapshots(string format, string name)
+    {
+        var h = Make(ClocksHarness.At(9, 30, 0), a => a.DateFormat = format);
+        h.Step(16, 200);
+        ClocksHarness.Verify(h.Snapshot(), name);
+    }
+
+    [Fact]
     public void Snapshots()
     {
         // Entrance: digits rising in.
