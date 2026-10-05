@@ -43,7 +43,7 @@ public class TubeStatusAppTests(Xunit.Abstractions.ITestOutputHelper output)
         var app = new TubeStatusApp(new HttpClient(new TflStubHandler()));
         Assert.Equal("tube-status", app.Id);
         Assert.Equal("Tube Status", app.Name);
-        Assert.Equal(new[] { "lines", "pageSeconds" }, app.GetSettings().Select(x => x.Key).ToArray());
+        Assert.Equal(new[] { "lines", "pageSeconds", "onlyShowDisruptions", "showGoodServiceLines", "showReason" }, app.GetSettings().Select(x => x.Key).ToArray());
         app.UpdateSetting("pageSeconds", 99);
         Assert.Equal(30, app.PageSeconds);
         app.UpdateSetting("lines", "Nonsense");
@@ -170,6 +170,49 @@ public class TubeStatusAppTests(Xunit.Abstractions.ITestOutputHelper output)
         lines[7] = Status("northern", 6, "Severe Delays", "NORTHERN LINE: Severe delays between Edgware and Morden via Bank due to a signal failure at Camden Town. Tickets are being accepted on local buses, and replacement services are running between Euston and Kennington.");
         var (_, stage) = Board(lines, 3600);
         Golden(stage, "tube_status_disrupted_long_reason");
+    }
+
+    [Fact]
+    public void Codes_AreUniqueAcrossAllRailLines_AndLibertyLionessAreDistinct()
+    {
+        var lines = AllRail();
+        var codes = TubeColors.Codes(lines.Select(l => (l.LineId, (string?)l.Name)));
+        Assert.Equal(lines.Length, codes.Values.Distinct().Count());
+        Assert.Equal("LB", codes["liberty"]);
+        Assert.Equal("LN", codes["lioness"]);
+        Assert.Equal("ML", codes["mildmay"]);
+        Assert.Equal("SU", codes["suffragette"]);
+        Assert.Equal("WE", codes["weaver"]);
+        Assert.Equal("WI", codes["windrush"]);
+        Assert.Equal("OV", TubeColors.Abbreviation("london-overground"));
+        var unknown = TubeColors.Codes([("lime", "Lime"), ("lilac", "Lilac"), ("lemon", "Lemon")]);
+        Assert.Equal(3, unknown.Values.Distinct().Count());
+    }
+
+    [Fact]
+    public void Golden_OnlyDisruptions_NoGoodTiles_AndTwoRowReason()
+    {
+        var lines = AllLines(true);
+        lines[7] = Status("northern", 6, "Severe Delays", "NORTHERN LINE: Severe delays between Edgware and Morden via Bank due to a signal failure at Camden Town. Tickets are being accepted on local buses, and replacement services are running between Euston and Kennington.");
+        var (app, stage) = Board(lines);
+        app.UpdateSetting("onlyShowDisruptions", true);
+        stage.Step(33, 90);
+        Assert.Equal(3, app.TileNodes.Count());
+        Golden(stage, "tube_status_only_disruptions");
+
+        var (app2, stage2) = Board(lines);
+        app2.UpdateSetting("showGoodServiceLines", false);
+        app2.UpdateSetting("showReason", false);
+        stage2.Step(33, 90);
+        Assert.Equal(3, app2.TileNodes.Count());
+        Golden(stage2, "tube_status_no_good_no_reason");
+
+        var (_, calm) = Board(AllLines(false));
+        var (app3, stage3) = Board(AllLines(false));
+        app3.UpdateSetting("onlyShowDisruptions", true);
+        stage3.Step(33, 90);
+        Assert.Empty(app3.TileNodes);
+        Golden(stage3, "tube_status_only_disruptions_all_good");
     }
 
     [Fact]

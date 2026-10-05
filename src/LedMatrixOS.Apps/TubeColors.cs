@@ -27,6 +27,12 @@ public static class TubeColors
         { "dlr",              new Pixel(0,   175, 173) },
         { "elizabeth",        new Pixel(126, 91,  198) },
         { "overground",       new Pixel(232, 106, 16)  },
+        { "liberty",          new Pixel(97,  103, 106) },
+        { "lioness",          new Pixel(255, 163, 43)  },
+        { "mildmay",          new Pixel(0,   119, 173) },
+        { "suffragette",      new Pixel(24,  169, 93)  },
+        { "weaver",           new Pixel(155, 0,   88)  },
+        { "windrush",         new Pixel(220, 36,  31)  },
     };
 
     private static readonly IReadOnlyDictionary<string, string> Abbreviations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -45,6 +51,12 @@ public static class TubeColors
         { "dlr",              "DL" },
         { "elizabeth",        "EL" },
         { "overground",       "OV" },
+        { "liberty",          "LB" },
+        { "lioness",          "LN" },
+        { "mildmay",          "ML" },
+        { "suffragette",      "SU" },
+        { "weaver",           "WE" },
+        { "windrush",         "WI" },
     };
 
     private static readonly Pixel Unknown = new(120, 120, 120);
@@ -93,6 +105,31 @@ public static class TubeColors
         if (string.IsNullOrWhiteSpace(source)) return "??";
         source = source.Trim();
         return source[..Math.Min(2, source.Length)].ToUpperInvariant();
+    }
+
+    /// <summary>
+    /// Two letter codes for a set of lines shown together, with no two lines sharing a code: lines with an explicit code keep it, and the others
+    /// get their first two letters or, if that is taken, the first letter plus a later one (then a digit as a last resort).
+    /// </summary>
+    public static Dictionary<string, string> Codes(IEnumerable<(string LineId, string? Name)> lines)
+    {
+        var list = lines.ToList();
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (id, _) in list)
+            if (Abbreviations.TryGetValue(Normalize(id), out var code)) { result[id] = code; used.Add(code); }
+        foreach (var (id, name) in list)
+        {
+            if (result.ContainsKey(id)) continue;
+            var source = (!string.IsNullOrWhiteSpace(name) ? name : id).Trim().ToUpperInvariant();
+            source = new string(source.Where(char.IsLetterOrDigit).ToArray());
+            string pick = source.Length switch { 0 => "??", 1 => source, _ => source[..2] };
+            for (int i = 2; used.Contains(pick) && i < source.Length; i++) pick = $"{source[0]}{source[i]}";
+            for (int d = 1; used.Contains(pick) && d < 10; d++) pick = source.Length > 0 ? $"{source[0]}{d}" : $"?{d}";
+            result[id] = pick;
+            used.Add(pick);
+        }
+        return result;
     }
 
     /// <summary>Black or white, whichever reads better on <paramref name="background"/>.</summary>
