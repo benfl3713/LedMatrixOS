@@ -177,9 +177,30 @@ internal sealed class ClockState
 
     public static string TwoDigits(int n) => Two[Math.Clamp(n, 0, 99)];
 
+    private TimeZoneInfo? _zone;
+    private string _dateFormat = "Weekday Day Month";
+
+    public static readonly string[] DateFormats = ["Weekday Day Month", "DD/MM", "MM/DD"];
+
+    /// <summary>
+    /// Picks the time zone (an IANA or Windows id; empty, unknown or invalid ids fall back to the device's local zone) and the date layout.
+    /// </summary>
+    public void Configure(string? timeZoneId, string? dateFormat)
+    {
+        _zone = null;
+        var id = (timeZoneId ?? "").Trim();
+        if (id.Length > 0)
+        {
+            try { _zone = TimeZoneInfo.FindSystemTimeZoneById(id); }
+            catch (Exception) { _zone = null; }
+        }
+        _dateFormat = dateFormat is "DD/MM" or "MM/DD" ? dateFormat : "Weekday Day Month";
+        _dateKey = -1;
+    }
+
     public void Refresh()
     {
-        var now = _time.GetLocalNow();
+        var now = _zone is null ? _time.GetLocalNow() : TimeZoneInfo.ConvertTime(_time.GetUtcNow(), _zone);
         Hour = now.Hour;
         Minute = now.Minute;
         Second = now.Second;
@@ -195,8 +216,13 @@ internal sealed class ClockState
         if (key != _dateKey)
         {
             _dateKey = key;
-            DateText = $"{TwoDigits(Day)} {MonthName}";
-            LongDateText = $"{DayShortName} {TwoDigits(Day)} {MonthName}";
+            DateText = _dateFormat switch
+            {
+                "DD/MM" => $"{TwoDigits(Day)}/{TwoDigits(Month)}",
+                "MM/DD" => $"{TwoDigits(Month)}/{TwoDigits(Day)}",
+                _ => $"{TwoDigits(Day)} {MonthName}",
+            };
+            LongDateText = $"{DayShortName} {DateText}";
         }
     }
 }

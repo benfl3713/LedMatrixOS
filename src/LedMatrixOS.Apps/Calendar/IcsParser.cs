@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace LedMatrixOS.Apps.Calendar;
 
-internal sealed record CalEvent(string Title, DateTimeOffset Start, DateTimeOffset End, bool AllDay, string? Location);
+internal sealed record CalEvent(string Title, DateTimeOffset Start, DateTimeOffset End, bool AllDay, string? Location, bool Declined = false);
 
 /// <summary>
 /// A small iCalendar reader: VEVENTs with UTC, TZID and floating times, all-day dates, escaping and folded lines, and simple recurrence
@@ -13,7 +13,7 @@ internal static class IcsParser
 {
     private sealed record Prop(string Name, Dictionary<string, string> Parameters, string Value);
 
-    public static List<CalEvent> Parse(string ics, DateTimeOffset from, DateTimeOffset to, TimeZoneInfo localZone)
+    public static List<CalEvent> Parse(string ics, DateTimeOffset from, DateTimeOffset to, TimeZoneInfo localZone, string? selfEmail = null)
     {
         var vevents = new List<List<Prop>>();
         List<Prop>? current = null;
@@ -49,7 +49,7 @@ internal static class IcsParser
         {
             string uid = props.FirstOrDefault(p => p.Name == "UID")?.Value.Trim() ?? "";
             bool isOverride = props.Any(p => p.Name == "RECURRENCE-ID");
-            try { Expand(props, from, to, localZone, events, !isOverride && replaced.TryGetValue(uid, out var skip) ? skip : null); }
+            try { Expand(props, from, to, localZone, events, !isOverride && replaced.TryGetValue(uid, out var skip) ? skip : null, selfEmail); }
             catch (Exception ex) when (ex is FormatException or ArgumentException or TimeZoneNotFoundException) { /* skip a malformed event */ }
         }
 
@@ -98,8 +98,26 @@ internal static class IcsParser
 
     private static string Unescape(string s) => s.Replace("\\n", " ").Replace("\\N", " ").Replace("\\,", ",").Replace("\\;", ";").Replace("\\\\", "\\");
 
-    private static void Expand(List<Prop> props, DateTimeOffset from, DateTimeOffset to, TimeZoneInfo localZone, List<CalEvent> output, HashSet<long>? overridden)
+    /// <summary>
+    /// True when the user declined the event. With <paramref name="selfEmail"/> only that attendee's PARTSTAT counts; without it an event
+    /// counts as declined only when every attendee declined (a single decline among several is somebody else's).
+    /// </summary>
+    private static bool IsDeclined(List<Prop> props, string? selfEmail)
     {
+        var attendees = props.Where(p => p.Name == "ATTENDEE").ToList();
+        if (attendees.Count == 0) return false;
+        static bool Declined(Prop a) => string.Equals(a.Parameters.GetValueOrDefault("PARTSTAT"), "DECLINED", StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(selfEmail))
+        {
+            var me = attendees.FirstOrDefault(a => a.Value.Contains(selfEmail.Trim(), StringComparison.OrdinalIgnoreCase));
+            return me is not null && Declined(me);
+        }
+        return attendees.All(Declined);
+    }
+
+    private static void Expand(List<Prop> props, DateTimeOffset from, DateTimeOffset to, TimeZoneInfo localZone, List<CalEvent> output, HashSet<long>? overridden, string? selfEmail)
+    {
+        bool declined = IsDeclined(props, selfEmail);
         var start = props.FirstOrDefault(p => p.Name == "DTSTART");
         if (start is null) return;
 
@@ -115,7 +133,7 @@ internal static class IcsParser
         var rrule = props.FirstOrDefault(p => p.Name == "RRULE")?.Value;
         if (rrule is null)
         {
-            Add(startWall, zone, length, allDay, title, location, from, to, localZone, output);
+            Add(startWall, zone, length, allDay, title, location, declined, from, to, localZone, output);
             return;
         }
 
@@ -149,7 +167,7 @@ internal static class IcsParser
             if (until != null && wall > until) break;
             if (count != null && ++produced > count) break;
             if (excluded.Contains(InstantKey(wall, zone)) || excludedDays.Contains(day)) continue;
-            Add(wall, zone, length, allDay, title, location, from, to, localZone, output);
+            Add(wall, zone, length, allDay, title, location, declined, from, to, localZone, output);
         }
     }
 
@@ -178,7 +196,7 @@ internal static class IcsParser
         "FR" => DayOfWeek.Friday, "SA" => DayOfWeek.Saturday, "SU" => DayOfWeek.Sunday, _ => null,
     };
 
-    private static void Add(DateTime wall, TimeZoneInfo zone, TimeSpan length, bool allDay, string title, string? location,
+    private static void Add(DateTime wall, TimeZoneInfo zone, TimeSpan length, bool allDay, string title, string? location, bool declined,
         DateTimeOffset from, DateTimeOffset to, TimeZoneInfo localZone, List<CalEvent> output)
     {
         var start = TimeZoneInfo.ConvertTime(new DateTimeOffset(wall, zone.GetUtcOffset(wall)), localZone);
@@ -188,7 +206,7 @@ internal static class IcsParser
             start = new DateTimeOffset(wall.Date, localZone.GetUtcOffset(wall.Date));
             end = new DateTimeOffset((wall.Date + length), localZone.GetUtcOffset(wall.Date + length));
         }
-        if (end > from && start < to) output.Add(new CalEvent(title, start, end, allDay, location));
+        if (end > from && start < to) output.Add(new CalEvent(title, start, end, allDay, location, declined));
     }
 
     private static (DateTime Wall, TimeZoneInfo Zone, bool AllDay) ParseTime(Prop prop, TimeZoneInfo localZone)

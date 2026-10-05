@@ -50,6 +50,30 @@ public sealed partial class HomePageApp : WidgetApp
     [Setting("Chip Seconds", Description = "Seconds each chip stays up (3-30)", Min = 3, Max = 30)]
     public int ChipSeconds { get; set; } = 6;
 
+    [Setting("Show Seconds", Description = "Show the seconds line sweeping along the bottom edge")]
+    public bool ShowSeconds { get; set; } = true;
+
+    [Setting("Date Format", Description = "Weekday Day Month (2 OCT), DD/MM or MM/DD under the weekday", Options = ["Weekday Day Month", "DD/MM", "MM/DD"])]
+    public string DateFormat { get; set; } = "Weekday Day Month";
+
+    [Setting("Brightness", Description = "Overall brightness in percent (5-100)", Min = 5, Max = 100)]
+    public int Brightness { get; set; } = 100;
+
+    [Setting("Fade At Night", Description = "Dim the display between Night Starts and Night Ends")]
+    public bool FadeAtNight { get; set; }
+
+    [Setting("Night Starts", Description = "Hour (0-23) the display starts dimming", Min = 0, Max = 23)]
+    public int NightStartHour { get; set; } = 22;
+
+    [Setting("Night Ends", Description = "Hour (0-23) the display returns to full brightness", Min = 0, Max = 23)]
+    public int NightEndHour { get; set; } = 7;
+
+    [Setting("Night Brightness", Description = "Brightness in percent while it is night (5-100)", Min = 5, Max = 100)]
+    public int NightBrightness { get; set; } = 20;
+
+    [Setting("Hide Chips When Idle", Description = "Only show a chip when there is something to know: an event starting within the hour, rain, snow, fog or thunder, a bus due within 10 minutes. Line disruption always shows.")]
+    public bool HideChipsWhenIdle { get; set; }
+
     // Saved values from the previous version ("Ambient Particles", "Geometric Art", ...) are mapped onto the nearest new scene.
     public override void UpdateSetting(string key, object value)
     {
@@ -73,9 +97,12 @@ public sealed partial class HomePageApp : WidgetApp
         band.Bind(() => chips.Visible, kind => ChipNodes.Build(kind, chips, state));
         var director = new HomeDirector(this, state, strip, date, line, backdrop, chips, band);
 
+        // The outer panel is the brightness dimmer (the director sets its opacity); the inner one does the entrance fade.
         return new Panel
         {
-            Children = { director, backdrop, date, strip, line, band },
+            HAlign = Align.Stretch,
+            VAlign = Align.Stretch,
+            Children = { new Panel { HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { director, backdrop, date, strip, line, band } } },
         };
     }
 }

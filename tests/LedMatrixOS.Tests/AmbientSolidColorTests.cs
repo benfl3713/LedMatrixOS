@@ -90,8 +90,37 @@ public class AmbientSolidColorTests
         Assert.Equal("Candle", app.Mode);
 
         var keys = app.GetSettings().Select(s => s.Key).ToArray();
-        Assert.Equal(["red", "green", "blue", "mode", "speed", "spread", "brightness"], keys);
+        Assert.Equal(["colour", "mode", "speed", "spread", "brightness", "fadeDuration"], keys);
         Assert.Equal("Candle", app.GetSettings().First(s => s.Key == "mode").CurrentValue);
+    }
+
+    [Fact]
+    public void Colour_Hex_ParsesAndInvalidKeepsPrevious()
+    {
+        var app = new SolidColorApp();
+        app.UpdateSetting("colour", "#FF8000");
+        Assert.Equal(new Pixel(255, 128, 0), app.Parsed);
+        app.UpdateSetting("colour", "0f0");
+        Assert.Equal(new Pixel(0, 255, 0), app.Parsed);
+        app.UpdateSetting("colour", "banana");
+        Assert.Equal(new Pixel(0, 255, 0), app.Parsed);
+    }
+
+    [Fact]
+    public void OldRgbValues_MigrateIntoColour()
+    {
+        var app = new SolidColorApp();
+        app.UpdateSetting("red", 10); app.UpdateSetting("green", 20); app.UpdateSetting("blue", 30);
+        Assert.Equal("#0A141E", app.Colour);
+    }
+
+    [Fact]
+    public void FadeDuration_Zero_SnapsInstantly()
+    {
+        var rig = new AmbientRig(new SolidColorApp { FadeDuration = 0 }).Advance(200);
+        ((SolidColorApp)rig.App).UpdateSetting("colour", "#FF0000");
+        rig.Advance(1, 16);
+        Assert.Equal(new Pixel(255, 0, 0), rig.Draw().GetPixel(5, 5));
     }
 
     [Theory]

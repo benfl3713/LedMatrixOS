@@ -11,7 +11,11 @@ internal enum WhenKind { Later, Soon, Imminent, Ongoing }
 
 internal static class CalendarFormat
 {
-    public static (string Text, WhenKind Kind) When(CalEvent e, DateTimeOffset now)
+    /// <summary>A clock time as HH:mm (24-hour) or h:mm AM/PM.</summary>
+    public static string TimeText(DateTimeOffset t, bool hour24) =>
+        t.ToString(hour24 ? "HH:mm" : "h:mm tt", CultureInfo.InvariantCulture);
+
+    public static (string Text, WhenKind Kind) When(CalEvent e, DateTimeOffset now, bool hour24 = true)
     {
         bool ongoing = e.Start <= now && now < e.End;
         var today = now.Date;
@@ -28,7 +32,7 @@ internal static class CalendarFormat
         int minutes = (int)Math.Ceiling((e.Start - now).TotalMinutes);
         if (minutes < 60) return ($"{Math.Max(1, minutes)} MIN", minutes <= 5 ? WhenKind.Imminent : minutes <= 15 ? WhenKind.Soon : WhenKind.Later);
 
-        var time = e.Start.ToString("HH:mm", CultureInfo.InvariantCulture);
+        var time = TimeText(e.Start, hour24);
         if (day == today) return (time, WhenKind.Later);
         if (day == today.AddDays(1)) return ("TMRW " + time, WhenKind.Later);
         return (e.Start.ToString("ddd", CultureInfo.InvariantCulture).ToUpperInvariant() + " " + time, WhenKind.Later);
@@ -66,12 +70,14 @@ internal sealed class CalendarModel
     public const int MaxLanes = 3;
     public const int MaxBars = 24;
     public const int NextCount = 3;
+    public const double PageSeconds = 6;
 
     private static readonly Pixel Cyan = new(120, 220, 240), Green = new(96, 230, 130), Amber = new(255, 190, 40), Red = new(255, 80, 60);
 
     private IReadOnlyList<CalEvent> _events = [];
     private IReadOnlyList<CalEvent>? _builtFor;
     private long _builtMinute = -1;
+    private int _builtPage = -1;
     private IReadOnlyList<CalEvent>? _timelineFor;
     private DateTime _timelineDay;
     private readonly StringBuilder _names = new();
@@ -86,6 +92,32 @@ internal sealed class CalendarModel
 
     /// <summary>Whole minutes since the epoch of <see cref="Now"/>; rows use it to refresh their wording once a minute.</summary>
     public long Minute { get; private set; }
+
+    // ---- display options (set by the app each frame; a change rebuilds the strings) ------------------------------------------
+
+    public int MaxEvents { get; private set; } = NextCount + 1;
+    public bool Hour24 { get; private set; } = true;
+    public bool ShowLocation { get; private set; } = true;
+    public string TitleOverflow { get; private set; } = "Scroll";
+
+    /// <summary>Bumped when a display option changes, so rows know to rewrite their text.</summary>
+    public int Revision { get; private set; }
+
+    /// <summary>Changes once a minute or when an option changes: rows refresh their wording when it does.</summary>
+    public long RefreshKey => Minute * 1000 + Revision;
+
+    public void Configure(int maxEvents, bool hour24, bool showLocation, string titleOverflow)
+    {
+        maxEvents = Math.Clamp(maxEvents, 1, 8);
+        if (maxEvents == MaxEvents && hour24 == Hour24 && showLocation == ShowLocation && titleOverflow == TitleOverflow) return;
+        MaxEvents = maxEvents;
+        Hour24 = hour24;
+        ShowLocation = showLocation;
+        TitleOverflow = titleOverflow;
+        Revision++;
+        _builtFor = null;
+        _timelineFor = null;
+    }
 
     // ---- board ----------------------------------------------------------------------------------------------------------------
 
@@ -134,7 +166,7 @@ internal sealed class CalendarModel
         Message = message;
         Minute = now.ToUnixTimeSeconds() / 60;
 
-        if (!ReferenceEquals(events, _builtFor) || Minute != _builtMinute) RebuildBoard();
+        if (!ReferenceEquals(events, _builtFor) || Minute != _builtMinute || PageAt(time) != _builtPage) RebuildBoard();
         if (!ReferenceEquals(events, _timelineFor) || now.Date != _timelineDay) RebuildTimeline();
 
         if (First >= 0)
@@ -166,6 +198,14 @@ internal sealed class CalendarModel
         }
     }
 
+    // The following events show three at a time; with more than three (Max Events above 4) the window moves on every few seconds.
+    private int PageAt(TimeSpan time)
+    {
+        int shown = Math.Min(MaxEvents - 1, Math.Max(0, _events.Count - Math.Max(First, 0) - 1));
+        int pages = Math.Max(1, (shown + NextCount - 1) / NextCount);
+        return pages <= 1 ? 0 : (int)(time.TotalSeconds / PageSeconds) % pages;
+    }
+
     private void RebuildBoard()
     {
         _builtFor = _events;
@@ -179,15 +219,18 @@ internal sealed class CalendarModel
         }
 
         var ev = _events[First];
-        var (text, kind) = CalendarFormat.When(ev, Now);
+        var (text, kind) = CalendarFormat.When(ev, Now, Hour24);
         Kind = kind;
         Caption = kind == WhenKind.Ongoing ? "HAPPENING" : First == 0 ? "NEXT UP" : "COMING UP";
         When = text;
         Title = ev.Title;
-        Place = ev.Location is { } loc ? loc : ev.AllDay ? "ALL DAY" : "until " + ev.End.ToString("HH:mm", CultureInfo.InvariantCulture);
+        Place = !ShowLocation ? "" : ev.Location is { } loc ? loc : ev.AllDay ? "ALL DAY" : "until " + CalendarFormat.TimeText(ev.End, Hour24);
 
+        int shown = Math.Min(MaxEvents - 1, _events.Count - First - 1);
+        int page = PageAt(Time);
+        _builtPage = page;
         var next = new List<CalEvent>(NextCount);
-        for (int i = 1; i <= NextCount && First + i < _events.Count; i++) next.Add(_events[First + i]);
+        for (int i = 1 + page * NextCount; i <= shown && i <= (page + 1) * NextCount; i++) next.Add(_events[First + i]);
         Next = next;
     }
 

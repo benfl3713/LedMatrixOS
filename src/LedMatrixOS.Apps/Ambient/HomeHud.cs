@@ -158,7 +158,8 @@ internal sealed class HomeDirector : Node
     private const float ChipLift = 6f;
 
     private HomePalette _from, _to;
-    private string? _theme, _mode;
+    private string? _theme, _mode, _dateFormat;
+    private float _level = -1f;
     private bool _showDate = true;
     private bool _first = true;
     private int _day = -1, _minute = -1;
@@ -199,12 +200,21 @@ internal sealed class HomeDirector : Node
         }
         _s.MinuteFlash = MathF.Max(0f, _s.MinuteFlash - dt / 0.9f);
 
-        if (now.Day != _day)
+        string dateFormat = _app.DateFormat ?? "";
+        if (now.Day != _day || !string.Equals(dateFormat, _dateFormat, StringComparison.Ordinal))
         {
             _day = now.Day;
+            _dateFormat = dateFormat;
             _weekday = now.ToString("dddd", CultureInfo.InvariantCulture).ToUpperInvariant();
-            _dateText = now.Day.ToString(CultureInfo.InvariantCulture) + " " + now.ToString("MMM", CultureInfo.InvariantCulture).ToUpperInvariant();
+            _dateText = dateFormat switch
+            {
+                "DD/MM" => now.ToString("dd'/'MM", CultureInfo.InvariantCulture),
+                "MM/DD" => now.ToString("MM'/'dd", CultureInfo.InvariantCulture),
+                _ => now.Day.ToString(CultureInfo.InvariantCulture) + " " + now.ToString("MMM", CultureInfo.InvariantCulture).ToUpperInvariant(),
+            };
         }
+
+        ApplyBrightness(now, dt);
 
         bool h24 = _app.Show24Hour;
         int hr = h24 ? now.Hour : (now.Hour % 12 == 0 ? 12 : now.Hour % 12);
@@ -232,6 +242,22 @@ internal sealed class HomeDirector : Node
     }
 
     private string _weekday = "", _dateText = "";
+
+    // Brightness and the night fade, eased so crossing the night boundary is a slow dim rather than a jump.
+    private void ApplyBrightness(DateTimeOffset now, float dt)
+    {
+        float target = Math.Clamp(_app.Brightness, 5, 100) / 100f;
+        if (_app.FadeAtNight)
+        {
+            int h = now.Hour, start = Math.Clamp(_app.NightStartHour, 0, 23), end = Math.Clamp(_app.NightEndHour, 0, 23);
+            bool night = start == end ? false : start > end ? h >= start || h < end : h >= start && h < end;
+            if (night) target *= Math.Clamp(_app.NightBrightness, 5, 100) / 100f;
+        }
+
+        _level = _level < 0f ? target : _level + (target - _level) * (1f - MathF.Exp(-dt / 0.8f));
+        if (MathF.Abs(_level - target) < 0.004f) _level = target;
+        if (Parent?.Parent is { } dimmer && dimmer.Opacity != _level) dimmer.Opacity = _level;
+    }
 
     // Polls for the switched-on chips, the strings they show, and the clock lifting to make room while at least one is visible.
     private void UpdateChips(UiHost host, DateTimeOffset now)
@@ -341,5 +367,6 @@ internal sealed class HomeDirector : Node
         _date.Alpha = dateAlpha;
         _date.Position = new Vector2(x + w + gap + (1f - _enterDate.Value) * 36f, -chipLift);
         _line.Alpha = _enterLine.Value;
+        _line.Visible = _app.ShowSeconds;
     }
 }

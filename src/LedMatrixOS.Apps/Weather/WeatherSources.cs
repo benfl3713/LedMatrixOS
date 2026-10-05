@@ -20,7 +20,7 @@ public sealed class OpenMeteoWeatherSource(HttpClient http) : IWeatherSource
     public static string ForecastUrl(double lat, double lon, bool fahrenheit) =>
         "https://api.open-meteo.com/v1/forecast" +
         $"?latitude={lat.ToString(CultureInfo.InvariantCulture)}&longitude={lon.ToString(CultureInfo.InvariantCulture)}" +
-        "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,is_day" +
+        "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,is_day,pressure_msl" +
         "&hourly=temperature_2m,weather_code,precipitation_probability,is_day,wind_speed_10m" +
         "&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max" +
         "&timezone=auto&forecast_days=4" +
@@ -38,7 +38,7 @@ public sealed class OpenMeteoWeatherSource(HttpClient http) : IWeatherSource
         var hourly = root.GetProperty("hourly");
         var times = hourly.GetProperty("time");
         var hours = new List<HourlyPoint>();
-        for (int i = 0; i < times.GetArrayLength() && hours.Count < 13; i++)
+        for (int i = 0; i < times.GetArrayLength() && hours.Count < 25; i++)
         {
             var t = ParseLocal(times[i].GetString()!);
             if (t < nowLocal.Date.AddHours(nowLocal.Hour)) continue;
@@ -60,7 +60,8 @@ public sealed class OpenMeteoWeatherSource(HttpClient http) : IWeatherSource
             cur.GetProperty("wind_speed_10m").GetDouble(), (int)Math.Round(cur.GetProperty("wind_direction_10m").GetDouble()),
             today.PrecipChance, today.High, today.Low,
             ParseLocal(daily.GetProperty("sunrise")[0].GetString()!).TimeOfDay, ParseLocal(daily.GetProperty("sunset")[0].GetString()!).TimeOfDay,
-            fahrenheit, hours, days);
+            fahrenheit, hours, days,
+            cur.TryGetProperty("pressure_msl", out var pr) && pr.ValueKind == JsonValueKind.Number ? pr.GetDouble() : 0);
     }
 
     private static DateTime ParseLocal(string s) => DateTime.Parse(s, CultureInfo.InvariantCulture, DateTimeStyles.None);
@@ -83,7 +84,7 @@ public sealed class FakeWeatherSource(int code = 0, bool isDay = true, double te
 
         double Conv(double c) => query.Fahrenheit ? c * 9 / 5 + 32 : c;
         var hours = new List<HourlyPoint>();
-        for (int i = 0; i < 13; i++)
+        for (int i = 0; i < 25; i++)
         {
             var t = Epoch.AddHours(i);
             int hc = i % 5 == 4 ? 61 : i % 3 == 2 ? 3 : i > 8 ? 2 : code;
@@ -96,6 +97,6 @@ public sealed class FakeWeatherSource(int code = 0, bool isDay = true, double te
             days.Add(new DailyPoint(Epoch.Date.AddDays(d), Conv(tempC + 3 - d), Conv(tempC - 6 - d), dayCodes[d], d * 25 % 90));
 
         return Task.FromResult(new WeatherSnapshot(location, new DateTimeOffset(Epoch, TimeSpan.Zero), Conv(tempC), Conv(tempC - 2), code, isDay,
-            query.Fahrenheit ? 9 : 14, 315, 40, days[0].High, days[0].Low, new TimeSpan(7, 52, 0), new TimeSpan(16, 42, 0), query.Fahrenheit, hours, days));
+            query.Fahrenheit ? 9 : 14, 315, 40, days[0].High, days[0].Low, new TimeSpan(7, 52, 0), new TimeSpan(16, 42, 0), query.Fahrenheit, hours, days, 1013));
     }
 }

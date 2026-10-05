@@ -23,6 +23,9 @@ public sealed class NowPlaying
     /// <summary>Album art at <see cref="ArtSize"/> square, or null if there is none or it failed to load.</summary>
     public Sprite? Art { get; init; }
 
+    /// <summary>True when the artwork bytes have not arrived yet (so a missing <see cref="Art"/> is still loading rather than failed).</summary>
+    public bool ArtLoading { get; init; }
+
     /// <summary>Dominant album colours, most prominent first.</summary>
     public IReadOnlyList<Pixel> Palette { get; init; } = [];
 

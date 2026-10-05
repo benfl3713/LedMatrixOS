@@ -23,10 +23,10 @@ public sealed class CountdownTimerApp : WidgetApp
     [Setting("Auto Restart", Description = "Automatically restart after completion (duration mode)")]
     public bool AutoRestart { get; set; }
 
-    [Setting("Text Color", Description = "Color of the timer display", Options = ["White", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta", "Orange"])]
+    [Setting("Text Color", Description = "Color of the timer display", Options = ["White", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta", "Orange", "Pink", "Purple", "Lime", "Gold"])]
     public string TextColor { get; set; } = "Cyan";
 
-    [Setting("Background Color", Description = "Background color", Options = ["Black", "DarkBlue", "DarkGray"])]
+    [Setting("Background Color", Description = "Background color", Options = ["Black", "DarkBlue", "DarkGray", "Navy"])]
     public string BackgroundColor { get; set; } = "Black";
 
     [Setting("Target", Description = "Optional moment to count down to, e.g. 2026-12-25 00:00 or a daily time like 18:30. Leave empty to use the duration")]
@@ -35,11 +35,20 @@ public sealed class CountdownTimerApp : WidgetApp
     [Setting("Label", Description = "Short caption shown above the digits, e.g. NEW YEAR")]
     public string Label { get; set; } = "";
 
+    [Setting("Show Seconds", Description = "Show seconds. Off shows hours and minutes until the last minute, which always counts seconds")]
+    public bool ShowSeconds { get; set; } = true;
+
+    [Setting("Show Days", Description = "Show a separate day count for long countdowns. Off folds the days into the hours (up to 99)")]
+    public bool ShowDays { get; set; } = true;
+
     [Setting("Celebrate", Description = "Confetti and flashing when the countdown reaches zero")]
     public bool Celebrate { get; set; } = true;
 
     public static bool TryParseTarget(string? text, DateTimeOffset now, out DateTimeOffset target) =>
         CountdownParsing.TryParse(text, now, out target);
+
+    /// <summary>True when Target has text that is neither a date/time nor a daily time (the display shows an error and counts the duration).</summary>
+    public bool TargetInvalid => _view?.TargetInvalid ?? false;
 
     private CountdownView? _view;
 

@@ -76,7 +76,7 @@ public class ClocksCommonTests
         var keys = new ClockApp().GetSettings().Select(s => s.Key).ToList();
         // Union of the three former apps' keys, so persisted values for any of them still bind.
         Assert.Equal(
-            new[] { "style", "showSeconds", "show24Hour", "showDate", "palette", "timeColor", "waves", "sparks", "textColor", "backgroundColor", "showAmPm" },
+            new[] { "style", "showSeconds", "show24Hour", "showDate", "palette", "timeColor", "waves", "sparks", "textColor", "backgroundColor", "showAmPm", "timeZone", "dateFormat" },
             keys);
     }
 

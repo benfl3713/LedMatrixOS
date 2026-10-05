@@ -48,11 +48,18 @@ public sealed partial class ClockApp : WidgetApp
     [Setting("Show AM/PM", Description = "Flip style: show an AM/PM flap in 12-hour mode")]
     public bool ShowAmPm { get; set; } = true;
 
+    [Setting("Time Zone", Description = "IANA time zone such as Europe/London or America/New_York. Empty or unknown uses the device's local time")]
+    public string TimeZone { get; set; } = "";
+
+    [Setting("Date Format", Description = "Weekday Day Month (THU 02 OCT), DD/MM or MM/DD. The Flip style always shows day and month cards", Options = ["Weekday Day Month", "DD/MM", "MM/DD"])]
+    public string DateFormat { get; set; } = "Weekday Day Month";
+
     private ClockState _state = null!;
 
     protected override void OnSettingChanged(string key)
     {
         if (Root is null) return;
+        if (key is "timeZone" or "dateFormat") { _state.Configure(TimeZone, DateFormat); return; }
         if (key == "style") { Host.Root = Build(); return; }
         switch (Style)
         {
@@ -62,10 +69,16 @@ public sealed partial class ClockApp : WidgetApp
         }
     }
 
-    protected override Node Build() => Style switch
+    protected override Node Build()
     {
-        "Animated" => BuildAnimated(),
-        "Flip" => BuildFlip(),
-        _ => BuildDigital(),
-    };
+        var root = Style switch
+        {
+            "Animated" => BuildAnimated(),
+            "Flip" => BuildFlip(),
+            _ => BuildDigital(),
+        };
+        _state.Configure(TimeZone, DateFormat);
+        _state.Refresh();
+        return root;
+    }
 }

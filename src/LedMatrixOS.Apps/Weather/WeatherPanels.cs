@@ -198,12 +198,15 @@ internal static class WeatherSeries
     public static float[] Temps(WeatherSnapshot s) => Extract(s, h => (float)h.Temp);
 
     /// <summary>The highest chance in the next hours and the first hour it occurs.</summary>
-    public static (int Percent, DateTime At) Peak(WeatherSnapshot s)
+    public static (int Percent, DateTime At) Peak(WeatherSnapshot s, int limit = int.MaxValue)
     {
         int best = -1;
         var at = default(DateTime);
-        foreach (var h in s.Hourly)
+        for (int i = 0; i < s.Hourly.Count && i < limit; i++)
+        {
+            var h = s.Hourly[i];
             if (h.PrecipChance > best) { best = h.PrecipChance; at = h.LocalTime; }
+        }
         return (Math.Max(best, 0), at);
     }
 
@@ -216,21 +219,26 @@ internal static class WeatherSeries
 }
 
 /// <summary>Builds a chart's value list once per snapshot, so frames just hand back the cached list.</summary>
-internal sealed class SeriesCache(Func<WeatherSnapshot?> snap, Func<WeatherSnapshot, float[]> build)
+internal sealed class SeriesCache(Func<WeatherSnapshot?> snap, Func<WeatherSnapshot, float[]> build, Func<int>? points = null)
 {
     private static readonly float[] Empty = [];
     private WeatherSnapshot? _for;
+    private int _forPoints = -1;
     private float[] _values = Empty;
 
     public Action<float[]>? OnBuilt { get; set; }
 
+    /// <summary>The series, cut to the first <c>points</c> values when a limit is given; rebuilt only when the snapshot or limit changes.</summary>
     public IReadOnlyList<float> Get()
     {
         var s = snap();
-        if (!ReferenceEquals(s, _for))
+        int limit = points?.Invoke() ?? int.MaxValue;
+        if (!ReferenceEquals(s, _for) || limit != _forPoints)
         {
             _for = s;
+            _forPoints = limit;
             _values = s is null ? Empty : build(s);
+            if (_values.Length > limit) _values = _values[..limit];
             OnBuilt?.Invoke(_values);
         }
         return _values;
@@ -245,15 +253,18 @@ internal static class WeatherPages
     private static readonly Pixel Warm = new(255, 160, 70);
     private static readonly Pixel Cool = new(110, 195, 255);
 
-    public static Node Now(Func<WeatherSnapshot?> snap, Func<DateTimeOffset> now, Func<(Pixel, Pixel)> sky)
+    public static Node Now(Func<WeatherSnapshot?> snap, Func<DateTimeOffset> now, Func<(Pixel, Pixel)> sky,
+        Func<string>? windUnit = null, Func<string>? pressureUnit = null, Func<bool>? showPressure = null)
     {
         var small = new TextStyle(Fonts.Small, Pixel.White);
         var tiny = new TextStyle(Fonts.QuiteSmall, Dim, Shadow: false);
 
         var chance = new Memo<WeatherSnapshot?>(snap, s => s is null ? "" : s.PrecipChance + "%");
-        var wind = new Memo<WeatherSnapshot?>(snap, s => s is null ? "" : Math.Round(s.WindSpeed) + (s.Fahrenheit ? " mph" : " kph"));
+        var wind = new Memo<(WeatherSnapshot?, string)>(() => (snap(), windUnit?.Invoke() ?? "Auto"), k => k.Item1 is null ? "" : WeatherApp.FormatWind(k.Item1, k.Item2));
         var dir = new Memo<WeatherSnapshot?>(snap, s => s is null ? "" : Compass[(int)Math.Round(s.WindDirection / 45.0) % 8]);
-        var sun = new Memo<(WeatherSnapshot?, int)>(() => (snap(), (int)now().TimeOfDay.TotalMinutes), SunText);
+        var sun = new Memo<(WeatherSnapshot?, int, bool, string)>(
+            () => (snap(), (int)now().TimeOfDay.TotalMinutes, showPressure?.Invoke() ?? false, pressureUnit?.Invoke() ?? "hPa"),
+            k => k.Item3 ? (k.Item1 is null ? "" : WeatherApp.FormatPressure(k.Item1, k.Item4)) : SunText((k.Item1, k.Item2)));
 
         Node bar = new ProgressBar(() => (snap()?.PrecipChance ?? 0) / 100f) { Fill = new Pixel(60, 150, 255), Background = new Pixel(18, 28, 52), Thickness = 5, Grow = 1, VAlign = Align.Center };
         return Page("TODAY", sky, new Stack(Orientation.Vertical, gap: 4)
@@ -267,9 +278,10 @@ internal static class WeatherPages
         });
     }
 
-    public static Node Hours(Func<WeatherSnapshot?> snap, Func<(Pixel, Pixel)> sky)
+    public static Node Hours(Func<WeatherSnapshot?> snap, Func<(Pixel, Pixel)> sky, Func<int>? hours = null)
     {
-        var temps = new SeriesCache(snap, WeatherSeries.Temps);
+        Func<int>? points = hours is null ? null : () => hours() + 1;
+        var temps = new SeriesCache(snap, WeatherSeries.Temps, points);
         Func<int, float, Pixel> color = (_, v) => WeatherApp.TempColor(v, snap()?.Fahrenheit ?? false);
         var chart = new BarChart
         {
@@ -289,7 +301,8 @@ internal static class WeatherPages
         };
 
         var first = new Memo<WeatherSnapshot?>(snap, s => s is { Hourly.Count: > 0 } ? s.Hourly[0].LocalTime.ToString("HH:mm") : "");
-        var last = new Memo<WeatherSnapshot?>(snap, s => s is { Hourly.Count: > 0 } ? s.Hourly[^1].LocalTime.ToString("HH:mm") : "");
+        var last = new Memo<(WeatherSnapshot?, int)>(() => (snap(), points?.Invoke() ?? int.MaxValue),
+            k => k.Item1 is { Hourly.Count: > 0 } s ? s.Hourly[Math.Min(s.Hourly.Count, k.Item2) - 1].LocalTime.ToString("HH:mm") : "");
         var labelStyle = new TextStyle(Fonts.ExtraSmall, new Pixel(185, 200, 232), Shadow: false);
         var labels = new Dock
         {
@@ -309,18 +322,20 @@ internal static class WeatherPages
         });
     }
 
-    public static Node Rain(Func<WeatherSnapshot?> snap, Func<(Pixel, Pixel)> sky)
+    public static Node Rain(Func<WeatherSnapshot?> snap, Func<(Pixel, Pixel)> sky, Func<int>? hours = null)
     {
-        var chances = new SeriesCache(snap, WeatherSeries.RainChance);
+        var chances = new SeriesCache(snap, WeatherSeries.RainChance, hours is null ? null : () => hours() + 1);
         var line = new Pixel(60, 150, 255);
         var chart = new Sparkline { Source = chances.Get, Min = 0, Max = 100, Line = line, FillBrightness = 0.3f, ShowLatest = false, Grow = 1, Margin = new Thickness(0, 1, 0, 0) };
-        var caption = new Memo<WeatherSnapshot?>(snap, s =>
+        // Rain-chance points are the hours from now on (12 by default, the same count the chart was always built from).
+        var caption = new Memo<(WeatherSnapshot?, int)>(() => (snap(), hours?.Invoke() ?? 12), k =>
         {
-            if (s is null) return "";
-            var (peak, at) = WeatherSeries.Peak(s);
+            if (k.Item1 is not { } s) return "";
+            var (peak, at) = WeatherSeries.Peak(s, k.Item2 + 1);
             return peak <= WeatherSeries.DryThreshold ? "DRY" : "PEAK " + peak + "% " + at.ToString("HH:mm");
         });
-        return Page("RAIN NEXT 12H", sky, new Stack(Orientation.Vertical, gap: 2)
+        var title = new Memo<int>(() => hours?.Invoke() ?? 12, h => "RAIN NEXT " + h + "H");
+        return Page(title.Get, sky, new Stack(Orientation.Vertical, gap: 2)
         {
             HAlign = Align.Stretch,
             VAlign = Align.Stretch,
@@ -331,7 +346,8 @@ internal static class WeatherPages
 
     public static Node Days(Func<WeatherSnapshot?> snap, Func<(Pixel, Pixel)> sky)
     {
-        var cols = new Grid("*", "*,*,*");
+        // Star tracks measure to nothing, so the grid must be told to fill the page body (otherwise the columns collapse to zero width).
+        var cols = new Grid("*", "*,*,*") { Grow = 1, HAlign = Align.Stretch, VAlign = Align.Stretch };
         for (int c = 0; c < 3; c++) cols.Add(DayColumn(snap, c + 1), 0, c);
         return Page("NEXT DAYS", sky, cols);
     }
@@ -388,7 +404,9 @@ internal static class WeatherPages
         return row;
     }
 
-    private static Node Page(string title, Func<(Pixel, Pixel)> sky, Node body) => new Panel
+    private static Node Page(string title, Func<(Pixel, Pixel)> sky, Node body) => Page(() => title, sky, body);
+
+    private static Node Page(Func<string> title, Func<(Pixel, Pixel)> sky, Node body) => new Panel
     {
         new PanelBackdrop(sky),
         new Stack(Orientation.Vertical, gap: 3)

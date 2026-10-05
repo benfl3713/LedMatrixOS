@@ -143,6 +143,60 @@ public class WeatherAppTests(ITestOutputHelper output)
         SnapshotHelper.AssertMatchesSnapshot(await PageAt(new FakeWeatherSource(2, true), 1), "weather_hours_chart");
 
     [Fact]
+    public void WindAndPressureFormatting()
+    {
+        var s = new FakeWeatherSource().GetAsync(new WeatherQuery("x", false), default).Result with { WindSpeed = 36, Pressure = 1013 };
+        Assert.Equal("36 kph", WeatherApp.FormatWind(s, "Auto"));
+        Assert.Equal("36 km/h", WeatherApp.FormatWind(s, "km/h"));
+        Assert.Equal("22 mph", WeatherApp.FormatWind(s, "mph"));
+        Assert.Equal("10 m/s", WeatherApp.FormatWind(s, "m/s"));
+        Assert.Equal("19 kn", WeatherApp.FormatWind(s, "kn"));
+        Assert.Equal("1013 hPa", WeatherApp.FormatPressure(s, "hPa"));
+        Assert.Equal("29.91 inHg", WeatherApp.FormatPressure(s, "inHg"));
+        Assert.Equal("760 mmHg", WeatherApp.FormatPressure(s, "mmHg"));
+    }
+
+    private static async Task<FrameBuffer> Configured(Action<WeatherApp> configure, int page, int ms = 0, int code = 61, double temp = 17)
+    {
+        Fonts.Load();
+        var app = new WeatherApp(new FakeWeatherSource(code, true, temp, "Newcastle upon Tyne")) { Time = new FakeTime { Now = DayTime } };
+        configure(app);
+        await app.OnActivatedAsync((64, 256), new ConfigurationBuilder().Build(), CancellationToken.None);
+        await WaitFor(() => app.Current is not null);
+        long frame = 0;
+        Step(app, ref frame, TimeSpan.Zero, 33, (page * 6000 + 3000 + ms) / 33);
+        var f = Draw(app);
+        await app.OnDeactivatedAsync(CancellationToken.None);
+        return f;
+    }
+
+    [Fact]
+    public async Task Golden_NoLocationNoFeels_WindMs_Pressure()
+    {
+        SnapshotHelper.AssertMatchesSnapshot(await Configured(a => { a.ShowLocation = false; a.ShowFeelsLike = false; a.WindUnit = "m/s"; a.ShowPressure = true; a.PressureUnit = "inHg"; }, 0),
+            "weather_options_minimal");
+    }
+
+    [Fact]
+    public async Task Golden_LongLocation_FeelsOnly()
+    {
+        SnapshotHelper.AssertMatchesSnapshot(await Configured(a => a.ShowLocation = true, 0), "weather_long_location");
+    }
+
+    [Fact]
+    public async Task Golden_ForecastHours24()
+    {
+        SnapshotHelper.AssertMatchesSnapshot(await Configured(a => a.ForecastHours = 24, 1), "weather_hours_24");
+    }
+
+    [Fact]
+    public async Task ShowRainPage_Off_HasThreePages()
+    {
+        var f = await Configured(a => a.ShowRainPage = false, 2);
+        SnapshotHelper.AssertMatchesSnapshot(f, "weather_no_rain_page_days");
+    }
+
+    [Fact]
     public async Task Golden_RainPage() =>
         SnapshotHelper.AssertMatchesSnapshot(await PageAt(new FakeWeatherSource(61, true), 2), "weather_rain_page");
 
@@ -254,7 +308,8 @@ public class WeatherAppTests(ITestOutputHelper output)
     public void Settings_KeepKeysAndRoundTripPersistedValues()
     {
         var app = new WeatherApp(new FakeWeatherSource());
-        Assert.Equal(new[] { "location", "units", "pageSeconds" }, app.GetSettings().Select(s => s.Key).ToArray());
+        Assert.Equal(new[] { "location", "units", "pageSeconds", "showFeelsLike", "showLocation", "windUnit", "pressureUnit", "showPressure", "forecastHours", "showRainPage" },
+            app.GetSettings().Select(s => s.Key).ToArray());
         app.UpdateSetting("location", JsonDocument.Parse("\"Leeds\"").RootElement.Clone());
         app.UpdateSetting("units", JsonDocument.Parse("\"Fahrenheit\"").RootElement.Clone());
         app.UpdateSetting("pageSeconds", JsonDocument.Parse("99").RootElement.Clone());
