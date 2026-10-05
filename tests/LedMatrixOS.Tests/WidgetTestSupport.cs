@@ -96,9 +96,18 @@ internal static class StageAllocationExtensions
     /// after it, that says whether the window was steady (e.g. no page change); windows that were not are skipped.
     /// </summary>
     public static AllocationMeasurement MeasureSteadyAllocation(
-        this Stage stage, int windows = 6, int warmFrames = 100, Func<Func<bool>>? beginWindow = null)
+        this Stage stage, int windows = 6, int warmFrames = 100, Func<Func<bool>>? beginWindow = null) =>
+        Measure(ms => stage.Step(ms), () => stage.Render(), windows, warmFrames, beginWindow);
+
+    /// <inheritdoc cref="MeasureSteadyAllocation(Stage, int, int, Func{Func{bool}}?)"/>
+    public static AllocationMeasurement MeasureSteadyAllocation(
+        this AppStage stage, int windows = 6, int warmFrames = 100, Func<Func<bool>>? beginWindow = null) =>
+        Measure(ms => stage.Step(ms), () => stage.Render(), windows, warmFrames, beginWindow);
+
+    private static AllocationMeasurement Measure(
+        Action<int> step, Action render, int windows, int warmFrames, Func<Func<bool>>? beginWindow)
     {
-        for (int i = 0; i < warmFrames; i++) { stage.Step(33); stage.Render(); }
+        for (int i = 0; i < warmFrames; i++) { step(33); render(); }
 
         int measured = 0;
         long least = long.MaxValue;
@@ -108,7 +117,7 @@ internal static class StageAllocationExtensions
             var isSteady = beginWindow?.Invoke();
             long before = GC.GetAllocatedBytesForCurrentThread();
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            for (int i = 0; i < 60; i++) { stage.Step(33); stage.Render(); }
+            for (int i = 0; i < 60; i++) { step(33); render(); }
             sw.Stop();
             long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
             if (isSteady != null && !isSteady()) continue;
