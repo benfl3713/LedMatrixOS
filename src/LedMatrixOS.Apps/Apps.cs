@@ -36,6 +36,7 @@ public static class BuiltInApps
         yield return typeof(CommuteApp);
         yield return typeof(HomeAssistantTilesApp);
         yield return typeof(CalendarApp);
+        yield return typeof(AquariumApp);
         yield return typeof(WidgetDemoApp);
         yield return typeof(Screens.ScreenApp);
     }
