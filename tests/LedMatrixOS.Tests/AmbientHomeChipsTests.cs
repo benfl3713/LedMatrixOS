@@ -55,7 +55,8 @@ public class AmbientHomeChipsTests
     {
         var app = new HomePageApp();
         Assert.Equal(
-            ["displayMode", "showDate", "show24Hour", "theme", "ambientSpeed", "showWeatherChip", "showEventChip", "showLineChip", "showBusChip", "chipStopId", "chipSeconds"],
+            ["displayMode", "showDate", "show24Hour", "theme", "ambientSpeed", "showWeatherChip", "showEventChip", "showLineChip", "showBusChip", "chipStopId", "chipSeconds",
+             "showSeconds", "dateFormat", "brightness", "fadeAtNight", "nightStartHour", "nightEndHour", "nightBrightness", "hideChipsWhenIdle"],
             app.GetSettings().Select(s => s.Key).ToArray());
         Assert.False(app.ShowWeatherChip || app.ShowEventChip || app.ShowLineChip || app.ShowBusChip);
         Assert.Equal(6, app.ChipSeconds);
@@ -145,6 +146,63 @@ public class AmbientHomeChipsTests
     {
         var rig = Rig(weather: weather, events: events, line: line, bus: bus);
         SnapshotHelper.AssertMatchesSnapshot(rig.Advance(4000).Copy(), name);
+    }
+
+    [Fact]
+    public void Snapshot_EventChip_StartsAfterTheBadgeWithAGutter()
+    {
+        // 1.2 s in: the chip has faded in and the title is still resting at its start, clear of the badge.
+        var rig = Rig(events: true);
+        SnapshotHelper.AssertMatchesSnapshot(rig.Advance(1500).Copy(), "ambient_home_chip_event_start");
+    }
+
+    [Fact]
+    public void Snapshot_NewDisplayOptions()
+    {
+        var rig = Rig(a => { a.ShowSeconds = false; a.DateFormat = "DD/MM"; a.Brightness = 50; });
+        SnapshotHelper.AssertMatchesSnapshot(rig.Advance(4000).Copy(), "ambient_home_options_noseconds_ddmm_dim");
+    }
+
+    [Fact]
+    public void FadeAtNight_DimsOnlyBetweenTheNightHours()
+    {
+        int Lit(AmbientRig rig) => rig.Advance(4000).Copy().GetPixelsSpan().ToArray().Sum(p => p.R + p.G + p.B);
+        long day = Lit(Rig(a => { a.FadeAtNight = true; a.NightStartHour = 22; a.NightEndHour = 7; a.NightBrightness = 20; }, hour: 13));
+        long night = Lit(Rig(a => { a.FadeAtNight = true; a.NightStartHour = 22; a.NightEndHour = 7; a.NightBrightness = 20; }, hour: 23));
+        long early = Lit(Rig(a => { a.FadeAtNight = true; a.NightStartHour = 22; a.NightEndHour = 7; a.NightBrightness = 20; }, hour: 3));
+        long off = Lit(Rig(a => { a.FadeAtNight = false; }, hour: 23));
+        Assert.True(night < day * 0.5, $"night {night} vs day {day}");
+        Assert.True(early < day * 0.5);
+        Assert.True(off > night * 2);
+    }
+
+    [Fact]
+    public void HideChipsWhenIdle_HidesQuietChips_KeepsNotableOnes()
+    {
+        var plain = new AmbientRig(new HomePageApp(), new FakeTime { Now = Start }).Advance(4000).Copy();
+        // Light rain is notable, so the weather chip stays; clear weather would be hidden.
+        var rain = Rig(a => a.HideChipsWhenIdle = true, weather: true).Advance(4000).Copy();
+        Assert.False(Stage.Same(plain, rain));
+
+        var app = new HomePageApp { ShowWeatherChip = true, HideChipsWhenIdle = true };
+        var rig = new AmbientRig(app, new FakeTime { Now = Start });
+        app.UseData(new FakeLive<WeatherSnapshot> { Value = Weather(code: 0) });
+        Assert.True(Stage.Same(plain, rig.Advance(4000).Copy()));   // clear sky: nothing to say, so the clock stays put
+    }
+
+    [Fact]
+    public void Snapshot_ClearWeatherChipShownWhenNotHiding()
+    {
+        var app = new HomePageApp { ShowWeatherChip = true };
+        var rig = new AmbientRig(app, new FakeTime { Now = Start });
+        app.UseData(new FakeLive<WeatherSnapshot> { Value = Weather(code: 0) });
+        Assert.False(Stage.Same(new AmbientRig(new HomePageApp(), new FakeTime { Now = Start }).Advance(4000).Copy(), rig.Advance(4000).Copy()));
+    }
+
+    [Fact]
+    public void SteadyState_AllocatesNothingPerFrame_WithBrightnessAndNightFade()
+    {
+        Rig(a => { a.Brightness = 60; a.FadeAtNight = true; a.ShowSeconds = false; a.DateFormat = "MM/DD"; }, hour: 23, weather: true, events: true).AssertNoAllocationsPerFrame();
     }
 
     [Fact]

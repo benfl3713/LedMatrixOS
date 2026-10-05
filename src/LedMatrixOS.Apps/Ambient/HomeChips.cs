@@ -46,11 +46,19 @@ internal sealed class HomeChips
     public void Refresh(HomePageApp app, DateTimeOffset now)
     {
         Visible.Clear();
-        if (app.ShowWeatherChip && RefreshWeather(app.WeatherFeed?.Data.Value)) Visible.Add(ChipKind.Weather);
-        if (app.ShowEventChip && RefreshEvent(app.EventFeed?.Data.Value, now)) Visible.Add(ChipKind.Event);
-        if (app.ShowLineChip && RefreshLine(app.LineFeed?.Data.Value)) Visible.Add(ChipKind.Line);
-        if (app.ShowBusChip && RefreshBus(app.BusFeed?.Data.Value)) Visible.Add(ChipKind.Bus);
+        bool idleHides = app.HideChipsWhenIdle;
+        if (app.ShowWeatherChip && RefreshWeather(app.WeatherFeed?.Data.Value) && (!idleHides || WeatherNotable())) Visible.Add(ChipKind.Weather);
+        if (app.ShowEventChip && RefreshEvent(app.EventFeed?.Data.Value, now) && (!idleHides || EventSoon(now))) Visible.Add(ChipKind.Event);
+        if (app.ShowLineChip && RefreshLine(app.LineFeed?.Data.Value)) Visible.Add(ChipKind.Line);   // only ever shown while there is disruption
+        if (app.ShowBusChip && RefreshBus(app.BusFeed?.Data.Value) && (!idleHides || BusDue())) Visible.Add(ChipKind.Bus);
     }
+
+    // "Idle" rules for Hide Chips When Idle: a chip is worth showing only when it tells you something you might act on.
+    private bool WeatherNotable() => WeatherKind is not (Weather.WeatherKind.Clear or Weather.WeatherKind.PartlyCloudy or Weather.WeatherKind.Cloudy);
+
+    private bool EventSoon(DateTimeOffset now) => _event is { } e && (e.Start - now).TotalMinutes <= 60;
+
+    private bool BusDue() => _buses is { } list && list.Any(a => a.TimeToStation is >= 0 and <= 600);
 
     private bool RefreshWeather(WeatherSnapshot? w)
     {
@@ -199,6 +207,15 @@ internal static class ChipNodes
 {
     private static readonly Pixel Text = new(228, 238, 250), Muted = new(150, 175, 205), Ink = new(8, 10, 16);
 
+    // Text beside a badge: a gutter after the badge so nothing is drawn against it, and a short rest at the start so the first words can be read.
+    private static MarqueeLabel TitleMarquee(Func<string> text, TextStyle style) => new(text)
+    {
+        Style = style,
+        Width = 116,
+        Margin = new Thickness(3, 0, 0, 0),
+        PauseDuration = TimeSpan.FromSeconds(1.5),
+    };
+
     public static Node Build(ChipKind kind, HomeChips m, HomeState state)
     {
         var shadow = new Pixel(0, 0, 0);
@@ -224,7 +241,7 @@ internal static class ChipNodes
             case ChipKind.Event:
             {
                 var when = new Pill("", Muted) { Style = pillStyle, Height = 10 };
-                return new ChipPage(state, Row(when, new MarqueeLabel(() => m.EventTitle) { Style = big, Width = 120 }))
+                return new ChipPage(state, Row(when, TitleMarquee(() => m.EventTitle, big)))
                 {
                     Tick = () => { when.Text = m.EventWhen; when.Background = m.EventColor; },
                 };
@@ -233,7 +250,7 @@ internal static class ChipNodes
             case ChipKind.Line:
             {
                 var pill = new Pill("", Muted) { Style = pillStyle, Height = 10 };
-                return new ChipPage(state, Row(pill, new MarqueeLabel(() => m.LineText) { Style = big, Width = 120 }))
+                return new ChipPage(state, Row(pill, TitleMarquee(() => m.LineText, big)))
                 {
                     Tick = () => { pill.Text = m.LineName; pill.Background = m.LineColor; },
                 };
