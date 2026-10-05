@@ -13,12 +13,12 @@ internal sealed class ReactionDiffusionSim : IAliveSim
     [
         ("Coral", 0.0545f, 0.062f),
         ("Spots", 0.030f, 0.062f),
-        ("Worms", 0.078f, 0.061f),
+        ("Worms", 0.029f, 0.057f),
         ("Mitosis", 0.0367f, 0.0649f),
     ];
 
-    private const float Du = 1.0f, Dv = 0.5f;
-    private const int CheckEvery = 150, WarmupSteps = 140, MaxStepsPerFrame = 20;
+    private const float Du = 0.35f, Dv = 0.175f;
+    private const int CheckEvery = 150, WarmupSteps = 300, MaxStepsPerFrame = 20;
 
     private readonly FieldUpscaler _up = new();
     private float[] _u = [], _v = [], _u2 = [], _v2 = [];
@@ -58,10 +58,10 @@ internal sealed class ReactionDiffusionSim : IAliveSim
 
         Array.Fill(_u, 1f);
         Array.Clear(_v);
-        int blobs = 3 + c.Population;
+        int blobs = 30 + 8 * c.Population;
         for (int b = 0; b < blobs; b++)
         {
-            int size = 3 + rng.Next(4);
+            int size = 2 + rng.Next(2);
             int cx = rng.Next(_gw), cy = rng.Next(_gh);
             for (int dy = -size; dy <= size; dy++)
                 for (int dx = -size; dx <= size; dx++)
@@ -76,7 +76,7 @@ internal sealed class ReactionDiffusionSim : IAliveSim
 
     public void Step(float dt, AliveContext c)
     {
-        _acc += dt * c.Speed * 45f;
+        _acc += dt * c.Speed * 60f;
         int steps = 0;
         while (_acc >= 1f && steps < MaxStepsPerFrame) { _acc -= 1f; Advance(); steps++; }
         if (_acc > 1f) _acc = 1f;
@@ -134,5 +134,5 @@ internal sealed class ReactionDiffusionSim : IAliveSim
         (_v, _v2) = (_v2, _v);
     }
 
-    public void Draw(FrameBuffer frame, Rectangle bounds, AliveContext c) => _up.Draw(frame, bounds, _v, c.Palette.Ramp, 3.2f);
+    public void Draw(FrameBuffer frame, Rectangle bounds, AliveContext c) => _up.Draw(frame, bounds, _v, c.Palette.Ramp, 2.4f);
 }
