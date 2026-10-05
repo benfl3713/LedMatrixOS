@@ -117,13 +117,13 @@ internal sealed class FallingSandSim : IAliveSim
             int top = 2, bottom = _h - 3, neck = (top + bottom) / 2;
             for (int y = top; y <= bottom; y++)
             {
-                int inner = 1 + Math.Abs(y - neck) / 2;
+                int inner = Math.Abs(y - neck) / 2;
                 Set(cx - inner - 1, y, Stone); Set(cx - inner - 2, y, Stone);
                 Set(cx + inner + 1, y, Stone); Set(cx + inner + 2, y, Stone);
                 if (y >= top + 4 && y <= neck - 2)
                     for (int x = -inner; x <= inner; x++) Set(cx + x, y, material);
             }
-            int maxInner = 1 + (neck - top) / 2;
+            int maxInner = (neck - top) / 2;
             for (int x = -maxInner - 2; x <= maxInner + 2; x++) { Set(cx + x, top - 1, Stone); Set(cx + x, bottom + 1, Stone); }
         }
     }
@@ -158,7 +158,7 @@ internal sealed class FallingSandSim : IAliveSim
     public void Step(float dt, AliveContext c)
     {
         _population = c.Population;
-        _acc += dt * c.Speed * 16f;
+        _acc += dt * c.Speed * (_scene == 1 ? 6f : 16f);   // the hourglasses run slower so they take a while to empty
         int steps = 0;
         while (_acc >= 1f && steps < MaxStepsPerFrame) { _acc -= 1f; Advance(); steps++; }
         if (_acc > 1f) _acc = 1f;
@@ -206,8 +206,8 @@ internal sealed class FallingSandSim : IAliveSim
 
     private void Spawn()
     {
-        int attempts = 1 + _population / 3;
-        int rate = 20 + 4 * _population;
+        int attempts = 2 + _population / 2;
+        int rate = 30 + 5 * _population;
         switch (_scene)
         {
             case 0:
@@ -352,20 +352,20 @@ internal sealed class FallingSandSim : IAliveSim
         else if (y > 0 && _t[i - w] == Water) water = i - w;
         else if (y < _h - 1 && _t[i + w] == Water) water = i + w;
         if (water < 0 || y == 0) return;
-        int d = (Rnd() & 1) == 0 ? 1 : -1;
-        // Prefer straight up, then a diagonal; the water it drank disappears.
-        for (int k = 0; k < 3; k++)
+        // The water it drank becomes a stem that shoots up a few cells, drifting sideways a little.
+        int cx = x, cy = y, len = 3 + (int)(Rnd() % 5u);
+        bool grew = false;
+        for (int k = 0; k < len; k++)
         {
-            int dx = k == 0 ? 0 : k == 1 ? d : -d;
-            int nx = x + dx;
-            if ((uint)nx >= (uint)w) continue;
-            int j = i - w + dx;
-            if (_t[j] != Empty) continue;
+            int dx = Chance(25) ? ((Rnd() & 1) == 0 ? 1 : -1) : 0;
+            int nx = cx + dx, ny = cy - 1;
+            if ((uint)nx >= (uint)w || ny < 0) break;
+            int j = ny * w + nx;
+            if (_t[j] != Empty) break;
             _t[j] = Plant; _s[j] = (byte)Rnd(); _stamp[j] = _tick;
-            _t[water] = Empty;
-            _changes++;
-            return;
+            cx = nx; cy = ny; grew = true;
         }
+        if (grew) { _t[water] = Empty; _changes++; }
     }
 
     // ---- drawing --------------------------------------------------------------

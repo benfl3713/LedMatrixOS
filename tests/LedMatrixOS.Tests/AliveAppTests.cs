@@ -70,14 +70,14 @@ public class AliveAppTests(ITestOutputHelper output)
     }
 
     [Theory]
-    [InlineData("Rain", "Neon", "alive_sand_rain")]
-    [InlineData("Hourglass", "Forest", "alive_sand_hourglass")]
-    [InlineData("Garden", "Ocean", "alive_sand_garden")]
-    [InlineData("Cascade", "Rainbow", "alive_sand_cascade")]
-    public void Golden_FallingSand(string scene, string palette, string name)
+    [InlineData("Rain", "Neon", "alive_sand_rain", 420)]
+    [InlineData("Hourglass", "Forest", "alive_sand_hourglass", 150)]
+    [InlineData("Garden", "Ocean", "alive_sand_garden", 600)]
+    [InlineData("Cascade", "Rainbow", "alive_sand_cascade", 420)]
+    public void Golden_FallingSand(string scene, string palette, string name, int frames)
     {
         var (_, stage) = Make(AliveApp.SandName, palette, scene);
-        stage.Step(33, 420);
+        stage.Step(33, frames);
         Golden(stage, name);
     }
 
