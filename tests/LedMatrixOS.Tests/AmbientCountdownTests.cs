@@ -90,7 +90,7 @@ public class AmbientCountdownTests
         app.UpdateSetting("label", "NEW YEAR");
         app.UpdateSetting("celebrate", Json("false"));
         Assert.Equal(("2027-01-01 00:00", "NEW YEAR", false), (app.Target, app.Label, app.Celebrate));
-        Assert.Equal(["durationMinutes", "autoRestart", "textColor", "backgroundColor", "target", "label", "celebrate"],
+        Assert.Equal(["durationMinutes", "autoRestart", "textColor", "backgroundColor", "target", "label", "showSeconds", "showDays", "celebrate"],
             app.GetSettings().Select(s => s.Key).ToArray());
     }
 
@@ -124,6 +124,24 @@ public class AmbientCountdownTests
     {
         var rig = Rig(target: "2026-12-25 00:00", label: "CHRISTMAS").Advance(2000);
         SnapshotHelper.AssertMatchesSnapshot(rig.Copy(), "ambient_countdown_days_t2000");
+    }
+
+    [Fact]
+    public void Snapshot_InvalidTarget_ShowsError()
+    {
+        var rig = Rig(target: "next tuesday-ish").Advance(2000);
+        Assert.True(((CountdownTimerApp)rig.App).TargetInvalid);
+        SnapshotHelper.AssertMatchesSnapshot(rig.Copy(), "ambient_countdown_invalid_target");
+    }
+
+    [Fact]
+    public void Snapshot_NoSecondsNoDays()
+    {
+        var rig = Rig(target: "2026-12-25 00:00", label: "CHRISTMAS");
+        var app = (CountdownTimerApp)rig.App;
+        app.ShowSeconds = false; app.ShowDays = false;
+        rig.Advance(2000);
+        SnapshotHelper.AssertMatchesSnapshot(rig.Copy(), "ambient_countdown_no_seconds_no_days");
     }
 
     [Fact]

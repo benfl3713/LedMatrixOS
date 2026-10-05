@@ -124,6 +124,7 @@ internal sealed class CountdownView : Node
     }
 
     public bool IsComplete => _complete;
+    public bool TargetInvalid { get; private set; }
     public double Remaining => _remaining;
     public int ConfettiCount => _confetti.Count;
 
@@ -170,6 +171,7 @@ internal sealed class CountdownView : Node
         _celebrate.Set(0f);
         _confetti.Clear();
         _hasTarget = CountdownTimerApp.TryParseTarget(target, wall, out _target);
+        TargetInvalid = target.Length > 0 && !_hasTarget;
         _total = _hasTarget ? Math.Max(1.0, (_target - wall).TotalSeconds) : Math.Max(1, _app.DurationMinutes) * 60.0;
         _labelText = (_app.Label ?? "").Trim().ToUpperInvariant();
     }
@@ -187,29 +189,40 @@ internal sealed class CountdownView : Node
 
     private void UpdateStrips(int secs)
     {
-        int daysLeft = secs / 86400;
-        bool showHours = secs >= 3600;
-        string pattern = showHours ? "dd:dd:dd" : "dd:dd";
-        bool hasLabel = _complete || _labelText.Length > 0;
-        int scale = showHours || hasLabel ? 2 : 3;
-
-        _strip.Pattern = pattern;
-        _strip.Scale = scale;
+        int daysLeft = _app.ShowDays ? secs / 86400 : 0;
         int rest = daysLeft > 0 ? secs % 86400 : secs;
-        if (showHours)
+        // Without days the hours keep counting (clamped to two digits).
+        bool showHours = secs >= 3600;
+        bool minutesOnly = !_app.ShowSeconds && secs >= 60;
+        bool hasLabel = _complete || _labelText.Length > 0 || TargetInvalid;
+        int scale = (showHours && !minutesOnly) || hasLabel ? 2 : 3;
+
+        _strip.Scale = scale;
+        if (minutesOnly)
         {
-            _strip.SetTwo(0, rest / 3600);
+            // Hours and minutes (minutes round up so the display never reads zero before the end).
+            int mins = (rest + 59) / 60;
+            _strip.Pattern = "dd:dd";
+            _strip.Scale = hasLabel ? 2 : 3;
+            _strip.SetTwo(0, Math.Min(99, mins / 60));
+            _strip.SetTwo(2, mins % 60);
+        }
+        else if (showHours)
+        {
+            _strip.Pattern = "dd:dd:dd";
+            _strip.SetTwo(0, Math.Min(99, rest / 3600));
             _strip.SetTwo(2, rest / 60 % 60);
             _strip.SetTwo(4, rest % 60);
         }
         else
         {
+            _strip.Pattern = "dd:dd";
             _strip.SetTwo(0, rest / 60);
             _strip.SetTwo(2, rest % 60);
         }
 
         _days.Visible = daysLeft > 0;
-        if (daysLeft > 0) _days.SetTwo(0, daysLeft);
+        if (daysLeft > 0) _days.SetTwo(0, Math.Min(99, daysLeft));
     }
 
     private (Pixel main, float warn, float crit) Colours(Pixel baseColor)
@@ -247,7 +260,7 @@ internal sealed class CountdownView : Node
         // Last ten seconds: every tick kicks the digits up a few pixels.
         _strip.Lift = crit > 0f ? 3f * f * f * f : 0f;
 
-        bool hasLabel = _complete || _labelText.Length > 0;
+        bool hasLabel = _complete || _labelText.Length > 0 || TargetInvalid;
         int w = _strip.TotalWidth;
         _strip.Position = new Vector2(68f + (182f - w) / 2f, hasLabel ? 8f : 0f);
 
@@ -346,7 +359,7 @@ internal sealed class CountdownView : Node
     private void DrawLabel(FrameBuffer frame, Pixel main, float t)
     {
         bool done = _complete;
-        string text = done ? "TIME'S UP!" : _labelText;
+        string text = done ? "TIME'S UP!" : TargetInvalid ? "CHECK TARGET" : _labelText;
         if (text.Length == 0) return;
 
         if (!string.Equals(text, _shownLabel, StringComparison.Ordinal))
@@ -357,7 +370,7 @@ internal sealed class CountdownView : Node
 
         var p = done
             ? TextPaint.Rainbow(t * 200f, 4f, 0.8f, 1f)
-            : TextPaint.Solid(Pixel.Lerp(main, Pixel.White, 0.25f));
+            : TargetInvalid ? TextPaint.Solid(new Pixel(255, 70, 50)) : TextPaint.Solid(Pixel.Lerp(main, Pixel.White, 0.25f));
         p.Shadow = true;
         p.Bold = true;
         if (done)
