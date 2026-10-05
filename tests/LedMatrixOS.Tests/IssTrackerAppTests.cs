@@ -165,7 +165,7 @@ public class IssTrackerAppTests(ITestOutputHelper output)
         Fonts.Load();
         var app = new IssTrackerApp(new FakeIssSource());
         Assert.Equal("iss-tracker", app.Id);
-        Assert.Equal(new[] { "location", "units", "alerts" }, app.GetSettings().Select(s => s.Key).ToArray());
+        Assert.Equal(new[] { "location", "units", "showMap", "alertDistance", "alerts" }, app.GetSettings().Select(s => s.Key).ToArray());
         Assert.Equal(AppSettingType.Search, app.GetSettings().Single(s => s.Key == "location").Type);
     }
 
@@ -221,6 +221,33 @@ public class IssTrackerAppTests(ITestOutputHelper output)
     {
         var (_, stage, _) = Tracker(Snap(52.1, -17.9, "visible", 5, 80), Snap(51.6, -16.5, "visible", 5, 80), configure: a => a.Units = "Miles");
         Golden(stage, "iss_tracker_visible_tonight");
+    }
+
+    [Fact]
+    public void Golden_MapHidden_GivesTheStatsTheFullWidth()
+    {
+        var (_, stage, _) = Tracker(Snap(50.9, -3.2, "eclipsed", -8, 150), Snap(51.4, -1.8, "eclipsed", -8, 150), configure: a => a.ShowMap = false);
+        Golden(stage, "iss_tracker_no_map");
+    }
+
+    [Fact]
+    public void Golden_MapHidden_FarAway()
+    {
+        var (_, stage, _) = Tracker(Snap(19.4, -153.5, "daylight", 12, -140), Snap(20, -152, "daylight", 12, -140), configure: a => a.ShowMap = false);
+        Golden(stage, "iss_tracker_no_map_far");
+    }
+
+    [Fact]
+    public void Model_AlertDistance_MovesTheRange()
+    {
+        var home = new HomePoint(London.Lat, London.Lon, "London");
+        var model = new IssModel();
+        // ~1100 km north-west of London: outside a 800 km alert, inside the default 1500 km one
+        Assert.False(model.Refresh(Snap(60, -10), home, false, 800));
+        Assert.False(model.InRange);
+        Assert.True(model.Refresh(Snap(60.1, -10), home, false, 1500));
+        Assert.True(model.InRange);
+        Assert.False(model.Overhead);
     }
 
     [Fact]

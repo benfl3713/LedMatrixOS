@@ -107,6 +107,9 @@ internal static class WorldMap
         return coast;
     }
 
+    // The map is backdrop: kept dim so the station, track and numbers stand out.
+    private const float MapBrightness = 0.6f;
+
     // Palette: [kind * 3 + shade], shade 0 day, 1 twilight, 2 night.
     public static readonly Pixel[] Palette = BuildPalette();
 
@@ -117,9 +120,9 @@ internal static class WorldMap
         var palette = new Pixel[12];
         for (int k = 0; k < 4; k++)
         {
-            palette[k * 3] = day[k];
-            palette[k * 3 + 1] = Pixel.Lerp(day[k], night[k], 0.5f);
-            palette[k * 3 + 2] = night[k];
+            palette[k * 3] = day[k].WithBrightness(MapBrightness);
+            palette[k * 3 + 1] = Pixel.Lerp(day[k], night[k], 0.5f).WithBrightness(MapBrightness);
+            palette[k * 3 + 2] = night[k].WithBrightness(MapBrightness);
         }
         return palette;
     }

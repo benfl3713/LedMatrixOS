@@ -36,6 +36,12 @@ public sealed class IssTrackerApp : WidgetApp
     [Setting("Units", Description = "Altitude, speed and distance units.", Options = ["Kilometres", "Miles"])]
     public string Units { get; set; } = "Kilometres";
 
+    [Setting("Show Map", Description = "Show the world map. Off gives the numbers the full width of the panel.")]
+    public bool ShowMap { get; set; } = true;
+
+    [Setting("Alert Distance", Description = "Kilometres from your location at which the station counts as nearby (banner, pulse and toast).", Min = 100, Max = 5000)]
+    public int AlertDistance { get; set; } = 1500;
+
     [Setting("Alerts", Description = "Show a toast when the station comes within range of your location (at most one every five minutes).")]
     public bool Alerts { get; set; } = true;
 
@@ -49,7 +55,7 @@ public sealed class IssTrackerApp : WidgetApp
     private bool _active;
     private IConfiguration? _configuration;
     private bool _loadedOnce;
-    private Node? _stats, _messageBox;
+    private Node? _stats, _statsWide, _messageBox, _mapNode, _mapDivider;
     private DateTimeOffset _lastToast = DateTimeOffset.MinValue;
     private string _messageTitle = "Locating the ISS", _messageHint = "Waiting for signal";
 
@@ -72,7 +78,7 @@ public sealed class IssTrackerApp : WidgetApp
         {
             HAlign = Align.Stretch,
             VAlign = Align.Stretch,
-            Padding = new Thickness(4, 3, 2, 0),
+            Padding = new Thickness(6, 3, 2, 0),
             Children =
             {
                 new MarqueeLabel(() => _model.RegionText) { Style = styles.Region, Height = 8, HAlign = Align.Stretch },
@@ -90,6 +96,41 @@ public sealed class IssTrackerApp : WidgetApp
                 },
                 new Label(() => _model.AltText) { Style = styles.Altitude, Height = 8, HAlign = Align.Stretch },
                 new Label(() => _model.LatLonText) { Style = styles.Coords, Height = 8, HAlign = Align.Stretch },
+                new Label(() => _model.DistText) { Style = styles.Distance, Height = 8, HAlign = Align.Stretch },
+            },
+        };
+
+        _statsWide = new Stack(Orientation.Vertical, gap: 3)
+        {
+            HAlign = Align.Stretch,
+            VAlign = Align.Stretch,
+            Visible = false,
+            Padding = new Thickness(8, 4, 8, 0),
+            Children =
+            {
+                new MarqueeLabel(() => _model.RegionText) { Style = styles.Region, Height = 8, HAlign = Align.Stretch },
+                new Stack(Orientation.Horizontal, gap: 3)
+                {
+                    Height = 13,
+                    HAlign = Align.Stretch,
+                    CrossAlign = Align.Center,
+                    Children =
+                    {
+                        new RollingNumber(() => _model.Speed) { Style = styles.Speed },
+                        new Label(() => _model.SpeedUnit) { Style = styles.Muted },
+                        new Label("ISS") { Style = styles.Title, Grow = 1, HAlign = Align.Stretch, TextAlignment = TextAlign.Right },
+                    },
+                },
+                new Stack(Orientation.Horizontal, gap: 6)
+                {
+                    Height = 8,
+                    HAlign = Align.Stretch,
+                    Children =
+                    {
+                        new Label(() => _model.AltText) { Style = styles.Altitude, Height = 8 },
+                        new Label(() => _model.LatLonText) { Style = styles.Coords, Height = 8, Grow = 1, HAlign = Align.Stretch, TextAlignment = TextAlign.Right },
+                    },
+                },
                 new Label(() => _model.DistText) { Style = styles.Distance, Height = 8, HAlign = Align.Stretch },
             },
         };
@@ -118,17 +159,14 @@ public sealed class IssTrackerApp : WidgetApp
             },
         };
 
-        var right = new Panel { Grow = 1, HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { _stats, _messageBox, band } };
+        var right = new Panel { Grow = 1, HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { _stats, _statsWide, _messageBox, band } };
+        _mapNode = new IssMapNode(_model) { Width = WorldMap.Width + 2, VAlign = Align.Stretch };
+        _mapDivider = new Block(new Pixel(30, 36, 56), width: 1) { Margin = new Thickness(0, 3) };
         return new Stack(Orientation.Horizontal)
         {
             HAlign = Align.Stretch,
             VAlign = Align.Stretch,
-            Children =
-            {
-                new IssMapNode(_model) { Width = WorldMap.Width + 2, VAlign = Align.Stretch },
-                new Block(new Pixel(30, 36, 56), width: 1) { Margin = new Thickness(0, 3) },
-                right,
-            },
+            Children = { _mapNode, _mapDivider, right },
         };
     }
 
@@ -139,11 +177,14 @@ public sealed class IssTrackerApp : WidgetApp
         _ = Host;   // builds the tree on the first frame
 
         var snapshot = _data?.Value;
-        bool entered = _model.Refresh(snapshot, _home, string.Equals(Units, "Miles", StringComparison.OrdinalIgnoreCase));
+        bool entered = _model.Refresh(snapshot, _home, string.Equals(Units, "Miles", StringComparison.OrdinalIgnoreCase), AlertDistance);
         if (snapshot is not null) _loadedOnce = true;
 
         bool has = _model.HasPosition;
-        _stats!.Visible = has;
+        _mapNode!.Visible = ShowMap;
+        _mapDivider!.Visible = ShowMap;
+        _stats!.Visible = has && ShowMap;
+        _statsWide!.Visible = has && !ShowMap;
         _messageBox!.Visible = !has;
         if (!has)
         {

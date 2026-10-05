@@ -9,7 +9,8 @@ namespace LedMatrixOS.Apps.ISS;
 /// </summary>
 internal sealed class IssModel
 {
-    public const double RangeKm = 1500, LeaveRangeKm = 1650, OverheadKm = 500;
+    public const double RangeKm = 1500, OverheadKm = 500;
+    private const double LeaveFactor = 1.1;
     public const int PastPoints = 16, FuturePoints = 8;
     private const double PastStepSeconds = 40, FutureStepSeconds = 120;
     private const double KmToMiles = 0.621371;
@@ -17,6 +18,7 @@ internal sealed class IssModel
     private IssSnapshot? _snapshot;
     private HomePoint? _home;
     private bool _miles, _keyed;
+    private double _rangeKm = RangeKm;
     private IssPosition? _previous;
     private bool? _ascending;
 
@@ -46,9 +48,10 @@ internal sealed class IssModel
     public int Speed { get; private set; }
 
     /// <summary>Takes the latest poll. Returns true on the call where the station has just come within range of home.</summary>
-    public bool Refresh(IssSnapshot? snapshot, HomePoint? home, bool miles)
+    public bool Refresh(IssSnapshot? snapshot, HomePoint? home, bool miles, double alertKm = RangeKm)
     {
-        if (_keyed && ReferenceEquals(snapshot, _snapshot) && ReferenceEquals(home, _home) && miles == _miles) return false;
+        if (_keyed && ReferenceEquals(snapshot, _snapshot) && ReferenceEquals(home, _home) && miles == _miles && alertKm == _rangeKm) return false;
+        _rangeKm = alertKm;
         bool sameSnapshot = _keyed && ReferenceEquals(snapshot, _snapshot);
         _keyed = true;
         _snapshot = snapshot;
@@ -100,8 +103,8 @@ internal sealed class IssModel
         }
 
         bool wasInRange = InRange;
-        InRange = home is not null && (wasInRange ? DistanceKm <= LeaveRangeKm : DistanceKm <= RangeKm);
-        Overhead = InRange && DistanceKm <= OverheadKm;
+        InRange = home is not null && (wasInRange ? DistanceKm <= _rangeKm * LeaveFactor : DistanceKm <= _rangeKm);
+        Overhead = InRange && DistanceKm <= Math.Min(OverheadKm, _rangeKm / 3);
 
         var inv = CultureInfo.InvariantCulture;
         RegionText = Stale ? "signal lost, retrying" : "over " + IssRegions.Describe(p.Latitude, p.Longitude);
