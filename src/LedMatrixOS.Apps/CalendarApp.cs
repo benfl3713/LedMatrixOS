@@ -160,19 +160,18 @@ public class CalendarApp : WidgetApp
     {
         await base.OnActivatedAsync(dimensions, configuration, cancellationToken);
         _url = (configuration["Calendar:IcsUrl"] ?? "").Trim();
-        _pollCts?.Cancel();
+        CancelPoll(ref _pollCts);
         _data = null;
         _lastSource = null;
         if (_url.Length == 0) return;
 
         var url = _url.StartsWith("webcal", StringComparison.OrdinalIgnoreCase) ? "https" + _url[6..] : _url;
-        var cts = _pollCts = new CancellationTokenSource();
-        _data = Poll(TimeSpan.FromMinutes(15), ct => FetchAsync(url, ct), cts.Token);
+        _data = RestartPoll(ref _pollCts, TimeSpan.FromMinutes(15), ct => FetchAsync(url, ct));
     }
 
     public override async Task OnDeactivatedAsync(CancellationToken cancellationToken)
     {
-        _pollCts?.Cancel();
+        CancelPoll(ref _pollCts);
         await base.OnDeactivatedAsync(cancellationToken);
     }
 

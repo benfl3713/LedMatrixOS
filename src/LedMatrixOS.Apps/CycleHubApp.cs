@@ -242,8 +242,8 @@ public class CycleHubApp : WidgetApp
 
     public override Task OnDeactivatedAsync(CancellationToken cancellationToken)
     {
-        _dockCts?.Cancel();
-        _weatherCts?.Cancel();
+        CancelPoll(ref _dockCts);
+        CancelPoll(ref _weatherCts);
         return base.OnDeactivatedAsync(cancellationToken);
     }
 
@@ -258,14 +258,13 @@ public class CycleHubApp : WidgetApp
 
     private void RestartDockPolling()
     {
-        _dockCts?.Cancel();
-        var cts = _dockCts = new CancellationTokenSource();
+        var scope = RestartPollScope(ref _dockCts);
 
         var feeds = ParseDockIds(DockIds).Select(id => new DockFeed(id)).ToArray();
         foreach (var feed in feeds)
         {
             var id = feed.DockId;
-            feed.Info = Poll(_dockInterval, ct => _api.GetBikePointAsync(id, ct), cts.Token);
+            feed.Info = Poll(_dockInterval, ct => _api.GetBikePointAsync(id, ct), scope);
         }
 
         PublishFeeds(feeds);
@@ -273,10 +272,8 @@ public class CycleHubApp : WidgetApp
 
     private void RestartWeatherPolling()
     {
-        _weatherCts?.Cancel();
-        var cts = _weatherCts = new CancellationTokenSource();
         var query = new WeatherQuery(_location, Units == "Fahrenheit");
-        _weather = Poll(_weatherInterval, ct => _weatherSource.GetAsync(query, ct), cts.Token);
+        _weather = RestartPoll(ref _weatherCts, _weatherInterval, ct => _weatherSource.GetAsync(query, ct));
     }
 
     private void PublishFeeds(DockFeed[] feeds)
@@ -292,8 +289,8 @@ public class CycleHubApp : WidgetApp
     /// <summary>Test seam: replaces the polled data with fixed sources (call before the first frame).</summary>
     internal void UseData(ILiveData<WeatherSnapshot>? weather, params (string DockId, ILiveData<BikePointInfo> Info)[] docks)
     {
-        _dockCts?.Cancel();
-        _weatherCts?.Cancel();
+        CancelPoll(ref _dockCts);
+        CancelPoll(ref _weatherCts);
         _weather = weather;
         PublishFeeds(docks.Select(d => new DockFeed(d.DockId) { Info = d.Info }).ToArray());
     }

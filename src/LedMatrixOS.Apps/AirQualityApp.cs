@@ -82,7 +82,7 @@ public sealed class AirQualityApp : WidgetApp
     public override async Task OnDeactivatedAsync(CancellationToken ct)
     {
         _active = false;
-        _pollCts?.Cancel();
+        CancelPoll(ref _pollCts);
         await base.OnDeactivatedAsync(ct);
     }
 
@@ -95,16 +95,14 @@ public sealed class AirQualityApp : WidgetApp
 
     private void StartPolling()
     {
-        _pollCts?.Cancel();
-        _pollCts = new CancellationTokenSource();
         var query = new AirQualityQuery(Location);
-        _data = Poll(TimeSpan.FromMinutes(15), ct => _source.GetAsync(query, ct), _pollCts.Token);
+        _data = RestartPoll(ref _pollCts, TimeSpan.FromMinutes(15), ct => _source.GetAsync(query, ct));
     }
 
     /// <summary>Test seam: replaces the polled data with a fixed source (call before the first frame).</summary>
     internal void UseData(ILiveData<AirQualitySnapshot>? data)
     {
-        _pollCts?.Cancel();
+        CancelPoll(ref _pollCts);
         _data = data;
     }
 
