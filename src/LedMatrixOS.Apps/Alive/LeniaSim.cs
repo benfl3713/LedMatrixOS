@@ -11,7 +11,9 @@ namespace LedMatrixOS.Apps.Alive;
 internal sealed class LeniaSim : IAliveSim
 {
     private const int R = 7;
-    private const float Mu = 0.15f, Sigma = 0.016f, Dt = 0.1f;
+    private const float Dt = 0.1f;
+    internal float SeedAmp = 0.88f;
+    internal float SeedRadius = 0.66f;
     private const int GrowthSteps = 1024, CheckEvery = 90, MaxStepsPerFrame = 3;
 
     private readonly FieldUpscaler _up = new();
@@ -33,12 +35,18 @@ internal sealed class LeniaSim : IAliveSim
 
     public LeniaSim()
     {
+        Configure(0.1237f, 0.0337f);
+        BuildKernel();
+    }
+
+    /// <summary>Rebuilds the growth lookup for a growth centre and width.</summary>
+    internal void Configure(float mu, float sigma)
+    {
         for (int i = 0; i <= GrowthSteps; i++)
         {
             float u = i / (float)GrowthSteps;
-            _growth[i] = 2f * MathF.Exp(-((u - Mu) * (u - Mu)) / (2f * Sigma * Sigma)) - 1f;
+            _growth[i] = 2f * MathF.Exp(-((u - mu) * (u - mu)) / (2f * sigma * sigma)) - 1f;
         }
-        BuildKernel();
     }
 
     private void BuildKernel()
@@ -86,11 +94,11 @@ internal sealed class LeniaSim : IAliveSim
         var rng = c.Rng;
         Array.Clear(_a); Array.Clear(_disp);
         Ticks = 0; _acc = 0; _stagnant = false; _frozenChecks = 0; _prevSig = 0; _lastCheck = 0;
-        int blobs = 1 + c.Population / 3;
+        int blobs = 1 + c.Population / 6;
         for (int b = 0; b < blobs; b++)
         {
             float cx = rng.NextSingle() * _gw, cy = rng.NextSingle() * _gh;
-            float radius = R * (0.9f + 0.5f * rng.NextSingle());
+            float radius = R * SeedRadius;
             int span = (int)radius + 2;
             for (int dy = -span; dy <= span; dy++)
                 for (int dx = -span; dx <= span; dx++)
@@ -98,7 +106,7 @@ internal sealed class LeniaSim : IAliveSim
                     float d2 = (dx * dx + dy * dy) / (radius * radius);
                     if (d2 >= 1f) continue;
                     int gx = ((int)cx + dx + _gw) % _gw, gy = ((int)cy + dy + _gh) % _gh;
-                    float v = (1f - d2) * (0.35f + 0.65f * rng.NextSingle());
+                    float v = SeedAmp * MathF.Exp(-2.5f * d2) * (0.7f + 0.6f * rng.NextSingle());
                     _a[(gy + R) * _pw + gx + R] = Math.Max(_a[(gy + R) * _pw + gx + R], v);
                 }
         }
@@ -144,6 +152,17 @@ internal sealed class LeniaSim : IAliveSim
             }
         }
         if (Ticks - _lastCheck >= CheckEvery) Check();
+    }
+
+    internal float ComputeMass()
+    {
+        double sum = 0;
+        for (int y = 0; y < _gh; y++)
+        {
+            int src = (y + R) * _pw + R;
+            for (int x = 0; x < _gw; x++) sum += _a[src + x];
+        }
+        return (float)(sum / (_gw * _gh));
     }
 
     private void Check()
@@ -195,5 +214,5 @@ internal sealed class LeniaSim : IAliveSim
         Wrap();
     }
 
-    public void Draw(FrameBuffer frame, Rectangle bounds, AliveContext c) => _up.Draw(frame, bounds, _disp, c.Palette.Ramp, 1.15f);
+    public void Draw(FrameBuffer frame, Rectangle bounds, AliveContext c) => _up.Draw(frame, bounds, _disp, c.Palette.Ramp, 0.8f);
 }

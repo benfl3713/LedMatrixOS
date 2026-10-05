@@ -36,7 +36,7 @@ internal sealed class FallingSandSim : IAliveSim
         _t = new byte[width * height]; _s = new byte[width * height]; _stamp = new byte[width * height];
     }
 
-    public void Wipe() { Array.Clear(_t); Array.Clear(_s); }
+    public void Wipe() { Array.Clear(_t); Array.Clear(_s); _stagnant = true; }
 
     private uint Rnd()
     {
