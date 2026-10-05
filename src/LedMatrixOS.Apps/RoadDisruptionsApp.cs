@@ -191,12 +191,9 @@ public class RoadDisruptionsApp : WidgetApp
 
     private void RestartPolling()
     {
-        _pollCts?.Cancel();
-        var cts = new CancellationTokenSource();
-        _pollCts = cts;
         var corridors = ParseCorridors(Corridors);
         _seen = null;
-        _data = Poll(TimeSpan.FromMinutes(5), ct => _api.GetRoadDisruptionsAsync(corridors, ct), cts.Token);
+        _data = RestartPoll(ref _pollCts, TimeSpan.FromMinutes(5), ct => _api.GetRoadDisruptionsAsync(corridors, ct));
     }
 
     internal Pager? DisruptionPager => _pager;
@@ -205,7 +202,7 @@ public class RoadDisruptionsApp : WidgetApp
     /// <summary>Test seam: replaces the polled data (call before the first frame).</summary>
     internal void UseData(ILiveData<RoadDisruption[]>? data)
     {
-        _pollCts?.Cancel();
+        CancelPoll(ref _pollCts);
         _data = data;
     }
 }

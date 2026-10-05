@@ -89,7 +89,7 @@ public class HomeAssistantTilesApp : WidgetApp
     public override async Task OnDeactivatedAsync(CancellationToken cancellationToken)
     {
         _active = false;
-        _pollCts?.Cancel();
+        CancelPoll(ref _pollCts);
         await base.OnDeactivatedAsync(cancellationToken);
     }
 
@@ -100,7 +100,7 @@ public class HomeAssistantTilesApp : WidgetApp
 
     private void Restart()
     {
-        _pollCts?.Cancel();
+        CancelPoll(ref _pollCts);
         _entities = HaFormat.ParseEntities(Entities);
         _entitiesDirty = true;
         _data = null;
@@ -108,10 +108,10 @@ public class HomeAssistantTilesApp : WidgetApp
         if (!_api.IsConfigured || _entities.Count == 0) return;
 
         var entities = _entities;
-        var cts = _pollCts = new CancellationTokenSource();
-        _data = Poll(TimeSpan.FromSeconds(30), ct => _api.GetStatesAsync(entities, ct), cts.Token);
+        var scope = RestartPollScope(ref _pollCts);
+        _data = Poll(TimeSpan.FromSeconds(30), ct => _api.GetStatesAsync(entities, ct), scope);
         if (entities.Any(e => (e.Flags & TileFlags.Spark) != 0))
-            _history = Poll(TimeSpan.FromMinutes(10), ct => _api.GetHistoryAsync(entities, ct), cts.Token);
+            _history = Poll(TimeSpan.FromMinutes(10), ct => _api.GetHistoryAsync(entities, ct), scope);
     }
 
     internal TileBoard? Board => _board;

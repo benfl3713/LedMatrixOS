@@ -183,8 +183,7 @@ public sealed class IssTrackerApp : WidgetApp
     public override async Task OnDeactivatedAsync(CancellationToken cancellationToken)
     {
         _active = false;
-        _pollCts?.Cancel();
-        _pollCts = null;
+        CancelPoll(ref _pollCts);
         await base.OnDeactivatedAsync(cancellationToken);
     }
 
@@ -220,10 +219,7 @@ public sealed class IssTrackerApp : WidgetApp
 
     private void RestartPolling()
     {
-        _pollCts?.Cancel();
-        var cts = new CancellationTokenSource();
-        _pollCts = cts;
-        _data = Poll(RefreshInterval, FetchAsync, cts.Token);
+        _data = RestartPoll(ref _pollCts, RefreshInterval, FetchAsync);
     }
 
     private async Task<IssSnapshot> FetchAsync(CancellationToken ct)
@@ -263,8 +259,7 @@ public sealed class IssTrackerApp : WidgetApp
     /// <summary>Test seam: replaces the polled data and the home point (call before the first frame).</summary>
     internal void UseData(ILiveData<IssSnapshot>? data, (double Lat, double Lon)? home = null)
     {
-        _pollCts?.Cancel();
-        _pollCts = null;
+        CancelPoll(ref _pollCts);
         _data = data;
         _home = home is { } h ? new HomePoint(h.Lat, h.Lon, "Home") : null;
     }

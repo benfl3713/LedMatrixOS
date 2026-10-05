@@ -187,17 +187,14 @@ public class BusArrivalsApp : WidgetApp
     /// <summary>(Re)starts the polls for the configured stops, stopping any previous ones.</summary>
     private void RestartPolling()
     {
-        _pollCts?.Cancel();
-
-        var cts = new CancellationTokenSource();
-        _pollCts = cts;
+        var scope = RestartPollScope(ref _pollCts);
 
         var feeds = ParseStopIds(StopIds).Select(id => new BusStopFeed(id)).ToArray();
         foreach (var feed in feeds)
         {
             var id = feed.StopId;
-            feed.Arrivals = Poll(_refreshInterval, ct => _api.GetArrivalsAsync(id, ct), cts.Token);
-            feed.Label = Poll(_labelRefreshInterval, ct => _api.GetStopLabelAsync(id, ct), cts.Token);
+            feed.Arrivals = Poll(_refreshInterval, ct => _api.GetArrivalsAsync(id, ct), scope);
+            feed.Label = Poll(_labelRefreshInterval, ct => _api.GetStopLabelAsync(id, ct), scope);
         }
 
         PublishFeeds(feeds);
@@ -215,7 +212,7 @@ public class BusArrivalsApp : WidgetApp
     /// <summary>Test seam: replaces the polled data with fixed sources (call before the first frame).</summary>
     internal void UseData(params (string StopId, ILiveData<TflArrival[]> Arrivals, ILiveData<string> Label)[] stops)
     {
-        _pollCts?.Cancel();
+        CancelPoll(ref _pollCts);
         PublishFeeds(stops.Select(s => new BusStopFeed(s.StopId) { Arrivals = s.Arrivals, Label = s.Label }).ToArray());
     }
 }

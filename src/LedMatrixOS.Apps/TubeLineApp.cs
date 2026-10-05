@@ -106,17 +106,15 @@ public sealed class TubeLineApp : WidgetApp
     public override async Task OnDeactivatedAsync(CancellationToken ct)
     {
         _active = false;
-        _pollCts?.Cancel();
+        CancelPoll(ref _pollCts);
         await base.OnDeactivatedAsync(ct);
     }
 
     private void StartPolling()
     {
-        _pollCts?.Cancel();
-        _pollCts = new CancellationTokenSource();
         string line = LineId, route = BranchRoute;
         bool pinned = BranchMode == "Pinned";
-        _data = Poll(TimeSpan.FromSeconds(15), ct => _client.FetchAsync(line, pinned, route, ct), _pollCts.Token);
+        _data = RestartPoll(ref _pollCts, TimeSpan.FromSeconds(15), ct => _client.FetchAsync(line, pinned, route, ct));
     }
 
     public static string NormalizeLineId(string? raw)

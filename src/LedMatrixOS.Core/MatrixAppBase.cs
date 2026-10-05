@@ -96,6 +96,31 @@ public abstract class MatrixAppBase : IMatrixApp
         return data;
     }
 
+    /// <summary>
+    /// Cancels whatever polls are running under <paramref name="slot"/> and gives back a token for a fresh set
+    /// (pass it to <see cref="Poll{T}"/> for each poll that should be replaced together).
+    /// </summary>
+    protected CancellationToken RestartPollScope(ref CancellationTokenSource? slot)
+    {
+        CancelPoll(ref slot);
+        slot = new CancellationTokenSource();
+        return slot.Token;
+    }
+
+    /// <summary>Replaces the poll held in <paramref name="slot"/> with a new one polling <paramref name="fetch"/>.</summary>
+    protected ILiveData<T> RestartPoll<T>(ref CancellationTokenSource? slot, TimeSpan interval, Func<CancellationToken, Task<T>> fetch)
+        => Poll(interval, fetch, RestartPollScope(ref slot));
+
+    /// <summary>Cancels the polls running under <paramref name="slot"/> (if any) and clears it.</summary>
+    protected static void CancelPoll(ref CancellationTokenSource? slot)
+    {
+        var cts = slot;
+        slot = null;
+        if (cts is null) return;
+        cts.Cancel();
+        cts.Dispose();
+    }
+
     /// <summary>Called by the engine every frame.</summary>
     public virtual void Update(FrameContext context, CancellationToken cancellationToken)
     {

@@ -293,7 +293,7 @@ public class TubeDeparturesApp : WidgetApp
     /// <summary>(Re)starts the polls that depend on the current station, stopping any previous ones.</summary>
     private void RestartStationPolling()
     {
-        _stationPollCts?.Cancel();
+        CancelPoll(ref _stationPollCts);
         _arrivals = null;
         _lineStatuses = null;
         _stationName = null;
@@ -302,13 +302,12 @@ public class TubeDeparturesApp : WidgetApp
         var stationId = StationId;
         if (string.IsNullOrWhiteSpace(stationId)) return;
 
-        var cts = new CancellationTokenSource();
-        _stationPollCts = cts;
+        var scope = RestartPollScope(ref _stationPollCts);
 
-        var arrivals = Poll(_refreshInterval, ct => _api.GetArrivalsAsync(stationId, ct), cts.Token);
+        var arrivals = Poll(_refreshInterval, ct => _api.GetArrivalsAsync(stationId, ct), scope);
         _arrivals = arrivals;
-        _lineStatuses = Poll(_lineStatusRefreshInterval, ct => TflLookups.FetchLineStatusesAsync(_api, arrivals, ct), cts.Token);
-        _stationName = Poll(_stationNameRefreshInterval, ct => _api.GetStationNameAsync(stationId, ct), cts.Token);
+        _lineStatuses = Poll(_lineStatusRefreshInterval, ct => TflLookups.FetchLineStatusesAsync(_api, arrivals, ct), scope);
+        _stationName = Poll(_stationNameRefreshInterval, ct => _api.GetStationNameAsync(stationId, ct), scope);
     }
 
     private void ApplyStationId(string stationId)

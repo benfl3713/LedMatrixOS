@@ -304,8 +304,7 @@ public sealed class PlaneSpotterApp : WidgetApp
     public override async Task OnDeactivatedAsync(CancellationToken cancellationToken)
     {
         _active = false;
-        _pollCts?.Cancel();
-        _pollCts = null;
+        CancelPoll(ref _pollCts);
         await base.OnDeactivatedAsync(cancellationToken);
     }
 
@@ -338,18 +337,15 @@ public sealed class PlaneSpotterApp : WidgetApp
 
     private void RestartPolling()
     {
-        _pollCts?.Cancel();
-        _pollCts = null;
+        CancelPoll(ref _pollCts);
         if (!_hasLocation)
         {
             _data = null;
             return;
         }
 
-        var cts = new CancellationTokenSource();
-        _pollCts = cts;
         double radius = Math.Clamp(Radius, MinRadiusKm, MaxRadiusKm);
-        _data = Poll(RefreshInterval, ct => FetchAsync(radius, ct), cts.Token);
+        _data = RestartPoll(ref _pollCts, RefreshInterval, ct => FetchAsync(radius, ct));
     }
 
     private async Task<PlaneSnapshot> FetchAsync(double radius, CancellationToken ct)
@@ -380,8 +376,7 @@ public sealed class PlaneSpotterApp : WidgetApp
     /// <summary>Test seam: replaces the polled data (call before the first frame).</summary>
     internal void UseData(ILiveData<PlaneSnapshot>? data, bool hasLocation = true)
     {
-        _pollCts?.Cancel();
-        _pollCts = null;
+        CancelPoll(ref _pollCts);
         _data = data;
         _hasLocation = hasLocation;
     }

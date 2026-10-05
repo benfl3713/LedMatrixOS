@@ -372,8 +372,7 @@ public class BinDayApp : WidgetApp
     private void StartCalendarPolling()
     {
         var url = _url.StartsWith("webcal", StringComparison.OrdinalIgnoreCase) ? "https" + _url[6..] : _url;
-        var cts = _pollCts = new CancellationTokenSource();
-        _data = Poll(TimeSpan.FromMinutes(30), ct => FetchAsync(url, ct), cts.Token);
+        _data = RestartPoll(ref _pollCts, TimeSpan.FromMinutes(30), ct => FetchAsync(url, ct));
     }
 
     private async Task<List<CalEvent>> FetchAsync(string url, CancellationToken ct)
@@ -388,14 +387,14 @@ public class BinDayApp : WidgetApp
         await base.OnActivatedAsync(dimensions, configuration, cancellationToken);
         _url = (configuration["Calendar:IcsUrl"] ?? "").Trim();
         if (Bins.Length == 0 && configuration["BinDay:Bins"] is { Length: > 0 } bins) Bins = bins;
-        _pollCts?.Cancel();
+        CancelPoll(ref _pollCts);
         _data = null;
         _dirty = true;
     }
 
     public override async Task OnDeactivatedAsync(CancellationToken cancellationToken)
     {
-        _pollCts?.Cancel();
+        CancelPoll(ref _pollCts);
         _data = null;
         await base.OnDeactivatedAsync(cancellationToken);
     }

@@ -237,8 +237,7 @@ public class MorningBriefingApp : WidgetApp
 
     private void StopPolls()
     {
-        _cts?.Cancel();
-        _cts = null;
+        CancelPoll(ref _cts);
         if (_dataInjected) return;
         _weather = null;
         _events = null;
@@ -251,8 +250,7 @@ public class MorningBriefingApp : WidgetApp
         StopPolls();
         if (_dataInjected || _sources is not { } s) return;
 
-        var cts = _cts = new CancellationTokenSource();
-        var ct = cts.Token;
+        var ct = RestartPollScope(ref _cts);
         bool fahrenheit = Units == "Fahrenheit";
         if (ShowWeather && s.Weather is not null) _weather = Poll(TimeSpan.FromMinutes(10), c => s.Weather(fahrenheit, c), ct);
         if (ShowCalendar && s.Events is not null) _events = Poll(TimeSpan.FromMinutes(15), s.Events, ct);
