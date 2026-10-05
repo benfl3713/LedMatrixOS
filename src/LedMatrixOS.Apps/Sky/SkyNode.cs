@@ -44,7 +44,7 @@ internal static class SkyPalette
 /// </summary>
 internal sealed class SkyNode : Node
 {
-    private const int StarCount = 70, CloudCount = 8, DropCount = 110;
+    private const int StarCount = 70, CloudCount = 14, DropCount = 110;
 
     private int _w, _h;
     private int[] _hill = [];
@@ -119,6 +119,12 @@ internal sealed class SkyNode : Node
         EnsureLayout(bounds.Width, bounds.Height);
         int hy = bounds.Bottom - 10;
         SkyPalette.Evaluate(Altitude, out var zenith, out var horizon);
+        float murk = Murk(Kind);
+        if (murk > 0)
+        {
+            zenith = Dull(zenith, murk);
+            horizon = Dull(horizon, murk);
+        }
 
         // Gradient
         for (int y = bounds.Top; y < bounds.Bottom; y++)
@@ -141,6 +147,25 @@ internal sealed class SkyNode : Node
                     frame.BlendPixel(x, y, new Pixel(230, 235, 255), 0.35f);
 
         DrawGround(frame, bounds, hy, horizon);
+    }
+
+    /// <summary>How much the weather drains the colour from the sky (0 clear, towards 1 stormy).</summary>
+    private static float Murk(WeatherKind kind) => kind switch
+    {
+        WeatherKind.PartlyCloudy => 0.1f,
+        WeatherKind.Cloudy => 0.45f,
+        WeatherKind.Fog => 0.5f,
+        WeatherKind.Drizzle => 0.6f,
+        WeatherKind.Rain => 0.68f,
+        WeatherKind.Snow => 0.5f,
+        WeatherKind.Thunderstorm => 0.82f,
+        _ => 0f,
+    };
+
+    private static Pixel Dull(Pixel c, float amount)
+    {
+        byte grey = (byte)(0.3f * c.R + 0.59f * c.G + 0.11f * c.B);
+        return Pixel.Lerp(c, new Pixel(grey, grey, grey), amount).WithBrightness(1f - 0.3f * amount);
     }
 
     private void DrawStars(FrameBuffer frame, Rectangle b, int hy, float night)
@@ -180,7 +205,7 @@ internal sealed class SkyNode : Node
                 float d = MathF.Sqrt(dx * dx + dy * dy);
                 if (d > glow) continue;
                 if (d <= 3.4f) frame.SetPixel(cx + dx, cy + dy, core);
-                else frame.BlendPixel(cx + dx, cy + dy, core, 0.4f * (1 - d / glow) * (1 - d / glow));
+                else frame.BlendPixel(cx + dx, cy + dy, core, 0.55f * (1 - d / glow) * (1 - d / glow));
             }
     }
 
@@ -198,7 +223,7 @@ internal sealed class SkyNode : Node
             double term = k * w;
             for (int dx = -r; dx <= r; dx++)
             {
-                if (dx * dx + dy * dy > r * r + 1) continue;
+                if (dx * dx + dy * dy > 18) continue;
                 bool isLit = waxing ? dx > term : dx < -term;
                 frame.SetPixel(cx + dx, cy + dy, isLit ? lit : Pixel.Lerp(new Pixel(14, 16, 30), dark, night));
             }
@@ -217,19 +242,19 @@ internal sealed class SkyNode : Node
         int count; float dark; float alpha = 0.9f;
         switch (Kind)
         {
-            case WeatherKind.PartlyCloudy: count = 3; dark = 0.05f; break;
-            case WeatherKind.Cloudy: count = 8; dark = 0.3f; break;
-            case WeatherKind.Fog: count = 8; dark = 0.1f; alpha = 0.55f; break;
-            case WeatherKind.Drizzle: count = 8; dark = 0.5f; break;
-            case WeatherKind.Rain: count = 8; dark = 0.6f; break;
-            case WeatherKind.Snow: count = 8; dark = 0.25f; break;
-            case WeatherKind.Thunderstorm: count = 8; dark = 0.85f; break;
+            case WeatherKind.PartlyCloudy: count = 4; dark = 0.05f; break;
+            case WeatherKind.Cloudy: count = 14; dark = 0.3f; break;
+            case WeatherKind.Fog: count = 14; dark = 0.1f; alpha = 0.55f; break;
+            case WeatherKind.Drizzle: count = 14; dark = 0.5f; break;
+            case WeatherKind.Rain: count = 14; dark = 0.6f; break;
+            case WeatherKind.Snow: count = 14; dark = 0.25f; break;
+            case WeatherKind.Thunderstorm: count = 14; dark = 0.85f; break;
             default: return;
         }
 
         float light = (float)Math.Clamp((Altitude + 8) / 22, 0.14, 1);
         var baseColor = Pixel.Lerp(new Pixel(240, 242, 248), new Pixel(96, 102, 118), dark).WithBrightness(light);
-        if (Altitude < 10) baseColor = Pixel.Lerp(baseColor, horizon, 0.3f);
+        if (Altitude < 10) baseColor = Pixel.Lerp(baseColor, horizon, 0.18f);
 
         float room = hy - 14 - b.Y;
         for (int i = 0; i < count; i++)
@@ -279,8 +304,8 @@ internal sealed class SkyNode : Node
             if (snow) frame.BlendPixel(px, py, Pixel.White, 0.85f);
             else
             {
-                frame.BlendPixel(px, py, new Pixel(160, 180, 230), 0.7f);
-                frame.BlendPixel(px, py - 1, new Pixel(160, 180, 230), 0.35f);
+                frame.BlendPixel(px, py, new Pixel(205, 222, 255), 0.8f);
+                frame.BlendPixel(px, py - 1, new Pixel(205, 222, 255), 0.45f);
             }
         }
     }

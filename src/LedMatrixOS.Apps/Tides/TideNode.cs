@@ -41,7 +41,7 @@ internal sealed class TideNode : Node
     private static Pixel ColorOf(TideKind? kind) => kind switch { TideKind.High => High, TideKind.Low => Low, _ => Soft };
 
     private static float Wave(float x, double t) =>
-        1.5f * MathF.Sin(x * 0.085f + (float)t * 1.5f) + 0.9f * MathF.Sin(x * 0.21f - (float)t * 2.3f) + 0.7f * MathF.Sin(x * 0.04f + (float)t * 0.6f);
+        2.1f * MathF.Sin(x * 0.085f + (float)t * 1.5f) + 1.2f * MathF.Sin(x * 0.21f - (float)t * 2.3f) + 0.9f * MathF.Sin(x * 0.04f + (float)t * 0.6f);
 
     protected override void OnRender(FrameBuffer frame, Rectangle bounds)
     {
@@ -55,7 +55,7 @@ internal sealed class TideNode : Node
         for (int y = 0; y < bounds.Height; y++)
         {
             float t = y / (float)Math.Max(1, bounds.Height - 1);
-            _rows[y] = Pixel.Lerp(new Pixel(52, 168, 212), new Pixel(4, 24, 70), MathF.Min(1f, t * 1.25f));   // water colour by depth
+            _rows[y] = Pixel.Lerp(new Pixel(74, 190, 228), new Pixel(8, 40, 100), t);   // water colour by depth
             frame.Fill(new Rectangle(bounds.X, bounds.Y + y, bounds.Width, 1), Pixel.Lerp(new Pixel(14, 22, 52), new Pixel(70, 100, 150), MathF.Pow(t, 1.4f)));
         }
 
@@ -69,7 +69,7 @@ internal sealed class TideNode : Node
 
             // Crest highlight, with a bit of foam on the taller peaks.
             frame.SetPixel(bounds.X + x, top, new Pixel(170, 232, 248));
-            if (surface < baseLine - 1.8f) frame.SetPixel(bounds.X + x, top - 1, new Pixel(235, 248, 255));
+            if (surface < baseLine - 2.4f) frame.SetPixel(bounds.X + x, top - 1, new Pixel(235, 248, 255));
         }
 
         DrawBuoy(frame, bounds, baseLine);
