@@ -15,7 +15,7 @@ public class CrashCardTests
         public int FrameRate => 30;
         public Task OnActivatedAsync((int height, int width) d, IConfiguration c, CancellationToken t) => Task.CompletedTask;
         public Task OnDeactivatedAsync(CancellationToken t) => Task.CompletedTask;
-        public void Update(TimeSpan deltaTime, CancellationToken t) { }
+        public void Update(FrameContext context, CancellationToken t) { }
         public void Render(FrameBuffer frame, CancellationToken t) { }
     }
 

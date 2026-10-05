@@ -96,16 +96,8 @@ public abstract class MatrixAppBase : IMatrixApp
         return data;
     }
 
-    /// <summary>
-    /// Called by the engine every frame. Defaults to the legacy <see cref="Update(TimeSpan, CancellationToken)"/>,
-    /// so override either one (the FrameContext overload wins if both are overridden).
-    /// </summary>
+    /// <summary>Called by the engine every frame.</summary>
     public virtual void Update(FrameContext context, CancellationToken cancellationToken)
-    {
-        Update(context.Delta, cancellationToken);
-    }
-
-    public virtual void Update(TimeSpan deltaTime, CancellationToken cancellationToken)
     {
     }
 

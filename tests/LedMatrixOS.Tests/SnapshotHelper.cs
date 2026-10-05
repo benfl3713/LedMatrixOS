@@ -29,7 +29,8 @@ public static class SnapshotHelper
     {
         app.OnActivatedAsync((height, width), new ConfigurationBuilder().Build(), CancellationToken.None)
             .GetAwaiter().GetResult();
-        app.Update(delta ?? TimeSpan.FromMilliseconds(16), CancellationToken.None);
+        var step = delta ?? TimeSpan.FromMilliseconds(16);
+        app.Update(new FrameContext(step, step, 0), CancellationToken.None);
         return Render(f => app.Render(f, CancellationToken.None), width, height);
     }
 
