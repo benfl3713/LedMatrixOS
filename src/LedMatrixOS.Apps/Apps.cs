@@ -19,6 +19,7 @@ public static class BuiltInApps
         yield return typeof(CountdownTimerApp);
         yield return typeof(PomodoroApp);
         yield return typeof(LifeApp);
+        yield return typeof(AliveApp);
         yield return typeof(ScrollingTextApp);
         yield return typeof(EqualizerApp);
         yield return typeof(FireApp);
