@@ -38,6 +38,7 @@ public static class BuiltInApps
         yield return typeof(CalendarApp);
         yield return typeof(AquariumApp);
         yield return typeof(RssTickerApp);
+        yield return typeof(StocksApp);
         yield return typeof(WidgetDemoApp);
         yield return typeof(Screens.ScreenApp);
     }
