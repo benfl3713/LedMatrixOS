@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/apps/apps_page.dart';
+import '../features/gamepad/gamepad_page.dart';
 import '../features/notify/notify_page.dart';
 import '../features/now/display_page.dart';
 import '../features/now/now_page.dart';
@@ -106,6 +107,7 @@ GoRouter buildRouter({List<AppTab>? tabs}) {
       ),
       // Outside the shell so the navigation bar is hidden.
       GoRoute(path: '/display', builder: (context, state) => const DisplayPage()),
+      GoRoute(path: '/gamepad', builder: (context, state) => const GamepadPage()),
     ],
   );
 }
