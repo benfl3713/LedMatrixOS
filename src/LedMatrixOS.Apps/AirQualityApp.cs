@@ -20,8 +20,8 @@ public sealed class AirQualityApp : WidgetApp
 {
     private enum State { Loading, Ready, Offline }
 
-    private const int GaugeWidth = 88;
-    private const int SideWidth = 88;
+    private const int GaugeWidth = 85;   // three near-equal columns: 85 + 86 + 85 = 256
+    private const int SideWidth = 85;
     private const int StripHeight = 12;
     private static readonly IReadOnlyList<float> NoValues = [];
 
@@ -33,7 +33,8 @@ public sealed class AirQualityApp : WidgetApp
     private AirQualitySnapshot? _viewFor;
     private AirQualityView? _view;
     private State _state = State.Loading;
-    private bool _stale;
+    private bool _stale, _viewDirty;
+    private Node _pollenHeader = null!, _pollenRows = null!;
 
     private AirQualityStyles _styles = null!;
     private Node _content = null!;
@@ -54,6 +55,12 @@ public sealed class AirQualityApp : WidgetApp
 
     [Setting("Page Seconds", Description = "Seconds each side page stays up.", Min = 3, Max = 30)]
     public int PageSeconds { get; set; } = 7;
+
+    [Setting("AQI Scale", Description = "EU shows the European AQI, US the US EPA AQI (with its own bands and colours).", Options = ["EU", "US"])]
+    public string AqiScale { get; set; } = "EU";
+
+    [Setting("Pollen", Description = "Show or hide the pollen counts on the side page.", Options = ["Show", "Hide"])]
+    public string Pollen { get; set; } = "Show";
 
     [ActivatorUtilitiesConstructor]
     public AirQualityApp(HttpClient http) : this(new OpenMeteoAirQualitySource(http)) { }
@@ -90,6 +97,8 @@ public sealed class AirQualityApp : WidgetApp
     {
         if (key == "location") _locationFromUser = true;
         if (_active && key == "location") StartPolling();
+        if (key == "aqiScale") _viewDirty = true;
+        if (key == "pollen") ApplyPollenVisibility();
         if (key == "pageSeconds" && _pager is not null) _pager.Interval = TimeSpan.FromSeconds(PageSeconds);
     }
 
@@ -118,7 +127,7 @@ public sealed class AirQualityApp : WidgetApp
         _digits = new RollingNumber(() => _view is { } v ? v.Aqi : 0) { Style = st.Digits[AirQualityStyles.Slots - 1], Spacing = 0 };
         _band = new Label(() => _view?.BandLabel ?? "") { Style = none };
 
-        var gauge = new Stack(Orientation.Vertical, gap: 1)
+        var gauge = new Stack(Orientation.Vertical, gap: 2)
         {
             Width = GaugeWidth,
             HAlign = Align.Start,
@@ -127,13 +136,13 @@ public sealed class AirQualityApp : WidgetApp
             Children =
             {
                 _place,
-                new Stack(Orientation.Horizontal, gap: 3)
+                new Stack(Orientation.Horizontal, gap: 4)
                 {
                     CrossAlign = Align.End,
                     Children =
                     {
                         _digits,
-                        new Stack(Orientation.Vertical, gap: 0) { Children = { new Label("EU") { Style = st.Muted }, new Label("AQI") { Style = st.Muted } } },
+                        new Stack(Orientation.Vertical, gap: 0) { Margin = new Thickness(0, 0, 0, 1), Children = { new Label(() => IsUs ? "US" : "EU") { Style = st.Muted }, new Label("AQI") { Style = st.Muted } } },
                     },
                 },
                 _band,
@@ -175,6 +184,7 @@ public sealed class AirQualityApp : WidgetApp
         _uv = new Label(() => _view?.UvText ?? "") { Style = none };
         _uvLabel = new Label(() => _view?.UvLabel ?? "") { Style = st.Tiny[AirQualityScale.Neutral], VAlign = Align.End };
         _pollenLevels = new Label[3];
+        var pollenHeader = new Label("POLLEN") { Style = st.Muted };
         var pollenRows = new Stack(Orientation.Vertical, gap: 1);
         string[] names = ["Alder", "Birch", "Grass"];
         for (int i = 0; i < 3; i++)
@@ -187,6 +197,8 @@ public sealed class AirQualityApp : WidgetApp
             });
         }
 
+        _pollenHeader = pollenHeader;
+        _pollenRows = pollenRows;
         var uvPage = new Stack(Orientation.Vertical, gap: 2)
         {
             HAlign = Align.Stretch,
@@ -195,7 +207,7 @@ public sealed class AirQualityApp : WidgetApp
             Children =
             {
                 new Stack(Orientation.Horizontal, gap: 3) { Children = { _uv, _uvLabel } },
-                new Label("POLLEN") { Style = st.Muted },
+                pollenHeader,
                 pollenRows,
             },
         };
@@ -232,11 +244,22 @@ public sealed class AirQualityApp : WidgetApp
 
         // A fresh tree starts on the message; Update swaps to the content (and restyles it) once there is a reading.
         _content.Visible = false;
+        ApplyPollenVisibility();
         _state = State.Loading;
         _viewFor = null;
         _view = null;
         _stale = false;
         return new Panel { HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { _content, _message } };
+    }
+
+    private bool IsUs => string.Equals(AqiScale, "US", StringComparison.OrdinalIgnoreCase);
+
+    private void ApplyPollenVisibility()
+    {
+        if (_pollenHeader is null) return;
+        bool show = !string.Equals(Pollen, "Hide", StringComparison.OrdinalIgnoreCase);
+        _pollenHeader.Visible = show;
+        _pollenRows.Visible = show;
     }
 
     private string PlaceText() =>
@@ -258,10 +281,11 @@ public sealed class AirQualityApp : WidgetApp
         var state = snap is not null ? State.Ready : _data?.Error is not null ? State.Offline : State.Loading;
         bool stale = snap is not null && _data?.Error is not null;
 
-        if (!ReferenceEquals(snap, _viewFor))
+        if (!ReferenceEquals(snap, _viewFor) || _viewDirty)
         {
+            _viewDirty = false;
             _viewFor = snap;
-            _view = snap is null ? null : new AirQualityView(snap);
+            _view = snap is null ? null : new AirQualityView(snap, IsUs);
             Apply();
         }
 

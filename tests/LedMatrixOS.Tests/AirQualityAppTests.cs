@@ -23,10 +23,10 @@ public class AirQualityAppTests(ITestOutputHelper output)
     private static AirQualitySnapshot Reading(int aqi, double pm25, double pm10, double uv = 4.5, bool pollen = true) =>
         new FakeAirQualitySource(aqi, pm25, pm10, uv, "London", pollen).GetAsync(new AirQualityQuery("London"), default).Result;
 
-    private static (AirQualityApp App, AppStage Stage) Screen(MutableLive<AirQualitySnapshot> live, int warmFrames = 45)
+    private static (AirQualityApp App, AppStage Stage) Screen(MutableLive<AirQualitySnapshot> live, int warmFrames = 45, string scale = "EU", string pollen = "Show")
     {
         Fonts.Load();
-        var app = new AirQualityApp(new FakeAirQualitySource()) { Time = new FakeTime() };
+        var app = new AirQualityApp(new FakeAirQualitySource()) { Time = new FakeTime(), AqiScale = scale, Pollen = pollen };
         app.UseData(live);
         var stage = new AppStage(app);
         stage.Step(33, warmFrames);
@@ -89,7 +89,7 @@ public class AirQualityAppTests(ITestOutputHelper output)
         Fonts.Load();
         var app = new AirQualityApp(new FakeAirQualitySource());
         Assert.Equal("air-quality", app.Id);
-        Assert.Equal(new[] { "location", "pageSeconds" }, app.GetSettings().Select(s => s.Key).ToArray());
+        Assert.Equal(new[] { "location", "pageSeconds", "aqiScale", "pollen" }, app.GetSettings().Select(s => s.Key).ToArray());
         Assert.Equal(AppSettingType.Search, app.GetSettings().Single(s => s.Key == "location").Type);
     }
 
@@ -156,6 +156,47 @@ public class AirQualityAppTests(ITestOutputHelper output)
     {
         var (_, stage) = Screen(new MutableLive<AirQualitySnapshot> { Value = Reading(30, 8, 15, uv: 1.2, pollen: false) }, warmFrames: 270);
         Golden(stage, "air_quality_no_pollen");
+    }
+
+    [Fact]
+    public void UsAqi_FollowsEpaBreakpoints()
+    {
+        Assert.Equal(0, AirQualityScale.UsAqiOf(0, 0, 0, 0));
+        Assert.Equal(50, AirQualityScale.UsAqiOf(9, 0, 0, 0));                // PM2.5 9.0 is the top of Good
+        Assert.Equal(100, AirQualityScale.UsAqiOf(35.4, 0, 0, 0));
+        Assert.Equal(151, AirQualityScale.UsAqiOf(55.5, 0, 0, 0));
+        Assert.Equal(51, AirQualityScale.UsAqiOf(0, 55, 0, 0));               // PM10 55 starts Moderate
+        Assert.Equal(AirQualityScale.UsAqiOf(5, 10, 0, 0), AirQualityScale.UsAqiOf(5, 10, 0, 0));
+        Assert.Equal(AqiBand.Good, AirQualityScale.UsBandOf(50));
+        Assert.Equal(AqiBand.Moderate, AirQualityScale.UsBandOf(51));
+        Assert.Equal(AqiBand.Poor, AirQualityScale.UsBandOf(101));
+        Assert.Equal("UNHEALTHY", AirQualityScale.UsLabelOf(180));
+        Assert.Equal(50f, AirQualityScale.EuToUs(20), 3);
+        Assert.Equal(150f, AirQualityScale.EuToUs(60), 3);
+    }
+
+    [Fact]
+    public void Parse_ReadsUsAqiWhenPresentAndFallsBackToAConversion()
+    {
+        var withUs = OpenMeteoAirQualitySource.Parse(OpenMeteoJson.Replace("\"european_aqi\":35,", "\"european_aqi\":35,\"us_aqi\":62,"), "X");
+        Assert.Equal(62, withUs.UsAqi);
+        var without = OpenMeteoAirQualitySource.Parse(OpenMeteoJson, "X");
+        Assert.Equal(AirQualityScale.UsAqiOf(9.6, 14.2, 61, 18.5), without.UsAqi);
+        Assert.Equal(without.Hourly.Count, without.UsHourly.Count);
+    }
+
+    [Fact]
+    public void Golden_UsScale()
+    {
+        var (_, stage) = Screen(new MutableLive<AirQualitySnapshot> { Value = Reading(48, 22.4, 38, uv: 6.8) }, scale: "US");
+        Golden(stage, "air_quality_us");
+    }
+
+    [Fact]
+    public void Golden_PollenHidden()
+    {
+        var (_, stage) = Screen(new MutableLive<AirQualitySnapshot> { Value = Reading(30, 8, 15, uv: 6.8) }, warmFrames: 270, pollen: "Hide");
+        Golden(stage, "air_quality_pollen_hidden");
     }
 
     [Fact]

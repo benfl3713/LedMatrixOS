@@ -34,13 +34,14 @@ internal sealed class AirQualityView
     public float ChartMax { get; }
     public string TrendText { get; }
 
-    public AirQualityView(AirQualitySnapshot s)
+    public AirQualityView(AirQualitySnapshot s, bool us = false)
     {
+        int shown = us ? s.UsAqi : s.Aqi;
         Place = s.Location.ToUpperInvariant();
-        Aqi = Math.Max(0, s.Aqi);
-        AqiText = s.Aqi.ToString(CultureInfo.InvariantCulture);
-        Band = AirQualityScale.BandOf(s.Aqi);
-        BandLabel = AirQualityScale.LabelOf(Band);
+        Aqi = Math.Max(0, shown);
+        AqiText = shown.ToString(CultureInfo.InvariantCulture);
+        Band = us ? AirQualityScale.UsBandOf(shown) : AirQualityScale.BandOf(shown);
+        BandLabel = us ? AirQualityScale.UsLabelOf(shown) : AirQualityScale.LabelOf(Band);
         Pm25Text = Fmt(s.Pm25);
         Pm10Text = Fmt(s.Pm10);
         Pm25Slot = (int)AirQualityScale.Pm25Band(s.Pm25);
@@ -72,9 +73,9 @@ internal sealed class AirQualityView
             PollenSlots = [AirQualityScale.Neutral, AirQualityScale.Neutral, AirQualityScale.Neutral];
         }
 
-        Hourly = s.Hourly.ToArray();
+        Hourly = (us ? s.UsHourly : s.Hourly).ToArray();
         float peak = Hourly.Length > 0 ? Hourly.Max() : 0;
-        ChartMax = MathF.Max(40f, MathF.Ceiling(peak / 10f) * 10f);
+        ChartMax = MathF.Max(us ? 100f : 40f, MathF.Ceiling(peak / 10f) * 10f);
         TrendText = "PEAK " + Math.Round(peak);
     }
 
@@ -92,7 +93,7 @@ internal sealed class AirQualityStyles
 
     public readonly TextStyle Place = new(Fonts.QuiteSmall, new Pixel(200, 215, 245), Shadow: false);
     public readonly TextStyle PlaceStale = new(Fonts.QuiteSmall, new Pixel(255, 176, 0), Shadow: false);
-    public readonly TextStyle Muted = new(Fonts.QuiteSmall, new Pixel(150, 150, 160), Shadow: false);
+    public readonly TextStyle Muted = new(Fonts.QuiteSmall, new Pixel(190, 190, 202), Shadow: false);
     public readonly TextStyle Message = new(Fonts.Small, new Pixel(255, 176, 0), Shadow: false);
     public readonly TextStyle PillText = new(Fonts.QuiteSmall, Pixel.White, Shadow: false);
 
