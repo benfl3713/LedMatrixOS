@@ -249,7 +249,7 @@ public class JourneyApp : WidgetApp
     public override Task OnDeactivatedAsync(CancellationToken cancellationToken)
     {
         _active = false;
-        _cts?.Cancel();
+        CancelPoll(ref _cts);
         return base.OnDeactivatedAsync(cancellationToken);
     }
 
@@ -281,23 +281,22 @@ public class JourneyApp : WidgetApp
 
     private void RestartPolling()
     {
-        _cts?.Cancel();
+        CancelPoll(ref _cts);
         _data = null;
         _view = new View(null, 0, [], NoTokens);
         _anchored = false;
         if (string.IsNullOrWhiteSpace(From) || string.IsNullOrWhiteSpace(To)) return;
 
-        var cts = _cts = new CancellationTokenSource();
         string from = PlannerPoint(From), to = PlannerPoint(To), modes = ModesParameter(Modes);
         var source = _source;
         JourneyResult? lastGood = null;
-        _data = Poll(_interval, async ct =>
+        _data = RestartPoll(ref _cts, _interval, async ct =>
         {
             var result = await source.GetAsync(new JourneyQuery(from, to, modes, Time.GetLocalNow().DateTime), ct);
             if (result.Status == JourneyStatus.Ok) lastGood = result;
             // A blip in the connection should not blank a board the traveller is still using.
             return result.Status == JourneyStatus.Offline && lastGood is not null ? lastGood : result;
-        }, cts.Token);
+        });
     }
 
     internal JourneyPlan CurrentPlan => _plan;
@@ -306,7 +305,7 @@ public class JourneyApp : WidgetApp
     /// <summary>Test seam: replaces the polled data with a fixed source (call before the first frame).</summary>
     internal void UseData(ILiveData<JourneyResult>? data)
     {
-        _cts?.Cancel();
+        CancelPoll(ref _cts);
         _data = data;
         _view = new View(null, 0, [], NoTokens);
         _anchored = false;

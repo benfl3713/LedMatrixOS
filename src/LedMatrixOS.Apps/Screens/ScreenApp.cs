@@ -56,8 +56,7 @@ public sealed class ScreenApp : WidgetApp, IPollHost
     public override async Task OnDeactivatedAsync(CancellationToken cancellationToken)
     {
         _store.Changed -= OnStoreChanged;
-        _pollCts?.Cancel();
-        _pollCts = null;
+        CancelPoll(ref _pollCts);
         await base.OnDeactivatedAsync(cancellationToken);
     }
 
@@ -70,8 +69,7 @@ public sealed class ScreenApp : WidgetApp, IPollHost
     {
         if (Interlocked.Exchange(ref _dirty, 0) == 1)
         {
-            _pollCts?.Cancel();
-            _pollCts = null;
+            CancelPoll(ref _pollCts);
             InvalidateTree();
         }
         base.Update(context, cancellationToken);

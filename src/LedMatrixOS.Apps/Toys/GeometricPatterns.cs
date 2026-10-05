@@ -1,4 +1,5 @@
 using LedMatrixOS.Core;
+using LedMatrixOS.Apps.Visuals;
 
 namespace LedMatrixOS.Apps.Toys;
 
@@ -100,7 +101,7 @@ public sealed class PolygonsPattern : GeoPattern
                 for (int s = 0; s <= Samples; s++)
                 {
                     float phi = s / (float)Samples * MathF.Tau;
-                    float r = radius * Lerp(Radial(n0, phi), Radial(n1, phi), mix);
+                    float r = radius * Kit.Lerp(Radial(n0, phi), Radial(n1, phi), mix);
                     float x = cx + MathF.Cos(phi + rot) * r, y = cy + MathF.Sin(phi + rot) * r;
                     if (s > 0) ToyGfx.AddLine(f, px, py, x, y, color, fade);
                     px = x; py = y;
@@ -108,8 +109,6 @@ public sealed class PolygonsPattern : GeoPattern
             }
         }
     }
-
-    private static float Lerp(float a, float b, float t) => a + (b - a) * t;
 
     // Distance from the centre to the edge of a regular n-gon (circumradius 1) in direction phi.
     private static float Radial(int n, float phi)

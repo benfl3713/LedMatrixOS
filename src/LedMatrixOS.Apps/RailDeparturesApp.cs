@@ -244,13 +244,9 @@ public class RailDeparturesApp : WidgetApp
 
     private void RestartPolling()
     {
-        _pollCts?.Cancel();
-        var cts = new CancellationTokenSource();
-        _pollCts = cts;
-
         var code = (Station ?? "").Trim();
         _stationName = StationLabel();
-        _services = Poll(RefreshInterval, ct => _source.GetDeparturesAsync(code, ct), cts.Token);
+        _services = RestartPoll(ref _pollCts, RefreshInterval, ct => _source.GetDeparturesAsync(code, ct));
     }
 
     internal RailBoardModel Model => _model;
@@ -260,7 +256,7 @@ public class RailDeparturesApp : WidgetApp
     /// <summary>Test seam: replaces the polled data with a fixed source (call before the first frame).</summary>
     internal void UseData(ILiveData<RailService[]> services, string? stationName = null)
     {
-        _pollCts?.Cancel();
+        CancelPoll(ref _pollCts);
         _services = services;
         if (stationName is not null) _stationName = stationName;
     }

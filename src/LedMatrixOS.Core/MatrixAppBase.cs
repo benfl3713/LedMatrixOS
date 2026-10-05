@@ -97,15 +97,32 @@ public abstract class MatrixAppBase : IMatrixApp
     }
 
     /// <summary>
-    /// Called by the engine every frame. Defaults to the legacy <see cref="Update(TimeSpan, CancellationToken)"/>,
-    /// so override either one (the FrameContext overload wins if both are overridden).
+    /// Cancels whatever polls are running under <paramref name="slot"/> and gives back a token for a fresh set
+    /// (pass it to <see cref="Poll{T}"/> for each poll that should be replaced together).
     /// </summary>
-    public virtual void Update(FrameContext context, CancellationToken cancellationToken)
+    protected CancellationToken RestartPollScope(ref CancellationTokenSource? slot)
     {
-        Update(context.Delta, cancellationToken);
+        CancelPoll(ref slot);
+        slot = new CancellationTokenSource();
+        return slot.Token;
     }
 
-    public virtual void Update(TimeSpan deltaTime, CancellationToken cancellationToken)
+    /// <summary>Replaces the poll held in <paramref name="slot"/> with a new one polling <paramref name="fetch"/>.</summary>
+    protected ILiveData<T> RestartPoll<T>(ref CancellationTokenSource? slot, TimeSpan interval, Func<CancellationToken, Task<T>> fetch)
+        => Poll(interval, fetch, RestartPollScope(ref slot));
+
+    /// <summary>Cancels the polls running under <paramref name="slot"/> (if any) and clears it.</summary>
+    protected static void CancelPoll(ref CancellationTokenSource? slot)
+    {
+        var cts = slot;
+        slot = null;
+        if (cts is null) return;
+        cts.Cancel();
+        cts.Dispose();
+    }
+
+    /// <summary>Called by the engine every frame.</summary>
+    public virtual void Update(FrameContext context, CancellationToken cancellationToken)
     {
     }
 

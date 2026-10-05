@@ -13,24 +13,12 @@ public class AudioDataServiceTests
     }
 
     [Fact]
-    public void CopyFrequencyBands_MatchesGetFrequencyBands()
+    public void CopyFrequencyBands_FillsAsMuchAsFits()
     {
         var service = Loud();
-        var expected = service.GetFrequencyBands();
-
-        var copy = new float[AudioDataService.FrequencyBandCount];
-        int count = service.CopyFrequencyBands(copy);
-
-        Assert.Equal(AudioDataService.FrequencyBandCount, count);
-        Assert.Equal(expected, copy);
-        Assert.Contains(copy, v => v > 0f);
-    }
-
-    [Fact]
-    public void CopyFrequencyBands_FillsOnlyAsMuchAsFits()
-    {
-        var service = Loud();
-        var full = service.GetFrequencyBands();
+        var full = new float[AudioDataService.FrequencyBandCount];
+        Assert.Equal(AudioDataService.FrequencyBandCount, service.CopyFrequencyBands(full));
+        Assert.Contains(full, v => v > 0f);
 
         var small = new float[10];
         Assert.Equal(10, service.CopyFrequencyBands(small));

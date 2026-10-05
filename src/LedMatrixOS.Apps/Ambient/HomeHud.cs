@@ -53,7 +53,7 @@ internal sealed class DateBlock : Node
 
         if (_ampmText.Length > 0)
         {
-            var ap = TextPaint.Solid(Gfx.Mix(p.Date, p.Accent, 0.4f));
+            var ap = TextPaint.Solid(Pixel.Lerp(p.Date, p.Accent, 0.4f));
             ap.Alpha = Alpha;
             ap.Shadow = true;
             int ax = x + (int)MathF.Round((_weekday.Width + 5) * inline);
@@ -62,7 +62,7 @@ internal sealed class DateBlock : Node
         }
         y += ampmH;
 
-        var wp = TextPaint.Vertical(Gfx.Mix(p.Date, Pixel.White, 0.45f), p.Date);
+        var wp = TextPaint.Vertical(Pixel.Lerp(p.Date, Pixel.White, 0.45f), p.Date);
         wp.Alpha = Alpha;
         wp.Shadow = true;
         wp.Bold = true;
@@ -76,13 +76,13 @@ internal sealed class DateBlock : Node
         {
             float d = MathF.Abs(i / (float)barW - shimmer * 1.4f + 0.2f);
             float glow = Gfx.Saturate(1f - d * 5f);
-            var c = Gfx.Mix(p.Accent, Pixel.White, glow * 0.8f);
+            var c = Pixel.Lerp(p.Accent, Pixel.White, glow * 0.8f);
             frame.BlendPixel(x + i, y, c, Alpha);
             frame.BlendPixel(x + i, y + 1, c, Alpha * 0.8f);
         }
         y += 2 + 4;
 
-        var dp = TextPaint.Vertical(Gfx.Mix(p.Time1, Pixel.White, 0.35f), p.Time1);
+        var dp = TextPaint.Vertical(Pixel.Lerp(p.Time1, Pixel.White, 0.35f), p.Time1);
         dp.Alpha = Alpha;
         dp.Shadow = true;
         _date.Draw(frame, x, y, 2, dp);
@@ -118,8 +118,8 @@ internal sealed class SecondsLine : Node
         for (int x = 0; x < fill && x < bounds.Width; x++)
         {
             float u = x / (float)bounds.Width;
-            var c = Gfx.Mix(p.A1, p.A2, u);
-            c = Gfx.Mix(c, Pixel.White, flash * 0.7f);
+            var c = Pixel.Lerp(p.A1, p.A2, u);
+            c = Pixel.Lerp(c, Pixel.White, flash * 0.7f);
             // The tail brightens towards the head so the line reads as motion.
             float head = Gfx.Saturate(1f - (fill - x) / 60f);
             c = Gfx.Dim(c, (0.45f + 0.55f * head) * Alpha);
@@ -127,7 +127,7 @@ internal sealed class SecondsLine : Node
         }
 
         if (fill > 0 || prog > 0f)
-            Gfx.GlowDisc(frame, bounds.X + prog * bounds.Width, y + 1, 7f, Gfx.Mix(p.A1, Pixel.White, 0.4f), 0.55f * Alpha);
+            Gfx.GlowDisc(frame, bounds.X + prog * bounds.Width, y + 1, 7f, Pixel.Lerp(p.A1, Pixel.White, 0.4f), 0.55f * Alpha);
     }
 }
 
@@ -326,8 +326,8 @@ internal sealed class HomeDirector : Node
 
         float t = _s.T;
         float shift = 0.5f + 0.5f * MathF.Sin(t * 0.25f * _s.Speed);
-        var top = Gfx.Mix(p.Time0, Pixel.White, _s.MinuteFlash * 0.8f);
-        var bottom = Gfx.Mix(Gfx.Mix(Gfx.Mix(p.Time1, p.Time0, 0.3f), p.A2, shift * 0.3f), Pixel.White, _s.MinuteFlash * 0.5f);
+        var top = Pixel.Lerp(p.Time0, Pixel.White, _s.MinuteFlash * 0.8f);
+        var bottom = Pixel.Lerp(Pixel.Lerp(Pixel.Lerp(p.Time1, p.Time0, 0.3f), p.A2, shift * 0.3f), Pixel.White, _s.MinuteFlash * 0.5f);
         var paint = TextPaint.Vertical(top, bottom);
         paint.Shadow = true;
         paint.ShadowColor = Gfx.Dim(p.Sky0, 0.15f);

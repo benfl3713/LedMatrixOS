@@ -72,7 +72,6 @@ builder.Services.AddSingleton(sp => new LedMatrixOS.Core.Screens.ScreenCatalog(
     sp.GetRequiredService<AppManager>(),
     DataFile("screens.json")));
 builder.Services.AddSingleton<AudioDataService>();
-builder.Services.AddSingleton<InterruptService>();
 var schedulePath = DataFile("schedule.json");
 // Services that can answer rule conditions register an IAttentionSource. They are lazy: AttentionCoordinator only lets them
 // poll while a schedule rule references their condition.
@@ -110,10 +109,9 @@ builder.Services.AddSingleton<RenderEngine>(sp =>
 {
     var device = sp.GetRequiredService<IMatrixDevice>();
     var apps = sp.GetRequiredService<AppManager>();
-    var interruptService = sp.GetRequiredService<InterruptService>();
     foreach (var app in BuiltInApps.GetAll()) apps.Register(app);
     foreach (var (alias, target, preset) in BuiltInApps.Aliases()) apps.RegisterAlias(alias, target, preset);
-    var renderEngine = new RenderEngine(device, apps, interruptService, logger: sp.GetService<ILogger<RenderEngine>>());
+    var renderEngine = new RenderEngine(device, apps, logger: sp.GetService<ILogger<RenderEngine>>());
     apps.Overlays = renderEngine.Overlays;
     return renderEngine;
 });
@@ -243,96 +241,10 @@ app.MapPost("/api/settings/transition/{name}", (string name, RenderEngine eng) =
     return Results.Ok(new { transition = eng.TransitionName });
 });
 
-// Live preview: binary frames [width u16][height u16][RGB...] at up to 30 fps, only when the picture changed
-app.MapGet("/ws/preview", async (HttpContext context, RenderEngine eng) =>
-{
-    if (!context.WebSockets.IsWebSocketRequest) return Results.BadRequest("WebSocket request expected");
-
-    using var socket = await context.WebSockets.AcceptWebSocketAsync();
-    using var subscription = eng.Broadcaster.Subscribe();
-    var ct = context.RequestAborted;
-    long last = 0;
-    var message = new byte[0];
-
-    // A viewer that closes shows up as a completed receive
-    var closed = Task.Run(async () =>
-    {
-        var buffer = new byte[64];
-        try { while (socket.State == System.Net.WebSockets.WebSocketState.Open && (await socket.ReceiveAsync(buffer, ct)).MessageType != System.Net.WebSockets.WebSocketMessageType.Close) { } }
-        catch (Exception) { }
-    }, ct);
-
-    try
-    {
-        while (socket.State == System.Net.WebSockets.WebSocketState.Open && !closed.IsCompleted)
-        {
-            int length = eng.Broadcaster.TryRead(ref last, ref message);
-            if (length > 0) await socket.SendAsync(new ArraySegment<byte>(message, 0, length), System.Net.WebSockets.WebSocketMessageType.Binary, true, ct);
-            await Task.Delay(33, ct);
-        }
-    }
-    catch (OperationCanceledException) { }
-    catch (System.Net.WebSockets.WebSocketException) { }
-    return Results.Empty;
-});
-
-// Simulator preview
-app.MapGet("/preview", (IMatrixDevice device) =>
-{
-    if (device is SimulatedMatrixDevice sim)
-    {
-        var bytes = sim.GetPngBytes();
-        return Results.File(bytes, "image/png");
-    }
-    return Results.BadRequest("Preview only available in simulator mode");
-});
-
-// Audio streaming endpoint for equalizer visualization
-app.MapPost("/api/audio/stream", async (HttpRequest request, AudioDataService audioService) =>
-{
-    try
-    {
-        using var reader = new StreamReader(request.Body);
-        var json = await reader.ReadToEndAsync();
-        
-        // Log the incoming data for debugging
-        Console.WriteLine($"Received audio data: {json.Substring(0, Math.Min(200, json.Length))}...");
-        
-        var audioData = JsonSerializer.Deserialize<AudioStreamData>(json, new JsonSerializerOptions
-        { 
-            PropertyNameCaseInsensitive = true 
-        });
-        
-        if (audioData?.Samples != null && audioData.Samples.Length > 0)
-        {
-            Console.WriteLine($"Processing {audioData.Samples.Length} samples. First few: {string.Join(", ", audioData.Samples.Take(5))}");
-            audioService.AddAudioSamples(audioData.Samples);
-            return Results.Ok(new { message = "Audio data received", sampleCount = audioData.Samples.Length });
-        }
-        
-        Console.WriteLine("Invalid audio data - samples null or empty");
-        return Results.BadRequest("Invalid audio data");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Error processing audio: {ex.Message}\n{ex.StackTrace}");
-        return Results.BadRequest($"Error processing audio: {ex.Message}");
-    }
-});
-
-app.MapGet("/api/audio/status", (AudioDataService audioService) =>
-{
-    return Results.Ok(new 
-    { 
-        hasRecentData = audioService.HasRecentData(),
-        bandCount = AudioDataService.FrequencyBandCount
-    });
-});
-
+app.MapPreviewEndpoints();
+app.MapAudioEndpoints();
 app.MapNotificationEndpoints();
 app.MapOverlayEndpoints(schedulePath);
 app.MapScreenEndpoints();
 
 app.Run();
-
-public record AudioStreamData(float[] Samples, int SampleRate = 44100);

@@ -152,11 +152,8 @@ public class TubeStatusApp : WidgetApp
 
     private void RestartPolling()
     {
-        _pollCts?.Cancel();
-        var cts = new CancellationTokenSource();
-        _pollCts = cts;
         var modes = Lines == "Tube" ? "tube" : "tube,dlr,overground,elizabeth-line";
-        _data = Poll(TimeSpan.FromMinutes(5), ct => _api.GetModeStatusesAsync(modes, ct), cts.Token);
+        _data = RestartPoll(ref _pollCts, TimeSpan.FromMinutes(5), ct => _api.GetModeStatusesAsync(modes, ct));
     }
 
     internal Pager? CardPager => _pager;

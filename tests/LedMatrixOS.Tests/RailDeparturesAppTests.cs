@@ -309,27 +309,9 @@ public class RailDeparturesAppTests(ITestOutputHelper output)
     public void SteadyState_DoesNotAllocate()
     {
         var (app, stage, _) = Board(HardcodedRailSource.Generate(Start));
-        for (int i = 0; i < 400; i++) { stage.Step(33); stage.Render(); }
+        var run = stage.MeasureSteadyAllocation(windows: 12, warmFrames: 400, beginWindow: () => { int page = app.ServicePager!.PageIndex; return () => page == app.ServicePager.PageIndex && !app.ServicePager.IsTransitioning; });
 
-        int measured = 0;
-        long least = long.MaxValue;
-        double ms = 0;
-        for (int window = 0; window < 12; window++)
-        {
-            int page = app.ServicePager!.PageIndex;
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            var sw = Stopwatch.StartNew();
-            for (int i = 0; i < 60; i++) { stage.Step(33); stage.Render(); }
-            sw.Stop();
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            if (page != app.ServicePager.PageIndex || app.ServicePager.IsTransitioning) continue;
-            measured++;
-            ms = sw.Elapsed.TotalMilliseconds / 60;
-            least = Math.Min(least, allocated);
-        }
-
-        output.WriteLine($"rail departures: {ms:F3} ms/frame, {measured} steady windows");
-        Assert.True(measured >= 3);
-        Assert.True(least < 256, $"least allocation in a steady window: {least} bytes");
-    }
+        output.WriteLine($"rail departures: {run.MsPerFrame:F3} ms/frame, {run.Measured} steady windows");
+        Assert.True(run.Measured >= 3);
+        Assert.True(run.Least < 256, $"least allocation in a steady window: {run.Least} bytes");    }
 }

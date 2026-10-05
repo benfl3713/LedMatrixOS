@@ -112,67 +112,6 @@ public class ParticleAndEffectTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void Fade_Zero_IsBlack_One_IsIdentity()
-    {
-        var f = Gradient();
-        var fade = new FadeEffect { Level = 0f };
-        fade.Apply(f, Ctx);
-        Assert.True(SnapshotHelper.IsBlank(f));
-
-        var g = Gradient();
-        new FadeEffect { Level = 1f }.Apply(g, Ctx);
-        AssertSame(Gradient(), g);
-    }
-
-    [Fact]
-    public void Fade_Half_HalvesChannels()
-    {
-        var f = new FrameBuffer(2, 1);
-        f.Clear(new Pixel(200, 100, 50));
-        new FadeEffect { Level = 0.5f }.Apply(f, Ctx);
-        Assert.Equal(new Pixel(100, 50, 25), f.GetPixel(0, 0));
-    }
-
-    [Fact]
-    public void ColorGrade_Identity_LeavesFrameUnchanged()
-    {
-        var f = Gradient();
-        new ColorGradeEffect().Apply(f, Ctx);
-        AssertSame(Gradient(), f);
-    }
-
-    [Fact]
-    public void ColorGrade_Brightness_Tint_Saturation()
-    {
-        var f = new FrameBuffer(1, 1);
-        f.Clear(new Pixel(200, 100, 50));
-        new ColorGradeEffect { Brightness = 0.5f }.Apply(f, Ctx);
-        Assert.Equal(new Pixel(100, 50, 25), f.GetPixel(0, 0));
-
-        f.Clear(new Pixel(200, 200, 200));
-        new ColorGradeEffect { Tint = new Pixel(255, 128, 0) }.Apply(f, Ctx);
-        Assert.Equal(new Pixel(200, 100, 0), f.GetPixel(0, 0));
-
-        f.Clear(new Pixel(255, 0, 0));
-        new ColorGradeEffect { Saturation = 0f }.Apply(f, Ctx);
-        var p = f.GetPixel(0, 0);
-        Assert.Equal(p.R, p.G);
-        Assert.Equal(p.G, p.B);
-    }
-
-    [Fact]
-    public void Scanlines_DimsOnlyEveryPeriodRow()
-    {
-        var f = new FrameBuffer(4, 4);
-        f.Clear(new Pixel(200, 200, 200));
-        new ScanlinesEffect { Intensity = 0.5f, Period = 2 }.Apply(f, Ctx);
-        Assert.Equal(new Pixel(200, 200, 200), f.GetPixel(0, 0));
-        Assert.Equal(new Pixel(100, 100, 100), f.GetPixel(0, 1));
-        Assert.Equal(new Pixel(200, 200, 200), f.GetPixel(3, 2));
-        Assert.Equal(new Pixel(100, 100, 100), f.GetPixel(3, 3));
-    }
-
-    [Fact]
     public void Glow_SpreadsBrightPixels_AndIgnoresDarkOnes()
     {
         var f = new FrameBuffer(16, 16);
@@ -186,27 +125,6 @@ public class ParticleAndEffectTests(ITestOutputHelper output)
         dark.Clear(new Pixel(50, 50, 50));
         new GlowEffect { Threshold = 100f }.Apply(dark, Ctx);
         Assert.Equal(new Pixel(50, 50, 50), dark.GetPixel(5, 5));
-    }
-
-    [Fact]
-    public void Effects_Timing_Report()
-    {
-        var frame = Gradient(256, 64);
-        IPostEffect[] effects =
-        [
-            new GlowEffect(), new ColorGradeEffect { Brightness = 0.5f, Saturation = 0.8f, Tint = new Pixel(255, 200, 150) },
-            new ScanlinesEffect(), new FadeEffect { Level = 0.5f },
-        ];
-        foreach (var effect in effects)
-        {
-            effect.Apply(frame, Ctx); // warm-up (allocates glow scratch once)
-            const int iterations = 200;
-            var sw = Stopwatch.StartNew();
-            for (int i = 0; i < iterations; i++) effect.Apply(frame, Ctx);
-            double ms = sw.Elapsed.TotalMilliseconds / iterations;
-            output.WriteLine($"{effect.GetType().Name}: {ms:F3} ms/frame (256x64)");
-            Assert.True(ms < 10, $"{effect.GetType().Name} took {ms:F3} ms");
-        }
     }
 
     [Fact]

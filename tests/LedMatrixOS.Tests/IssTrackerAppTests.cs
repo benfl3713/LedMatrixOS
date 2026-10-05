@@ -254,21 +254,8 @@ public class IssTrackerAppTests(ITestOutputHelper output)
     public void SteadyState_DoesNotAllocate()
     {
         var (_, stage, _) = Tracker(Snap(50.9, -3.2), Snap(51.4, -1.8));
-        for (int i = 0; i < 100; i++) { stage.Step(33); stage.Render(); }
+        var run = stage.MeasureSteadyAllocation(windows: 6);
 
-        long least = long.MaxValue;
-        double ms = 0;
-        for (int window = 0; window < 6; window++)
-        {
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            var sw = Stopwatch.StartNew();
-            for (int i = 0; i < 60; i++) { stage.Step(33); stage.Render(); }
-            sw.Stop();
-            ms = sw.Elapsed.TotalMilliseconds / 60;
-            least = Math.Min(least, GC.GetAllocatedBytesForCurrentThread() - before);
-        }
-
-        output.WriteLine($"iss tracker: {ms:F3} ms/frame");
-        Assert.True(least < 256, $"least allocation in a steady window: {least} bytes");
-    }
+        output.WriteLine($"iss tracker: {run.MsPerFrame:F3} ms/frame");
+        Assert.True(run.Least < 256, $"least allocation in a steady window: {run.Least} bytes");    }
 }

@@ -174,7 +174,7 @@ internal sealed class Ticker : Node
             {
                 Gfx.ToHsv(color, out var hue, out var s, out var v);
                 float drift = 14f * MathF.Sin(_t * 0.6f);
-                p = TextPaint.Vertical(Gfx.Mix(color, Pixel.White, 0.4f), Gfx.Hsv(hue + 38f + drift, MathF.Max(s, 0.8f), MathF.Max(v, 0.9f)));
+                p = TextPaint.Vertical(Pixel.Lerp(color, Pixel.White, 0.4f), Gfx.Hsv(hue + 38f + drift, MathF.Max(s, 0.8f), MathF.Max(v, 0.9f)));
                 break;
             }
             case "Rainbow":
@@ -254,7 +254,7 @@ internal sealed class Ticker : Node
             int iy = (frame.Height - 7 * _sepScale) / 2;
             var c = _app.TextEffect is "Rainbow" or "Rainbow Wave"
                 ? Pixel.FromHsv(_t * 90f + ix * 1.25f, 0.9f, 1f)
-                : Gfx.Mix(color, Pixel.White, 0.35f);
+                : Pixel.Lerp(color, Pixel.White, 0.35f);
             TickerIcons.Draw(frame, _icon, ix, iy, _sepScale, c, paint.ShadowColor, paint.Alpha);
         }
     }
@@ -270,7 +270,7 @@ internal sealed class Ticker : Node
             {
                 float u = (x / 256f + _t * 0.15f) % 1f;
                 float k = 0.35f + 0.65f * (0.5f + 0.5f * MathF.Sin(u * MathF.PI * 2f));
-                var c = Gfx.Dim(Gfx.Mix(color, Pixel.White, 0.2f), k * 0.55f);
+                var c = Gfx.Dim(Pixel.Lerp(color, Pixel.White, 0.2f), k * 0.55f);
                 frame.SetPixel(x, 0, c);
                 frame.SetPixel(x, 63, c);
             }
@@ -278,7 +278,7 @@ internal sealed class Ticker : Node
         else if (decor == "Chase Lights")
         {
             int phase = (int)(_t * 9f);
-            var lit = Gfx.Mix(color, Pixel.White, 0.5f);
+            var lit = Pixel.Lerp(color, Pixel.White, 0.5f);
             var dim = Gfx.Dim(color, 0.22f);
             for (int i = 0; i < 64; i++)
             {

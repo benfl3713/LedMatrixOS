@@ -20,11 +20,14 @@ A flexible and extensible LED matrix display system built with .NET 10, designed
 
 | Group | Apps (id) |
 |---|---|
-| Clocks | Clock (`clock`), Animated Clock (`animated-clock`), Flip Clock (`flip-clock`), Countdown Timer (`countdown-timer`) |
+| Clocks | Clock (`clock`; `style` = Animated or Flip, with `animated-clock` and `flip-clock` as presets), Countdown Timer (`countdown-timer`) |
 | Ambient | Home (`home`), Solid Color / mood light (`solid_color`), Scrolling Text (`scrolling-text`) |
 | Visuals | Rainbow Spiral (`rainbow-spiral`), Geometric Patterns (`geometric-patterns`), Bouncing Balls (`bouncing-balls`), DVD Logo (`dvd-logo`), Matrix Rain (`matrix-rain`), Fire (`fire`), Equalizer (`equalizer`) |
 | Everyday | Weather (`weather`, Open-Meteo, no key), Commute (`commute`), Calendar (`calendar`), Home Assistant tiles (`ha-tiles`), Spotify (`spotify`, needs API config) |
 | Tube | Tube Departures (`tube-departures`), Tube Status (`tube-status`), Tube Line (`tube-line`) |
+| Transport | Bus Arrivals (`bus-arrivals`), Rail Departures (`rail-departures`), Cycle Hub (`cycle-hub`), Road Disruptions (`road-disruptions`), Journey (`journey`) |
+| Tracking & info | Plane Spotter (`plane-spotter`), ISS Tracker (`iss-tracker`), Air Quality (`air-quality`), Bin Day (`bin-day`), Morning Briefing (`morning-briefing`) |
+| Custom | JSON screens (`screen`, see `/api/screens`) |
 | Dev | Widget Demo (`widget-demo`) |
 
 Apps with settings expose them through `GET /api/apps/{id}/settings`.
@@ -207,61 +210,12 @@ public class HelloApp : WidgetApp
 
 Use `Time` and the frame context rather than `DateTime.Now`, so tests can drive the clock. Look at `CommuteApp` or `HomeAssistantTilesApp` for complete examples with polled data, and `tests/LedMatrixOS.Tests/CommuteAppTests.cs` for golden-image and allocation tests. Steady-state rendering should allocate nothing (cache `TextRun`s; rebuild strings only when data changes).
 
-### Low-level apps
-
-To create your own app, inherit from `MatrixAppBase`:
-
-```csharp
-using LedMatrixOS.Core;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
-
-namespace LedMatrixOS.Apps;
-
-public sealed class MyCustomApp : MatrixAppBase
-{
-    public override string Id => "my-custom-app";
-    public override string Name => "My Custom App";
-
-    private double _animationTime;
-
-    public override void Update(TimeSpan deltaTime, CancellationToken cancellationToken)
-    {
-        // Update animation state
-        _animationTime += deltaTime.TotalSeconds;
-    }
-
-    public override void Render(FrameBuffer frame, CancellationToken cancellationToken)
-    {
-        // Option 1: Direct pixel manipulation
-        for (int y = 0; y < frame.Height; y++)
-        {
-            for (int x = 0; x < frame.Width; x++)
-            {
-                frame.SetPixel(x, y, new Pixel(255, 0, 0));
-            }
-        }
-
-        // Option 2: Using ImageSharp (recommended for complex graphics)
-        using var image = new Image<Rgb24>(frame.Width, frame.Height);
-        image.Mutate(ctx =>
-        {
-            // Draw your graphics here
-            ctx.Fill(Color.Blue);
-        });
-        frame.RenderImage(image);
-    }
-}
-```
-
 ### App Lifecycle
 
 Apps can override these methods for lifecycle management:
 
 - `OnActivatedAsync()` - Called when app becomes active (initialize resources)
-- `Update()` - Called every frame to update state
-- `Render()` - Called every frame to render output
+- `Update()` - Called every frame to update state (`WidgetApp` handles this and `Render()` for you)
 - `OnDeactivatedAsync()` - Called when app is deactivated (cleanup resources)
 
 ### Background Tasks
@@ -295,7 +249,6 @@ public static IEnumerable<Type> GetAll()
     yield return typeof(MyCustomApp);
     // ... other apps
 }
->>>>>>> main
 ```
 
 ## Configuration

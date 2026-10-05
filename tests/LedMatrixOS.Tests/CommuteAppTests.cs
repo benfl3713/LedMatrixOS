@@ -186,29 +186,14 @@ public class CommuteAppTests(ITestOutputHelper output)
     public void SteadyState_DoesNotAllocate()
     {
         var (app, stage) = Board(walk: 0);
-        for (int i = 0; i < 100; i++) { stage.Step(33); stage.Render(); }
-
         // Strings are rebuilt when the minute changes; measure windows where neither the leave-in nor the train minute moved.
-        int measured = 0;
-        long least = long.MaxValue;
-        double ms = 0;
-        for (int window = 0; window < 12; window++)
+        var run = stage.MeasureSteadyAllocation(windows: 12, beginWindow: () =>
         {
             int leaveMinute = app.CurrentPlan.LeaveInSeconds / 60;
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            var sw = Stopwatch.StartNew();
-            for (int i = 0; i < 60; i++) { stage.Step(33); stage.Render(); }
-            sw.Stop();
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            int after = app.CurrentPlan.LeaveInSeconds / 60;
-            if (leaveMinute != after || (app.CurrentPlan.LeaveInSeconds + 2) / 60 != after) continue;
-            measured++;
-            ms = sw.Elapsed.TotalMilliseconds / 60;
-            least = Math.Min(least, allocated);
-        }
+            return () => leaveMinute == app.CurrentPlan.LeaveInSeconds / 60 && (app.CurrentPlan.LeaveInSeconds + 2) / 60 == leaveMinute;
+        });
 
-        output.WriteLine($"commute: {ms:F3} ms/frame, {measured} steady windows");
-        Assert.True(measured >= 3);
-        Assert.True(least < 256, $"least allocation in a steady window: {least} bytes");
-    }
+        output.WriteLine($"commute: {run.MsPerFrame:F3} ms/frame, {run.Measured} steady windows");
+        Assert.True(run.Measured >= 3);
+        Assert.True(run.Least < 256, $"least allocation in a steady window: {run.Least} bytes");    }
 }

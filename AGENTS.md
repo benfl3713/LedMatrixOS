@@ -28,17 +28,17 @@ All six are in `LedMatrixOS.sln`.
 | Project | Role |
 |---|---|
 | `src/LedMatrixOS` | **Entry point** (ASP.NET Core web app). `Program.cs` wires DI, picks the device (simulator vs Pi), registers apps, starts the render loop, and defines the REST endpoints. `Endpoints/` holds `NotificationEndpoints` (alert overlays) and `OverlayEndpoints` (toast/badge/schedule). `ScheduleRunner.cs` applies `schedule.json`. `AppConfig.cs` binds the `Matrix` config section. `wwwroot/index.html` is the web preview UI (WebSocket). `appsettings*.json` is config. `*.http` files are manual request samples. |
-| `src/LedMatrixOS.Core` | Engine, no hardware or app specifics. `RenderEngine` (render loop, transitions, overlays, crash card), `AppManager`, `FrameBuffer`/`Pixel`/`FrameContext`, `Animation/`, `Transitions/`, `Data/` (`Poll<T>`), `Settings/` (`[Setting]` attributes), `Scheduling/` (playlists and rules), `Overlays/` (toast/badge/alert), `CrashGuard`, `FrameBroadcaster` (WebSocket preview), `InterruptService` (legacy full-screen takeovers), `AudioDataService`. | **High** |
+| `src/LedMatrixOS.Core` | Engine, no hardware or app specifics. `RenderEngine` (render loop, transitions, overlays, crash card), `AppManager`, `FrameBuffer`/`Pixel`/`FrameContext`, `Animation/`, `Transitions/`, `Data/` (`Poll<T>`), `Settings/` (`[Setting]` attributes), `Scheduling/` (playlists and rules), `Overlays/` (toast/badge/alert), `CrashGuard`, `FrameBroadcaster` (WebSocket preview), `AudioDataService`. | **High** |
 | `src/LedMatrixOS.Apps` | **All the display apps**. Most are `WidgetApp`s with their own `*Kit`/subfolder of nodes (`Commute/`, `Calendar/`, `HomeAssistant/`, `Tube/`, `Weather/`, ...). `Apps.cs` (`BuiltInApps.GetAll()`) is the registry; a new app must be added there. | **High** |
 | `src/LedMatrixOS.Graphics` | Drawing and UI: `SimpleGraphics`, `Text/` (fonts, `TextStyle`), `UI/` (widget tree: `Node`, `Stack`, `Dock`, `Label`, `ListView`, `Pager`, `WidgetApp`, `TextRun`, `CrashCard`), `Particles/`, `Effects/`. `Fonts.Load()` is called at startup. | **High** |
 | `src/LedMatrixOS.Hardware.RpiLedMatrix` | Raspberry Pi hardware backend: P/Invoke bindings to `librgbmatrix.so` (hzeller/rpi-rgb-led-matrix), options/factory classes, and `RpiLedMatrixDevice` (the `IMatrixDevice` implementation). Only works on a Pi with root. Mostly binding boilerplate; rarely needs changes. |
-| `src/LedMatrixOS.Hardware.Simulator` | Simulated device for development. The `SimulatedMatrixDevice` class lives in `Class1.cs` (misleading filename) and renders to PNG for `GET /preview`. |
+| `src/LedMatrixOS.Hardware.Simulator` | Simulated device for development. `SimulatedMatrixDevice` renders to PNG for `GET /preview`. |
 
 Dependency direction: `LedMatrixOS` -> `Apps`, `Core`, `Graphics`, both hardware projects. `Apps` -> `Core` + `Graphics`. Hardware projects -> `Core`.
 
 ## Where to make common changes
 
-- **New or changed display app:** `src/LedMatrixOS.Apps/<Name>App.cs`, then register in `Apps.cs`. Prefer `WidgetApp` (override `Build()`, use `[Setting]` properties and `Poll(...)`); add a test file with goldens and a zero-allocation check (copy `CommuteAppTests.cs`). Use `MatrixAppBase` only for low-level pixel apps.
+- **New or changed display app:** `src/LedMatrixOS.Apps/<Name>App.cs`, then register in `Apps.cs`. Prefer `WidgetApp` (override `Build()`, use `[Setting]` properties and `Poll(...)`); add a test file with goldens and a zero-allocation check (copy `CommuteAppTests.cs`).
 - **User-defined JSON screens:** schema and validation in `src/LedMatrixOS.Core/Screens/` (`ScreenSchema`, `BindingKey`), runtime in `src/LedMatrixOS.Apps/Screens/` (`ScreenApp`, `BindingResolver`, `ScreenNodeFactory`), API in `Endpoints/ScreenEndpoints.cs`, stored in `screens.json`; each screen is an alias `screen:<id>`. A new node type or binding key must be added to the schema, the factory/resolver and `flutter_app/lib/features/screens/`.
 - **New REST endpoint:** `src/LedMatrixOS/Program.cs` (or a new `Endpoints/*.cs` extension like `NotificationEndpoints`).
 - **Rendering/lifecycle/engine behaviour:** `src/LedMatrixOS.Core`.

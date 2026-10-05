@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-
 namespace LedMatrixOS.Core;
 
 /// <summary>
@@ -7,47 +5,25 @@ namespace LedMatrixOS.Core;
 /// </summary>
 public class AudioDataService
 {
-    private readonly ConcurrentQueue<float[]> _audioBuffer = new();
     private float[] _frequencyBands = new float[64];
     private readonly object _lock = new();
     private DateTime _lastUpdate = DateTime.MinValue;
     
-    public const int MaxBufferSize = 10;
     public const int FrequencyBandCount = 64;
 
     /// <summary>
-    /// Add raw audio samples to the processing queue
+    /// Folds raw audio samples into the frequency bands
     /// </summary>
     public void AddAudioSamples(float[] samples)
     {
         if (samples == null || samples.Length == 0) return;
         
-        _audioBuffer.Enqueue(samples);
-        
-        // Keep buffer size reasonable
-        while (_audioBuffer.Count > MaxBufferSize)
-        {
-            _audioBuffer.TryDequeue(out _);
-        }
-        
         ProcessAudioData(samples);
     }
 
     /// <summary>
-    /// Get current frequency band values (0.0 to 1.0 for each band)
-    /// </summary>
-    public float[] GetFrequencyBands()
-    {
-        lock (_lock)
-        {
-            DecayIfStale();
-            return (float[])_frequencyBands.Clone();
-        }
-    }
-
-    /// <summary>
     /// Copies the current band values into <paramref name="destination"/> (at most <see cref="FrequencyBandCount"/> entries) and returns
-    /// how many were written. Unlike <see cref="GetFrequencyBands"/> it allocates nothing, so render code should prefer it.
+    /// how many were written. It allocates nothing, so it is safe to call from render code.
     /// </summary>
     public int CopyFrequencyBands(Span<float> destination)
     {
@@ -119,7 +95,6 @@ public class AudioDataService
     {
         lock (_lock)
         {
-            _audioBuffer.Clear();
             Array.Fill(_frequencyBands, 0);
             _lastUpdate = DateTime.MinValue;
         }

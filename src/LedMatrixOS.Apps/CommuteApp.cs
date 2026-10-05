@@ -173,8 +173,8 @@ public class CommuteApp : WidgetApp
     public override async Task OnDeactivatedAsync(CancellationToken cancellationToken)
     {
         _active = false;
-        _stationCts?.Cancel();
-        _weatherCts?.Cancel();
+        CancelPoll(ref _stationCts);
+        CancelPoll(ref _weatherCts);
         await base.OnDeactivatedAsync(cancellationToken);
     }
 
@@ -193,7 +193,7 @@ public class CommuteApp : WidgetApp
 
     private void RestartStationPolling()
     {
-        _stationCts?.Cancel();
+        CancelPoll(ref _stationCts);
         _arrivals = null;
         _lineStatuses = null;
         _model.Reset();
@@ -201,18 +201,16 @@ public class CommuteApp : WidgetApp
         var stationId = StationId;
         if (string.IsNullOrWhiteSpace(stationId)) return;
 
-        var cts = _stationCts = new CancellationTokenSource();
-        var arrivals = Poll(TimeSpan.FromSeconds(30), ct => _api.GetArrivalsAsync(stationId, ct), cts.Token);
+        var scope = RestartPollScope(ref _stationCts);
+        var arrivals = Poll(TimeSpan.FromSeconds(30), ct => _api.GetArrivalsAsync(stationId, ct), scope);
         _arrivals = arrivals;
-        _lineStatuses = Poll(TimeSpan.FromMinutes(5), ct => TflLookups.FetchLineStatusesAsync(_api, arrivals, ct), cts.Token);
+        _lineStatuses = Poll(TimeSpan.FromMinutes(5), ct => TflLookups.FetchLineStatusesAsync(_api, arrivals, ct), scope);
     }
 
     private void RestartWeatherPolling()
     {
-        _weatherCts?.Cancel();
-        var cts = _weatherCts = new CancellationTokenSource();
         var query = new WeatherQuery(Location, Units == "Fahrenheit");
-        _weather = Poll(TimeSpan.FromMinutes(10), ct => _weatherSource.GetAsync(query, ct), cts.Token);
+        _weather = RestartPoll(ref _weatherCts, TimeSpan.FromMinutes(10), ct => _weatherSource.GetAsync(query, ct));
     }
 
     internal CommutePlan CurrentPlan => _card?.Plan ?? CommutePlan.None;

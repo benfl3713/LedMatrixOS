@@ -78,7 +78,7 @@ public sealed class WeatherApp : WidgetApp
     public override async Task OnDeactivatedAsync(CancellationToken ct)
     {
         _active = false;
-        _pollCts?.Cancel();
+        CancelPoll(ref _pollCts);
         await base.OnDeactivatedAsync(ct);
     }
 
@@ -90,10 +90,8 @@ public sealed class WeatherApp : WidgetApp
 
     private void StartPolling()
     {
-        _pollCts?.Cancel();
-        _pollCts = new CancellationTokenSource();
         var query = new WeatherQuery(Location, Units == "Fahrenheit");
-        _data = Poll(TimeSpan.FromMinutes(10), ct => _source.GetAsync(query, ct), _pollCts.Token);
+        _data = RestartPoll(ref _pollCts, TimeSpan.FromMinutes(10), ct => _source.GetAsync(query, ct));
     }
 
     // ---- derived state -------------------------------------------------------------------------------------------------------
