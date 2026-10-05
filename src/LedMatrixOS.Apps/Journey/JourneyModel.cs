@@ -31,7 +31,8 @@ internal sealed record JourneyResult(JourneyStatus Status, JourneyOption[] Journ
     public static JourneyResult Of(JourneyStatus status) => new(status, []);
 }
 
-internal sealed record JourneyQuery(string From, string To, string Modes, DateTime When);
+/// <param name="Preference">TfL <c>journeyPreference</c>: LeastTime, LeastInterchange or LeastWalking.</param>
+internal sealed record JourneyQuery(string From, string To, string Modes, DateTime When, string Preference = "LeastTime");
 
 internal interface IJourneySource
 {

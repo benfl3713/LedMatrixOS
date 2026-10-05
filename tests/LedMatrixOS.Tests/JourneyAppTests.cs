@@ -197,7 +197,7 @@ public class JourneyAppTests(ITestOutputHelper output)
         var app = new JourneyApp(new HttpClient(new TflStubHandler()));
         var settings = app.GetSettings().ToList();
 
-        Assert.Equal(new[] { "from", "to", "destinationLabel", "walkBuffer", "journeys", "modes", "pageSeconds" }, settings.Select(s => s.Key).ToArray());
+        Assert.Equal(new[] { "from", "to", "destinationLabel", "walkBuffer", "journeys", "modes", "pageSeconds", "showWalkingLegs", "preference", "leaveAfter" }, settings.Select(s => s.Key).ToArray());
         Assert.Equal("journey", app.Id);
         Assert.Equal("Journey Planner", app.Name);
         var walk = settings.Single(s => s.Key == "walkBuffer");
@@ -214,6 +214,34 @@ public class JourneyAppTests(ITestOutputHelper output)
     [InlineData("Tube only", "tube,walking")]
     [InlineData("Bus only", "bus,walking")]
     public void Modes_MapToTflModes(string setting, string expected) => Assert.Equal(expected, JourneyApp.ModesParameter(setting));
+
+    [Theory]
+    [InlineData("Fastest", "LeastTime")]
+    [InlineData("Fewest changes", "LeastInterchange")]
+    [InlineData("Least walking", "LeastWalking")]
+    public void Preference_MapsToTflJourneyPreference(string setting, string expected) => Assert.Equal(expected, JourneyApp.PreferenceParameter(setting));
+
+    [Fact]
+    public async Task Activation_PassesPreferenceAndLeaveAfterToTheSource()
+    {
+        Fonts.Load();
+        var source = new FakeJourneySource(Board());
+        var app = new JourneyApp(new HttpClient(new TflStubHandler()), source)
+            { Time = new FakeTime(), From = "SW9 8LQ", To = "W1D 3QU", Preference = "Least walking", LeaveAfter = 20 };
+        await app.OnActivatedAsync((64, 256), new ConfigurationBuilder().Build(), CancellationToken.None);
+        var stage = new AppStage(app);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (source.Queries.IsEmpty)
+        {
+            Assert.True(DateTime.UtcNow < deadline, "journeys were not fetched in time");
+            stage.Step(33);
+            await Task.Delay(10);
+        }
+        var query = source.Queries.First();
+        Assert.Equal("LeastWalking", query.Preference);
+        Assert.Equal(Now.AddMinutes(20), query.When);
+        await app.OnDeactivatedAsync(CancellationToken.None);
+    }
 
     [Fact]
     public async Task Activation_PollsTheSource()
@@ -263,6 +291,11 @@ public class JourneyAppTests(ITestOutputHelper output)
 
         var (_, offline) = Stage(null, error: new HttpRequestException("down"));
         Golden(offline, "journey_offline");
+
+        var (noWalk, noWalkStage) = Stage(Board(58));
+        noWalk.UpdateSetting("showWalkingLegs", false);
+        noWalkStage.Step(33, 10);
+        Golden(noWalkStage, "journey_no_walking_legs");
     }
 
     [Fact]

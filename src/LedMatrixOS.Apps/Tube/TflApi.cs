@@ -199,10 +199,10 @@ internal sealed class TflApi(HttpClient http)
     /// Journey Planner results from <paramref name="from"/> to <paramref name="to"/> (postcode, "lat,lon" or Naptan id), leaving at <paramref name="when"/>.
     /// Never throws for network or HTTP problems (they come back as Offline); only cancellation propagates.
     /// </summary>
-    public async Task<Journey.JourneyResult> GetJourneysAsync(string from, string to, DateTime when, string modes, CancellationToken ct)
+    public async Task<Journey.JourneyResult> GetJourneysAsync(string from, string to, DateTime when, string modes, CancellationToken ct, string preference = "LeastTime")
     {
         static string Escape(string s) => Uri.EscapeDataString(s.Trim()).Replace("%2C", ",");
-        var query = $"date={when:yyyyMMdd}&time={when:HHmm}&timeIs=Departing&journeyPreference=LeastTime";
+        var query = $"date={when:yyyyMMdd}&time={when:HHmm}&timeIs=Departing&journeyPreference={preference}";
         if (!string.IsNullOrWhiteSpace(modes)) query += $"&mode={modes}";
         var url = WithKey($"{Root}/Journey/JourneyResults/{Escape(from)}/to/{Escape(to)}", query);
 

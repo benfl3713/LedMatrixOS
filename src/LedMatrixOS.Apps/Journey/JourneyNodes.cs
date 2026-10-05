@@ -29,7 +29,7 @@ internal sealed class JourneyHero : Node
         HAlign = Align.Stretch;
         VAlign = Align.Stretch;
         _caption.Set(Fonts.QuiteSmall, "LEAVE IN");
-        _unit.Set(Fonts.QuiteSmall, "MIN");
+        _unit.Set(Fonts.Small, "MIN");
         _go.Set(_huge, "GO");
         _title.Set(Fonts.Big, "MISSED");
         _sub.Set(Fonts.QuiteSmall, "Refreshing");
@@ -91,7 +91,7 @@ internal sealed class JourneyHero : Node
         int dy = (int)MathF.Round(-14f * (1f - bump));
         _number.Draw(frame, x, numberRect.Y + dy, color, shadow: true);
         frame.PopClip();
-        _unit.Draw(frame, x + DigitsWidth + 6, bounds.Y + 11, TubeGfx.Muted);
+        _unit.Draw(frame, x + DigitsWidth + 4, bounds.Y + 12, TubeGfx.Muted);
     }
 }
 
@@ -115,7 +115,7 @@ internal sealed class JourneyPage : Node
     private readonly TextRun _duration = new(), _unit = new(), _arrLabel = new(), _arrival = new(), _dep = new(), _tag = new();
     private TimeSpan _time;
 
-    public JourneyPage(JourneyOption option, int index, int count)
+    public JourneyPage(JourneyOption option, int index, int count, bool showWalking = true)
     {
         HAlign = Align.Stretch;
         VAlign = Align.Stretch;
@@ -125,13 +125,14 @@ internal sealed class JourneyPage : Node
         for (int i = 0; i < option.Legs.Length; i++)
         {
             var leg = option.Legs[i];
+            if (leg.Walking && !showWalking && option.FirstTransit is not null) continue;
             var run = new TextRun();
             run.Set(Fonts.QuiteSmall, leg.Label);
             int width = run.Width + 6;
             if (x + width > MaxWidth)
             {
                 var more = new TextRun();
-                more.Set(Fonts.QuiteSmall, $"+{option.Legs.Length - i}");
+                more.Set(Fonts.QuiteSmall, $"+{option.Legs.Skip(i).Count(l => !(l.Walking && !showWalking))}");
                 pills.Add(new Chip(x, more.Width + 6, new Pixel(48, 50, 62), TubeGfx.Muted, more, false));
                 break;
             }
