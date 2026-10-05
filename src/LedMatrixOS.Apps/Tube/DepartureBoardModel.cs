@@ -42,6 +42,29 @@ internal sealed partial class Departure
         return remaining < 60 ? 0 : (int)(remaining / 60);
     }
 
+    /// <summary>Whole minutes away with a custom "due" threshold in seconds: 0 (due) under <paramref name="dueSeconds"/>, otherwise at least 1.</summary>
+    public int Minutes(TimeSpan now, int dueSeconds)
+    {
+        var remaining = RemainingSeconds(now);
+        return remaining < dueSeconds ? 0 : Math.Max(1, (int)(remaining / 60));
+    }
+
+    private int _clockKey = -1;
+    private string _clock = "";
+
+    /// <summary>The wall clock time the train arrives ("14:07"), re-formatted only when the minute changes.</summary>
+    public string ClockText(TimeSpan now, DateTime localNow)
+    {
+        var arrive = localNow.AddSeconds(RemainingSeconds(now));
+        int key = arrive.Hour * 60 + arrive.Minute;
+        if (key != _clockKey)
+        {
+            _clockKey = key;
+            _clock = arrive.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+        }
+        return _clock;
+    }
+
     [GeneratedRegex(@"platform\s+(\w{1,2})", RegexOptions.IgnoreCase)]
     private static partial Regex PlatformRegex();
 
@@ -103,6 +126,12 @@ internal sealed class DepartureBoardModel
     private readonly List<int> _dirCounts = new();
 
     public TimeSpan Now { get; private set; }
+
+    /// <summary>Seconds under which a train counts as due (the "Due Threshold" setting).</summary>
+    public int DueSeconds { get; set; } = ArrivalOptions.DefaultDueSeconds;
+
+    /// <summary>Whole minutes to <paramref name="d"/> by the board's clock and due threshold; 0 means due.</summary>
+    public int MinutesOf(Departure d) => d.Minutes(Now, DueSeconds);
 
     /// <summary>
     /// When set, the filter text is a comma separated list of route names (buses) that must match a departure's line name exactly,

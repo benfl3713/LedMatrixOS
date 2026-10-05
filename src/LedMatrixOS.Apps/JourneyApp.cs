@@ -51,6 +51,15 @@ public class JourneyApp : WidgetApp
     [Setting("Page Seconds", Description = "How long each journey stays before sliding to the next.", Min = 3, Max = 30)]
     public int PageSeconds { get; set; } = 6;
 
+    [Setting("Show Walking Legs", Description = "Show the walking legs as grey pills in each journey.")]
+    public bool ShowWalkingLegs { get; set; } = true;
+
+    [Setting("Preference", Description = "What TfL optimises for: the quickest journey, the fewest changes or the least walking.", Options = ["Fastest", "Fewest changes", "Least walking"])]
+    public string Preference { get; set; } = "Fastest";
+
+    [Setting("Leave After", Description = "Plan for this many minutes from now, e.g. when you are not leaving straight away.", Min = 0, Max = 120)]
+    public int LeaveAfter { get; set; }
+
     private readonly TflApi _api;
     private IJourneySource _source;
     private readonly TimeSpan _interval = TimeSpan.FromSeconds(60);
@@ -64,13 +73,14 @@ public class JourneyApp : WidgetApp
     private JourneyPlan _plan = JourneyPlan.None;
     private DateTime _anchorLocal;
     private TimeSpan _anchorTime;
-    private bool _anchored;
+    private bool _anchored, _shownWalking = true;
 
     private string _headerText = "", _fromText = "";
     private JourneyHero? _hero;
     private JourneyStateScreen? _state;
     private Pager? _pager;
     private Pill? _disruption;
+    private bool _disrupted;
     private Node? _body, _strip;
     private bool _entered, _bodyShown;
 
@@ -94,7 +104,7 @@ public class JourneyApp : WidgetApp
 
         var transition = new SlideTransition(MoveDirection.Left) { Duration = 500.Ms() };
         _pager = new Pager(pageSize: 1, interval: PageSeconds.Seconds(), transition: transition, easing: Easing.InOutCubic) { Grow = 1 }
-            .Bind(() => _view.Tokens, token => new JourneyPage(_view.Options[token.Index], token.Index, _view.Options.Length));
+            .Bind(() => _view.Tokens, token => new JourneyPage(_view.Options[token.Index], token.Index, _view.Options.Length, token.ShowWalking));
 
         var header = new Label(() => _headerText) { Style = new TextStyle(Fonts.Small, TubeGfx.Amber, Shadow: false), Height = HeaderHeight, Padding = new Thickness(4, 0, 0, 0) };
 
@@ -117,8 +127,9 @@ public class JourneyApp : WidgetApp
         };
 
         var clock = new TextStyle(Fonts.Small, new Pixel(245, 245, 245), Shadow: false);
-        _disruption = new Pill("DISRUPTION", TubeGfx.Amber, pulse: true)
-            { Style = new TextStyle(Fonts.QuiteSmall, Pixel.Black, Shadow: false), Height = 10, Padding = new Thickness(3, 1), Visible = false };
+        // "DELAYS" in the small font reads at a glance; while it shows, the From label gives way to it.
+        _disruption = new Pill("DELAYS", TubeGfx.Amber, pulse: true)
+            { Style = new TextStyle(Fonts.Small, Pixel.Black, Shadow: false), Height = 10, Padding = new Thickness(3, 0), Visible = false };
         _strip = new Panel
         {
             Height = StripHeight,
@@ -134,7 +145,7 @@ public class JourneyApp : WidgetApp
                     Children =
                     {
                         new Clock("HH:mm", Time) { Style = clock },
-                        new Label(() => _fromText) { Style = new TextStyle(Fonts.QuiteSmall, new Pixel(150, 150, 160), Shadow: false), Grow = 1 },
+                        new Label(() => _disrupted ? "" : _fromText) { Style = new TextStyle(Fonts.QuiteSmall, new Pixel(150, 150, 160), Shadow: false), Grow = 1 },
                         _disruption,
                     },
                 },
@@ -160,12 +171,12 @@ public class JourneyApp : WidgetApp
             _hero!.Plan = _plan;
             var shown = _view.Options[Math.Max(0, _plan.Index)];
             _hero.Spine = shown.FirstTransit is { } leg ? JourneyParser.ColorOf(leg) : TubeGfx.Muted;
-            _disruption!.Visible = shown.Disrupted;
+            _disrupted = _disruption!.Visible = shown.Disrupted;
         }
         else
         {
             _plan = JourneyPlan.None;
-            _disruption!.Visible = false;
+            _disrupted = _disruption!.Visible = false;
             _state!.State = state!.Value;
         }
 
@@ -193,7 +204,7 @@ public class JourneyApp : WidgetApp
         var result = data?.Value;
         if (result is null) return data?.Error is not null ? JourneyState.Offline : JourneyState.Loading;
 
-        if (!ReferenceEquals(result, _view.Result) || Journeys != _view.Count)
+        if (!ReferenceEquals(result, _view.Result) || Journeys != _view.Count || ShowWalkingLegs != _shownWalking)
         {
             if (!ReferenceEquals(result, _view.Result) || !_anchored)
             {
@@ -202,8 +213,9 @@ public class JourneyApp : WidgetApp
                 _anchored = true;
             }
 
+            _shownWalking = ShowWalkingLegs;
             var options = result.Journeys.Take(Math.Clamp(Journeys, 1, JourneyParser.MaxJourneys)).ToArray();
-            _view = new View(result, Journeys, options, options.Select((o, i) => new JourneyToken(i, o.Key)).ToArray());
+            _view = new View(result, Journeys, options, options.Select((o, i) => new JourneyToken(i, o.Key, ShowWalkingLegs)).ToArray());
         }
 
         return result.Status switch
@@ -227,7 +239,7 @@ public class JourneyApp : WidgetApp
                 break;
         }
 
-        if (_active && key is "from" or "to" or "modes") RestartPolling();
+        if (_active && key is "from" or "to" or "modes" or "preference" or "leaveAfter") RestartPolling();
     }
 
     public override Task OnActivatedAsync((int height, int width) dimensions, IConfiguration configuration, CancellationToken cancellationToken)
@@ -279,6 +291,13 @@ public class JourneyApp : WidgetApp
         _ => "",
     };
 
+    internal static string PreferenceParameter(string? preference) => preference switch
+    {
+        "Fewest changes" => "LeastInterchange",
+        "Least walking" => "LeastWalking",
+        _ => "LeastTime",
+    };
+
     private void RestartPolling()
     {
         CancelPoll(ref _cts);
@@ -287,12 +306,13 @@ public class JourneyApp : WidgetApp
         _anchored = false;
         if (string.IsNullOrWhiteSpace(From) || string.IsNullOrWhiteSpace(To)) return;
 
-        string from = PlannerPoint(From), to = PlannerPoint(To), modes = ModesParameter(Modes);
+        string from = PlannerPoint(From), to = PlannerPoint(To), modes = ModesParameter(Modes), preference = PreferenceParameter(Preference);
+        var leaveAfter = TimeSpan.FromMinutes(Math.Clamp(LeaveAfter, 0, 120));
         var source = _source;
         JourneyResult? lastGood = null;
         _data = RestartPoll(ref _cts, _interval, async ct =>
         {
-            var result = await source.GetAsync(new JourneyQuery(from, to, modes, Time.GetLocalNow().DateTime), ct);
+            var result = await source.GetAsync(new JourneyQuery(from, to, modes, Time.GetLocalNow().DateTime + leaveAfter, preference), ct);
             if (result.Status == JourneyStatus.Ok) lastGood = result;
             // A blip in the connection should not blank a board the traveller is still using.
             return result.Status == JourneyStatus.Offline && lastGood is not null ? lastGood : result;
@@ -313,11 +333,11 @@ public class JourneyApp : WidgetApp
 }
 
 /// <summary>Identifies one page of the journey pager: the option's position and content, so changed journeys rebuild their pages.</summary>
-internal readonly record struct JourneyToken(int Index, string Key);
+internal readonly record struct JourneyToken(int Index, string Key, bool ShowWalking = true);
 
 /// <summary>The real thing: TfL Journey Planner over HTTP.</summary>
 internal sealed class TflJourneySource(TflApi api) : IJourneySource
 {
     public Task<JourneyResult> GetAsync(JourneyQuery query, CancellationToken ct) =>
-        api.GetJourneysAsync(query.From, query.To, query.When, query.Modes, ct);
+        api.GetJourneysAsync(query.From, query.To, query.When, query.Modes, ct, query.Preference);
 }

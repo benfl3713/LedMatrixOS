@@ -44,6 +44,15 @@ internal sealed class RailStyles
     public TextStyle TextTiny(RailStatus s) => _tinyText[(int)s];
 }
 
+/// <summary>Display options of the rail board shared by its rows (see <see cref="Tube.ArrivalOptions"/>), updated by the app each frame.</summary>
+internal sealed class RailOptions
+{
+    public ArrivalFormat Format { get; set; } = ArrivalFormat.Clock;
+    public bool ShowDestination { get; set; } = true;
+    public bool ShowPlatform { get; set; } = true;
+    public bool ShowCallingPoints { get; set; } = true;
+}
+
 /// <summary>A following train: scheduled time, destination, platform and status on one 7px line.</summary>
 internal sealed class RailRowNode : Stack
 {
@@ -53,28 +62,45 @@ internal sealed class RailRowNode : Stack
     private readonly RailStyles _styles;
     private readonly Label _time, _platform, _status;
     private readonly MarqueeLabel _destination;
+    private readonly Panel _timeCell, _platformCell;
+    private readonly RailOptions _options;
     private int _version = -1;
+    private ArrivalFormat _format = (ArrivalFormat)(-1);
+    private bool _platformShown = true;
 
-    public RailRowNode(RailRow row, RailStyles styles) : base(Orientation.Horizontal)
+    public RailRowNode(RailRow row, RailStyles styles, RailOptions? options = null) : base(Orientation.Horizontal)
     {
         _row = row;
         _styles = styles;
+        _options = options ?? new RailOptions();
         CrossAlign = Align.Center;
 
         _time = new Label(() => row.Time) { Style = styles.TextTiny(row.State) };
-        _destination = new MarqueeLabel(() => row.Destination) { Style = styles.TextTiny(row.State), Grow = 1, Margin = new Thickness(4, 0, 4, 0) };
+        _destination = new MarqueeLabel(() => _options.ShowDestination ? row.Destination : "") { Style = styles.TextTiny(row.State), Grow = 1, Margin = new Thickness(4, 0, 4, 0) };
         _platform = new Label(() => row.Platform) { Style = styles.TextTiny(row.State), HAlign = Align.End };
         _status = new Label(() => row.Status) { Style = styles.StatusTiny(row.State), HAlign = Align.End };
 
-        Add(new Panel { Width = 28, Margin = new Thickness(3, 0, 0, 0), Children = { _time } });
+        _timeCell = new Panel { Width = 28, Margin = new Thickness(3, 0, 0, 0), Children = { _time } };
+        _platformCell = new Panel { Width = 8, Margin = new Thickness(0, 0, 6, 0), Children = { _platform } };
+        Add(_timeCell);
         Add(_destination);
-        Add(new Panel { Width = 8, Margin = new Thickness(0, 0, 6, 0), Children = { _platform } });
+        Add(_platformCell);
         Add(new Panel { Width = 50, Margin = new Thickness(0, 0, 4, 0), Children = { _status } });
     }
 
     public override void Update(FrameContext ctx)
     {
         base.Update(ctx);
+        if (_options.Format != _format)
+        {
+            _format = _options.Format;
+            _timeCell.Width = _format switch { ArrivalFormat.Both => 62, ArrivalFormat.Minutes => 34, _ => 28 };
+        }
+        if (_options.ShowPlatform != _platformShown)
+        {
+            _platformShown = _options.ShowPlatform;
+            _platformCell.Visible = _platformShown;
+        }
         if (_version == _row.Version) return;
         _version = _row.Version;
         _time.Style = _destination.Style = _platform.Style = _styles.TextTiny(_row.State);
@@ -95,16 +121,20 @@ internal sealed class RailHeroNode : Stack
     private readonly MarqueeLabel _destination, _calling;
     private readonly Pill _platform;
     private readonly Block _stripe;
+    private readonly Panel _timeCell;
+    private readonly RailOptions _options;
     private int _version = -1;
+    private ArrivalFormat _format = (ArrivalFormat)(-1);
 
-    public RailHeroNode(RailRow row, RailStyles styles) : base(Orientation.Vertical)
+    public RailHeroNode(RailRow row, RailStyles styles, RailOptions? options = null) : base(Orientation.Vertical)
     {
         _row = row;
         _styles = styles;
+        _options = options ?? new RailOptions();
 
         _stripe = new Block(RailStyles.Green, width: 3);
         _time = new Label(() => row.Time) { Style = styles.TextSmall(row.State) };
-        _destination = new MarqueeLabel(() => row.Destination) { Style = styles.TextSmall(row.State), Grow = 1, Margin = new Thickness(4, 0, 4, 0) };
+        _destination = new MarqueeLabel(() => _options.ShowDestination ? row.Destination : "") { Style = styles.TextSmall(row.State), Grow = 1, Margin = new Thickness(4, 0, 4, 0) };
         _platform = new Pill(row.Platform, new Pixel(235, 235, 240))
         {
             Style = new TextStyle(Fonts.Small, Pixel.Black, Shadow: false),
@@ -116,6 +146,7 @@ internal sealed class RailHeroNode : Stack
         _status = new Label(() => row.Status) { Style = styles.StatusSmall(row.State), HAlign = Align.End };
         _calling = new MarqueeLabel(() => row.Info) { Style = styles.Calling, Height = 7, Margin = new Thickness(7, 0, 4, 0), HAlign = Align.Stretch };
 
+        _timeCell = new Panel { Width = 36, Margin = new Thickness(4, 0, 0, 0), Children = { _time } };
         var top = new Stack(Orientation.Horizontal)
         {
             Height = 15,
@@ -124,7 +155,7 @@ internal sealed class RailHeroNode : Stack
             Children =
             {
                 _stripe,
-                new Panel { Width = 36, Margin = new Thickness(4, 0, 0, 0), Children = { _time } },
+                _timeCell,
                 _destination,
                 _platform,
                 new Panel { Width = 56, Margin = new Thickness(4, 0, 4, 0), Children = { _status } },
@@ -138,6 +169,13 @@ internal sealed class RailHeroNode : Stack
     public override void Update(FrameContext ctx)
     {
         base.Update(ctx);
+        if (_options.Format != _format)
+        {
+            _format = _options.Format;
+            _timeCell.Width = _format switch { ArrivalFormat.Both => 88, ArrivalFormat.Minutes => 48, _ => 36 };
+        }
+        _platform.Visible = _options.ShowPlatform;
+        _calling.Visible = _options.ShowCallingPoints;
         if (_version == _row.Version) return;
         _version = _row.Version;
         _time.Style = _destination.Style = _styles.TextSmall(_row.State);

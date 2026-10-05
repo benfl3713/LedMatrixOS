@@ -49,6 +49,18 @@ public class TubeDeparturesApp : WidgetApp
     [Setting("Page Seconds", Description = "How long each page of following trains stays before sliding to the next.", Min = 3, Max = 30)]
     public int PageSeconds { get; set; } = 8;
 
+
+    [Setting("Arrival Format", Description = "How each arrival reads: minutes away, the clock time it arrives, or both.", Options = [ArrivalOptions.MinutesOption, ArrivalOptions.ClockOption, ArrivalOptions.BothOption])]
+    public string ArrivalFormat { get; set; } = ArrivalOptions.MinutesOption;
+
+    [Setting("Show Destination", Description = "Show where each service is heading.")]
+    public bool ShowDestination { get; set; } = true;
+
+    [Setting("Due Threshold", Description = "Seconds away under which an arrival shows DUE.", Min = ArrivalOptions.MinDueSeconds, Max = ArrivalOptions.MaxDueSeconds)]
+    public int DueThreshold { get; set; } = ArrivalOptions.DefaultDueSeconds;
+
+    private readonly ArrivalOptions _arrival = new();
+
     private readonly HttpClient _http;
     private readonly TflApi _api;
     private readonly DepartureBoardModel _model = new();
@@ -77,6 +89,7 @@ public class TubeDeparturesApp : WidgetApp
         _http = httpClient;
         _http.Timeout = TimeSpan.FromSeconds(10);
         _api = new TflApi(_http);
+        _arrival.LocalNow = () => Time.GetLocalNow().DateTime;
     }
 
     // ---- view -------------------------------------------------------------------------------------------------------------------
@@ -86,13 +99,13 @@ public class TubeDeparturesApp : WidgetApp
         var styles = new BoardStyles();
         Func<bool> byLine = () => ColorDeparturesByLine;
 
-        var hero = new ListView<Departure>(() => _model.Hero, d => new ScrollSlot(new HeroRow(d, _model, styles, byLine), HeroRow.RowHeight), d => d.Key)
+        var hero = new ListView<Departure>(() => _model.Hero, d => new ScrollSlot(new HeroRow(d, _model, styles, byLine, _arrival), HeroRow.RowHeight), d => d.Key)
             { HAlign = Align.Stretch, Height = HeroRow.RowHeight, ClipChildren = true, EnterOffset = 0, EnterDuration = 420.Ms(), ExitDuration = 420.Ms(), Easing = Easing.InOutCubic };
 
         _pager = new Pager(pageSize: 1, interval: PageSeconds.Seconds(), transition: new SlideTransition(MoveDirection.Up) { Duration = 550.Ms() }, easing: Easing.InOutCubic)
             { Grow = 1 }
             .Bind(() => _model.Pages, token => new ListView<Departure>(() => _model.Page(token.Index),
-                d => new ScrollSlot(new CompactRow(d, _model, styles, byLine), CompactRow.RowHeight), d => d.Key)
+                d => new ScrollSlot(new CompactRow(d, _model, styles, byLine, options: _arrival), CompactRow.RowHeight), d => d.Key)
                 { EnterOffset = 0, EnterDuration = 350.Ms(), ExitDuration = 350.Ms() });
         _rest = _pager;
 
@@ -172,7 +185,7 @@ public class TubeDeparturesApp : WidgetApp
                 },
             };
             var rows = new ListView<Departure>(() => _model.Column(index),
-                d => new ScrollSlot(new CompactRow(d, _model, styles, byLine, countdownWidth: 34, platformWidth: 11), CompactRow.RowHeight), d => d.Key)
+                d => new ScrollSlot(new CompactRow(d, _model, styles, byLine, countdownWidth: 34, platformWidth: 11, options: _arrival), CompactRow.RowHeight), d => d.Key)
                 { HAlign = Align.Stretch, VAlign = Align.Stretch, Grow = 1, ClipChildren = true, EnterOffset = 0, EnterDuration = 350.Ms(), ExitDuration = 350.Ms() };
             return new Stack(Orientation.Vertical) { Grow = 1, HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { header, rows } };
         }
@@ -197,7 +210,7 @@ public class TubeDeparturesApp : WidgetApp
                 new Block(TubeGfx.Amber.WithBrightness(0.3f), height: 1) { VAlign = Align.End },
             },
         };
-        var rows = new ListView<Departure>(() => _model.Visible, d => new ScrollSlot(new PlatformRow(d, _model, styles, byLine), PlatformRow.RowHeight), d => d.Key)
+        var rows = new ListView<Departure>(() => _model.Visible, d => new ScrollSlot(new PlatformRow(d, _model, styles, byLine, _arrival), PlatformRow.RowHeight), d => d.Key)
             { HAlign = Align.Stretch, VAlign = Align.Stretch, Grow = 1, ClipChildren = true, EnterOffset = 0, EnterDuration = 350.Ms(), ExitDuration = 350.Ms(), Margin = new Thickness(0, 2, 0, 0) };
         return new Stack(Orientation.Vertical) { HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { header, rows } };
     }
@@ -213,6 +226,8 @@ public class TubeDeparturesApp : WidgetApp
         _ = Host;   // builds the tree on the first frame
         var style = CurrentStyle;
         int max = style == Style.Platform ? 5 : MaxDepartures;
+        _arrival.Apply(ArrivalFormat, ShowDestination, DueThreshold);
+        _model.DueSeconds = _arrival.DueSeconds;
         _model.Refresh(context.Time, _arrivals?.Value, PlatformFilter, max, perDirection: style == Style.Split, Routes);
         bool byRoute = _model.ColumnsByRoute;
         _stripe0!.Visible = _stripe1!.Visible = byRoute;

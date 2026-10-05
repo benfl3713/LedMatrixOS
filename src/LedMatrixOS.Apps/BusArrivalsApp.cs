@@ -39,6 +39,18 @@ public class BusArrivalsApp : WidgetApp
     [Setting("Page Seconds", Description = "How long each stop stays before sliding to the next.", Min = 3, Max = 30)]
     public int PageSeconds { get; set; } = 8;
 
+
+    [Setting("Arrival Format", Description = "How each arrival reads: minutes away, the clock time it arrives, or both.", Options = [ArrivalOptions.MinutesOption, ArrivalOptions.ClockOption, ArrivalOptions.BothOption])]
+    public string ArrivalFormat { get; set; } = ArrivalOptions.MinutesOption;
+
+    [Setting("Show Destination", Description = "Show where each service is heading.")]
+    public bool ShowDestination { get; set; } = true;
+
+    [Setting("Due Threshold", Description = "Seconds away under which an arrival shows DUE.", Min = ArrivalOptions.MinDueSeconds, Max = ArrivalOptions.MaxDueSeconds)]
+    public int DueThreshold { get; set; } = ArrivalOptions.DefaultDueSeconds;
+
+    private readonly ArrivalOptions _arrival = new();
+
     private readonly HttpClient _http;
     private readonly TflApi _api;
     private readonly TimeSpan _refreshInterval = TimeSpan.FromSeconds(30);
@@ -57,6 +69,7 @@ public class BusArrivalsApp : WidgetApp
         _http = httpClient;
         _http.Timeout = TimeSpan.FromSeconds(10);
         _api = new TflApi(_http);
+        _arrival.LocalNow = () => Time.GetLocalNow().DateTime;
     }
 
     // ---- view -------------------------------------------------------------------------------------------------------------------
@@ -100,7 +113,7 @@ public class BusArrivalsApp : WidgetApp
             },
         };
 
-        var rows = new ListView<Departure>(() => feed.Model.Visible, d => new ScrollSlot(new BusRow(d, feed.Model, styles), BusRow.RowHeight), d => d.Key)
+        var rows = new ListView<Departure>(() => feed.Model.Visible, d => new ScrollSlot(new BusRow(d, feed.Model, styles, _arrival), BusRow.RowHeight), d => d.Key)
             { HAlign = Align.Stretch, EnterOffset = 0, EnterDuration = 350.Ms(), ExitDuration = 350.Ms() };
 
         return new Stack(Orientation.Vertical) { HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { header, rows } };
@@ -113,8 +126,10 @@ public class BusArrivalsApp : WidgetApp
         _ = Host;   // builds the tree on the first frame
 
         bool anyBuses = false;
+        _arrival.Apply(ArrivalFormat, ShowDestination, DueThreshold);
         foreach (var feed in _feeds)
         {
+            feed.Model.DueSeconds = _arrival.DueSeconds;
             feed.Model.Refresh(context.Time, feed.Arrivals?.Value, RouteFilter, MaxBuses);
             if (feed.Model.Visible.Count > 0) anyBuses = true;
         }

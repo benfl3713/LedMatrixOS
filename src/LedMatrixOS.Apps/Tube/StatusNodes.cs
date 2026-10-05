@@ -6,7 +6,8 @@ using SixLabors.ImageSharp;
 namespace LedMatrixOS.Apps.Tube;
 
 /// <summary>What the lower half of the status board shows: one disruption, or the all-clear (<see cref="Status"/> is null).</summary>
-internal sealed record StatusCard(LineStatus? Status)
+/// <param name="ReasonRows">0 hides the reason, 1 scrolls it on one row, 2 wraps it over two static rows.</param>
+internal sealed record StatusCard(LineStatus? Status, int ReasonRows = 1)
 {
     public static readonly StatusCard AllGood = new((LineStatus?)null);
     public string Key => Status?.LineId ?? "ok";
@@ -20,13 +21,15 @@ internal sealed class StatusTile : Node
 {
     private readonly TextRun _code = new();
     private readonly BdfFontParser.BdfFont _font;
+    private readonly Func<LineStatus, string> _codeOf;
     private LineStatus _status;
     private Pixel _color, _ink;
     private TimeSpan _time;
 
-    public StatusTile(LineStatus status, BdfFontParser.BdfFont font, int width, int height)
+    public StatusTile(LineStatus status, BdfFontParser.BdfFont font, int width, int height, Func<LineStatus, string>? codeOf = null)
     {
         _font = font;
+        _codeOf = codeOf ?? (s => TubeColors.Abbreviation(s.LineId, s.Name));
         _status = status;
         Width = width;
         Height = height;
@@ -38,7 +41,7 @@ internal sealed class StatusTile : Node
         _status = status;
         _color = TubeColors.Display(status.LineId);
         _ink = TubeColors.TextOn(_color);
-        _code.Set(_font, TubeColors.Abbreviation(status.LineId, status.Name));
+        _code.Set(_font, _codeOf(status));
     }
 
     public override void Update(FrameContext ctx)
@@ -153,7 +156,7 @@ internal static class StatusCards
         }
 
         var color = TubeColors.Display(s.LineId);
-        return new Stack(Orientation.Vertical, gap: 0)
+        var node = new Stack(Orientation.Vertical, gap: 0)
         {
             Padding = new Thickness(4, 1),
             Children =
@@ -168,8 +171,60 @@ internal static class StatusCards
                         new Label(s.Description.ToUpperInvariant()) { Style = new TextStyle(Fonts.Small, s.Health.Color(), Shadow: false) },
                     },
                 },
-                new MarqueeLabel(FullReason(s.Reason)) { Style = styles.Strip, Height = 8, Margin = new Thickness(0, 1, 0, 0), Speed = 40 },
             },
         };
+        if (card.ReasonRows == 2)
+        {
+            var (first, second) = WrapTwoRows(FullReason(s.Reason), styles.Strip.Font, ReasonWidth);
+            node.Children.Add(new Label(first) { Style = styles.Strip, Height = 8, Margin = new Thickness(0, 1, 0, 0) });
+            if (second.Length > 0) node.Children.Add(new Label(second) { Style = styles.Strip, Height = 8 });
+        }
+        else if (card.ReasonRows == 1)
+            node.Children.Add(new MarqueeLabel(FullReason(s.Reason)) { Style = styles.Strip, Height = 8, Margin = new Thickness(0, 1, 0, 0), Speed = 40 });
+        return node;
+    }
+
+    /// <summary>Pixels available to the reason text on one row (display width less the card padding).</summary>
+    public const int ReasonWidth = 246;
+
+    /// <summary>Whether the reason is too wide for one row, so a two row layout is worth the height.</summary>
+    public static bool IsLongReason(string reason, BdfFontParser.BdfFont font)
+    {
+        var text = FullReason(reason);
+        if (text.Length == 0) return false;
+        var run = new TextRun();
+        run.Set(font, text);
+        return run.Width > ReasonWidth;
+    }
+
+    /// <summary>Splits text at a word boundary into two rows that each fit <paramref name="width"/>; the second ends in "..." if the text is still too long.</summary>
+    public static (string First, string Second) WrapTwoRows(string text, BdfFontParser.BdfFont font, int width)
+    {
+        var run = new TextRun();
+        run.Set(font, text);
+        if (run.Width <= width) return (text, "");
+        int cut = 0;
+        for (int i = 1; i <= text.Length; i++)
+        {
+            if (i < text.Length && text[i] != ' ') continue;
+            run.Set(font, text[..i]);
+            if (run.Width > width) break;
+            cut = i;
+        }
+        if (cut == 0) cut = Math.Min(text.Length, 40);
+        var first = text[..cut].TrimEnd();
+        var rest = text[cut..].TrimStart();
+        run.Set(font, rest);
+        bool trimmed = false;
+        while (run.Width > width && rest.Length > 4)
+        {
+            var body = trimmed ? rest[..^3] : rest;
+            int space = body.LastIndexOf(' ');
+            body = space > 0 ? body[..space] : body[..^1];
+            rest = body.TrimEnd(',', ' ') + "...";
+            trimmed = true;
+            run.Set(font, rest);
+        }
+        return (first, rest);
     }
 }

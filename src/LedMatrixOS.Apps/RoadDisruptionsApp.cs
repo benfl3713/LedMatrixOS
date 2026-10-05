@@ -32,6 +32,9 @@ public class RoadDisruptionsApp : WidgetApp
     [Setting("Page Seconds", Description = "How long each page of disruptions stays before sliding to the next.", Min = 3, Max = 30)]
     public int PageSeconds { get; set; } = 8;
 
+    [Setting("Show Description", Description = "Show where and what the disruption is, as well as the road.")]
+    public bool ShowDescription { get; set; } = true;
+
     private readonly TflApi _api;
     private volatile ILiveData<RoadDisruption[]>? _data;
     private CancellationTokenSource? _pollCts;
@@ -39,6 +42,9 @@ public class RoadDisruptionsApp : WidgetApp
     private RoadDisruption[]? _seen;
     private RoadSeverity _seenMin;
     private IReadOnlyList<RoadDisruption> _view = [];
+    private IReadOnlyList<RoadToken> _rows = [], _heroView = [];
+    private bool _shownDescription = true;
+    private Pager? _heroPager;
     private string _countText = "", _clearDetail = "";
     private Pager? _pager;
     private Node? _board, _allClear;
@@ -60,7 +66,12 @@ public class RoadDisruptionsApp : WidgetApp
 
         _pager = new Pager(pageSize: RowsPerPage, interval: PageSeconds.Seconds(), transition: new SlideTransition(MoveDirection.Up) { Duration = 500.Ms() }, easing: Easing.InOutCubic)
             { Grow = 1 }
-            .Bind(() => _view, d => new RoadRow(d, styles));
+            .Bind(() => _rows, t => new RoadRow(t.Disruption, styles, t.ShowDescription));
+
+        // A lone disruption gets the whole panel.
+        _heroPager = new Pager(pageSize: 1, interval: PageSeconds.Seconds(), transition: new SlideTransition(MoveDirection.Up) { Duration = 500.Ms() }, easing: Easing.InOutCubic)
+            { Grow = 1 }
+            .Bind(() => _heroView, t => new RoadHero(t.Disruption, styles, t.ShowDescription));
 
         var header = new Panel
         {
@@ -85,7 +96,7 @@ public class RoadDisruptionsApp : WidgetApp
             },
         };
 
-        var list = new Stack(Orientation.Vertical) { HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { header, _pager } };
+        var list = new Stack(Orientation.Vertical) { HAlign = Align.Stretch, VAlign = Align.Stretch, Children = { header, _pager, _heroPager } };
         _board = list;
 
         _allClear = new Stack(Orientation.Horizontal, gap: 8)
@@ -124,11 +135,17 @@ public class RoadDisruptionsApp : WidgetApp
         var data = _data;
         var disruptions = data?.Value;
         var min = ParseMin(MinSeverity);
-        if (!ReferenceEquals(disruptions, _seen) || min != _seenMin)
+        if (!ReferenceEquals(disruptions, _seen) || min != _seenMin || ShowDescription != _shownDescription)
         {
+            _shownDescription = ShowDescription;
             _seen = disruptions;
             _seenMin = min;
             _view = Filter(disruptions ?? [], min);
+            var tokens = _view.Select(d => new RoadToken(d, ShowDescription)).ToArray();
+            _rows = tokens.Length == 1 ? [] : tokens;
+            _heroView = tokens.Length == 1 ? tokens : [];
+            _pager!.Visible = _rows.Count > 0;
+            _heroPager!.Visible = _heroView.Count > 0;
             _countText = _view.Count == 0 ? "" : _view.Count == 1 ? "1 disruption" : $"{_view.Count} disruptions";
             _clearDetail = ClearDetail(min);
         }
@@ -206,3 +223,6 @@ public class RoadDisruptionsApp : WidgetApp
         _data = data;
     }
 }
+
+/// <summary>A disruption plus how it is shown, so toggling the description rebuilds the pages.</summary>
+internal readonly record struct RoadToken(RoadDisruption Disruption, bool ShowDescription);

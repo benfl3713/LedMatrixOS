@@ -65,8 +65,8 @@ public class RailDeparturesAppTests(ITestOutputHelper output)
         var app = new RailDeparturesApp();
         var settings = app.GetSettings().ToList();
 
-        Assert.Equal(new[] { "station", "maxServices", "platformFilter", "pageSeconds" }, settings.Select(s => s.Key).ToArray());
-        Assert.Equal(new[] { AppSettingType.String, AppSettingType.Integer, AppSettingType.String, AppSettingType.Integer }, settings.Select(s => s.Type).ToArray());
+        Assert.Equal(new[] { "station", "maxServices", "platformFilter", "pageSeconds", "arrivalFormat", "showDestination", "dueThreshold", "showCallingPoints", "showPlatform" }, settings.Select(s => s.Key).ToArray());
+        Assert.Equal(new[] { AppSettingType.String, AppSettingType.Integer, AppSettingType.String, AppSettingType.Integer, AppSettingType.Select, AppSettingType.Boolean, AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Boolean }, settings.Select(s => s.Type).ToArray());
         Assert.Equal(1, settings.Single(s => s.Key == "maxServices").MinValue);
         Assert.Equal(5, settings.Single(s => s.Key == "maxServices").MaxValue);
         Assert.Equal("rail-departures", app.Id);
@@ -194,6 +194,27 @@ public class RailDeparturesAppTests(ITestOutputHelper output)
     }
 
     // ---- rendering ----------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Golden_MinutesBothAndHiddenColumns()
+    {
+        var (minutes, minutesStage, _) = Board(HardcodedRailSource.Generate(Start));
+        minutes.ArrivalFormat = "Minutes";
+        minutesStage.Step(33, 6);
+        Golden(minutesStage, "rail_departures_minutes");
+
+        var (both, bothStage, _) = Board(HardcodedRailSource.Generate(Start));
+        both.ArrivalFormat = "Both";
+        both.ShowPlatform = false;
+        both.ShowCallingPoints = false;
+        bothStage.Step(33, 6);
+        Golden(bothStage, "rail_departures_both_no_platform_no_calling");
+
+        var (nodest, nodestStage, _) = Board(HardcodedRailSource.Generate(Start));
+        nodest.ShowDestination = false;
+        nodestStage.Step(33, 6);
+        Golden(nodestStage, "rail_departures_no_destination");
+    }
 
     [Fact]
     public void Snapshots()

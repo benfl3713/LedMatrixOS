@@ -240,7 +240,7 @@ public class RoadDisruptionsAppTests(ITestOutputHelper output)
         Fonts.Load();
         var app = new RoadDisruptionsApp(new HttpClient(new FakeHandler()));
         Assert.Equal("road-disruptions", app.Id);
-        Assert.Equal(new[] { "corridors", "minSeverity", "pageSeconds" }, app.GetSettings().Select(s => s.Key).ToArray());
+        Assert.Equal(new[] { "corridors", "minSeverity", "pageSeconds", "showDescription" }, app.GetSettings().Select(s => s.Key).ToArray());
         var corridors = app.GetSettings().Single(s => s.Key == "corridors");
         Assert.Equal(AppSettingType.MultiSearch, corridors.Type);
         Assert.True(corridors.Browse);
@@ -282,6 +282,20 @@ public class RoadDisruptionsAppTests(ITestOutputHelper output)
         stage.Step(33, 8000 / 33 + 20);   // rest, then slide
         Assert.Equal(1, app.DisruptionPager!.PageIndex);
         Golden(stage, "road_disruptions_second_page");
+    }
+
+    [Fact]
+    public void Golden_NoDescription_ListAndHero()
+    {
+        var (app, stage) = Board(Disruptions());
+        app.UpdateSetting("showDescription", false);
+        stage.Step(33, 45);
+        Golden(stage, "road_disruptions_list_no_description");
+
+        var (single, singleStage) = Board([Disruptions()[0]]);
+        single.UpdateSetting("showDescription", false);
+        singleStage.Step(33, 45);
+        Golden(singleStage, "road_disruptions_single_no_description");
     }
 
     [Fact]
