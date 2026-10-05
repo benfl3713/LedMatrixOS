@@ -61,7 +61,6 @@ public sealed class EqualizerApp : WidgetApp
     /// <summary>Fixes the random sequence (tests); null picks a random seed per activation.</summary>
     public int? Seed { get; set; }
 
-    public void SetAudioService(AudioDataService audioService) => _audioService = audioService;
 
     /// <summary>True while the app is showing real audio (tests and diagnostics).</summary>
     public bool IsShowingLiveAudio => _visual?.Source == EqualizerVisual.SourceKind.Live;

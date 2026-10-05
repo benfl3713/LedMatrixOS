@@ -7,34 +7,6 @@ using SixLabors.ImageSharp;
 namespace LedMatrixOS.Graphics.UI;
 
 /// <summary>
-/// Turns <see cref="ILiveData{T}"/> into a text source for a label. The string is only re-formatted when the value changes,
-/// so reading it every frame does not allocate.
-/// </summary>
-public static class LiveText
-{
-    public static Func<string> From<T>(ILiveData<T> data, Func<T?, string> format) => new Memo<T>(data, format).Get;
-
-    public static Func<string> From(ILiveData<string> data) => From(data, static s => s ?? "");
-
-    private sealed class Memo<T>(ILiveData<T> data, Func<T?, string> format)
-    {
-        private T? _last;
-        private string? _text;
-
-        public string Get()
-        {
-            var value = data.Value;
-            if (_text is null || !EqualityComparer<T?>.Default.Equals(value, _last))
-            {
-                _last = value;
-                _text = format(value);
-            }
-            return _text;
-        }
-    }
-}
-
-/// <summary>
 /// Shared text handling for <see cref="Label"/>, <see cref="MarqueeLabel"/> and <see cref="Clock"/>: a style, fixed or bound text,
 /// and a cached glyph map that is rebuilt only when the text or font changes.
 /// </summary>
@@ -113,7 +85,6 @@ public class Label : TextNode
 
     public Label(Func<string> source) => TextSource = source;
 
-    public Label(ILiveData<string> data) => TextSource = LiveText.From(data);
 
     protected override void OnRender(FrameBuffer frame, Rectangle bounds)
     {
@@ -145,7 +116,6 @@ public sealed class MarqueeLabel : TextNode
 
     public MarqueeLabel(Func<string> source) => TextSource = source;
 
-    public MarqueeLabel(ILiveData<string> data) => TextSource = LiveText.From(data);
 
     /// <summary>How long the text rests at the start and at the end.</summary>
     public TimeSpan PauseDuration { get; set; } = TimeSpan.FromSeconds(2);

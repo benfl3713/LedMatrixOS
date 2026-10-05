@@ -29,18 +29,6 @@ public sealed class Sprite
         foreach (var frame in frames) _totalDuration += frame.Duration;
     }
 
-    public static Sprite Load(string path)
-    {
-        using var image = Image.Load<Rgba32>(path);
-        return FromImage(image);
-    }
-
-    public static Sprite Load(Stream stream)
-    {
-        using var image = Image.Load<Rgba32>(stream);
-        return FromImage(image);
-    }
-
     public static Sprite FromImage(Image<Rgba32> image)
     {
         var frames = new List<SpriteFrame>(image.Frames.Count);

@@ -24,14 +24,6 @@ public static class SimpleGraphics
         }
     }
 
-    public static void DrawHorizontalLine(this FrameBuffer frame, int y, int length, Pixel color, int x = 0)
-    {
-        for (int i = 0; i < length; i++)
-        {
-            frame.SetPixel(x + i, y, color);
-        }
-    }
-
     public static void DrawRect(this FrameBuffer frame, Rectangle rect, Pixel color)
     {
         if (rect.Width <= 0 || rect.Height <= 0) return;

@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace LedMatrixOS.Core;
 
@@ -104,18 +103,4 @@ public sealed class FrameBuffer
     public ReadOnlySpan<Pixel> GetPixelsSpan() => _pixels;
 
     public ReadOnlySpan<Pixel> GetPixelRowSpan(int y) => _pixels.AsSpan().Slice(Index(0, y));
-
-    public void RenderImage(Image<Rgb24> image)
-    {
-        for (int y = 0; y < Math.Min(image.Height, Height); y++)
-        {
-            for (int x = 0; x < Math.Min(image.Width, Width); x++)
-            {
-                var pixel = image[x, y];
-                SetPixel(x, y, new Pixel(pixel.R, pixel.G, pixel.B));
-            }
-        }
-    }
 }
-
-

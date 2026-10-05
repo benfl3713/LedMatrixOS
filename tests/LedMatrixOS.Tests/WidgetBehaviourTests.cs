@@ -12,23 +12,18 @@ public class WidgetBehaviourTests
     // ---- Label / bindings ----
 
     [Fact]
-    public void Label_BindsToFuncAndLiveData()
+    public void Label_BindsToFunc()
     {
         string current = "one";
-        var live = new FakeLive<string> { Value = "alpha" };
         var fromFunc = new Label(() => current);
-        var fromLive = new Label(live);
-        var stage = new Stage(new Stack { Children = { fromFunc, fromLive } });
+        var stage = new Stage(new Stack { Children = { fromFunc } });
 
         stage.Step(16);
         Assert.Equal(fromFunc.Bounds.Width, Fonts.Small.MeasureText("one"));
-        Assert.Equal(Fonts.Small.MeasureText("alpha"), fromLive.Bounds.Width);
 
         current = "three";
-        live.Value = "be";
         stage.Step(16);
         Assert.Equal(Fonts.Small.MeasureText("three"), fromFunc.Bounds.Width);
-        Assert.Equal(Fonts.Small.MeasureText("be"), fromLive.Bounds.Width);
     }
 
     [Fact]

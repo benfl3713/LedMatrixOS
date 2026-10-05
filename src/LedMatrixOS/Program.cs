@@ -72,7 +72,6 @@ builder.Services.AddSingleton(sp => new LedMatrixOS.Core.Screens.ScreenCatalog(
     sp.GetRequiredService<AppManager>(),
     DataFile("screens.json")));
 builder.Services.AddSingleton<AudioDataService>();
-builder.Services.AddSingleton<InterruptService>();
 var schedulePath = DataFile("schedule.json");
 // Services that can answer rule conditions register an IAttentionSource. They are lazy: AttentionCoordinator only lets them
 // poll while a schedule rule references their condition.
@@ -110,10 +109,9 @@ builder.Services.AddSingleton<RenderEngine>(sp =>
 {
     var device = sp.GetRequiredService<IMatrixDevice>();
     var apps = sp.GetRequiredService<AppManager>();
-    var interruptService = sp.GetRequiredService<InterruptService>();
     foreach (var app in BuiltInApps.GetAll()) apps.Register(app);
     foreach (var (alias, target, preset) in BuiltInApps.Aliases()) apps.RegisterAlias(alias, target, preset);
-    var renderEngine = new RenderEngine(device, apps, interruptService, logger: sp.GetService<ILogger<RenderEngine>>());
+    var renderEngine = new RenderEngine(device, apps, logger: sp.GetService<ILogger<RenderEngine>>());
     apps.Overlays = renderEngine.Overlays;
     return renderEngine;
 });

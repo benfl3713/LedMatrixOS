@@ -11,7 +11,7 @@ public enum RollStyle
     /// <summary>Each changed digit scrolls vertically out and the new one in, like a mechanical counter.</summary>
     Odometer,
 
-    /// <summary>Each digit sits on a card whose top flap folds down to reveal the new digit, like a split-flap clock (see FlipNumberCard).</summary>
+    /// <summary>Each digit sits on a card whose top flap folds down to reveal the new digit, like a split-flap clock.</summary>
     Flip,
 }
 
