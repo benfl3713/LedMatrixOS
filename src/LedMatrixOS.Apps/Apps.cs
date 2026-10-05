@@ -45,6 +45,8 @@ public static class BuiltInApps
         yield return typeof(StocksApp);
         yield return typeof(PetApp);
         yield return typeof(InputTestApp);
+        yield return typeof(QrApp);
+        yield return typeof(PartyModeApp);
         yield return typeof(WidgetDemoApp);
         yield return typeof(Screens.ScreenApp);
     }
@@ -54,5 +56,6 @@ public static class BuiltInApps
     {
         yield return ("animated-clock", "clock", new Dictionary<string, object> { ["style"] = "Animated" });
         yield return ("flip-clock", "clock", new Dictionary<string, object> { ["style"] = "Flip" });
+        yield return ("wifi", "qr", new Dictionary<string, object> { ["mode"] = "WiFi", ["label"] = "Join Wi-Fi" });
     }
 }

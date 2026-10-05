@@ -343,7 +343,7 @@ public sealed class SettingOptionsTests : IDisposable
         var handler = new TflStubHandler();
         var services = new HttpServices(handler);
         var mgr = new AppManager(services, new ConfigurationBuilder().Build(), 64, 256, storage ?? new AppSettingsStorage(_file));
-        foreach (var app in new[] { typeof(TubeDeparturesApp), typeof(BusArrivalsApp), typeof(CycleHubApp), typeof(CommuteApp), typeof(ClockApp) }) mgr.Register(app);
+        foreach (var app in new[] { typeof(TubeDeparturesApp), typeof(BusArrivalsApp), typeof(CycleHubApp), typeof(CommuteApp), typeof(ClockApp), typeof(QrApp) }) mgr.Register(app);
         foreach (var (alias, target, preset) in BuiltInApps.Aliases()) mgr.RegisterAlias(alias, target, preset);
         return mgr;
     }
