@@ -190,21 +190,8 @@ public class AirQualityAppTests(ITestOutputHelper output)
     public void SteadyState_DoesNotAllocate()
     {
         var (_, stage) = Screen(new MutableLive<AirQualitySnapshot> { Value = Reading(48, 22.4, 38, uv: 6.8) });
-        for (int i = 0; i < 100; i++) { stage.Step(33); stage.Render(); }
+        var run = stage.MeasureSteadyAllocation(windows: 8);
 
-        long least = long.MaxValue;
-        double ms = 0;
-        for (int window = 0; window < 8; window++)
-        {
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            var sw = Stopwatch.StartNew();
-            for (int i = 0; i < 60; i++) { stage.Step(33); stage.Render(); }
-            sw.Stop();
-            ms = sw.Elapsed.TotalMilliseconds / 60;
-            least = Math.Min(least, GC.GetAllocatedBytesForCurrentThread() - before);
-        }
-
-        output.WriteLine($"air quality: {ms:F3} ms/frame");
-        Assert.True(least < 256, $"least allocation in a steady window: {least} bytes");
-    }
+        output.WriteLine($"air quality: {run.MsPerFrame:F3} ms/frame");
+        Assert.True(run.Least < 256, $"least allocation in a steady window: {run.Least} bytes");    }
 }

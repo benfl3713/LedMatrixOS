@@ -280,28 +280,9 @@ public class JourneyAppTests(ITestOutputHelper output)
     public void SteadyState_DoesNotAllocate()
     {
         var (app, stage) = Stage(Board(58));
-        for (int i = 0; i < 400; i++) { stage.Step(33); stage.Render(); }
+        var run = stage.MeasureSteadyAllocation(windows: 12, warmFrames: 400, beginWindow: () => { int page = app.JourneyPager!.PageIndex; int minute = app.CurrentPlan.LeaveInSeconds / 60; return () => page == app.JourneyPager.PageIndex && !app.JourneyPager.IsTransitioning && minute == app.CurrentPlan.LeaveInSeconds / 60; });
 
-        int measured = 0;
-        long least = long.MaxValue;
-        double ms = 0;
-        for (int window = 0; window < 12; window++)
-        {
-            int page = app.JourneyPager!.PageIndex;
-            int minute = app.CurrentPlan.LeaveInSeconds / 60;
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            var sw = Stopwatch.StartNew();
-            for (int i = 0; i < 60; i++) { stage.Step(33); stage.Render(); }
-            sw.Stop();
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            if (page != app.JourneyPager.PageIndex || app.JourneyPager.IsTransitioning || minute != app.CurrentPlan.LeaveInSeconds / 60) continue;
-            measured++;
-            ms = sw.Elapsed.TotalMilliseconds / 60;
-            least = Math.Min(least, allocated);
-        }
-
-        output.WriteLine($"journey: {ms:F3} ms/frame, {measured} steady windows");
-        Assert.True(measured >= 3);
-        Assert.True(least < 256, $"least allocation in a steady window: {least} bytes");
-    }
+        output.WriteLine($"journey: {run.MsPerFrame:F3} ms/frame, {run.Measured} steady windows");
+        Assert.True(run.Measured >= 3);
+        Assert.True(run.Least < 256, $"least allocation in a steady window: {run.Least} bytes");    }
 }

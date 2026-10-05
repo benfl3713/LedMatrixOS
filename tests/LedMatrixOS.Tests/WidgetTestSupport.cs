@@ -81,3 +81,42 @@ internal sealed class Stage
 
     public static bool Same(FrameBuffer a, FrameBuffer b) => a.GetPixelsSpan().SequenceEqual(b.GetPixelsSpan());
 }
+
+/// <summary>Result of <see cref="StageAllocationExtensions.MeasureSteadyAllocation"/>.</summary>
+/// <param name="Least">Smallest allocation, in bytes, over the steady windows.</param>
+/// <param name="MsPerFrame">Frame time of the last steady window.</param>
+/// <param name="Measured">How many windows were steady and so counted.</param>
+internal readonly record struct AllocationMeasurement(long Least, double MsPerFrame, int Measured);
+
+internal static class StageAllocationExtensions
+{
+    /// <summary>
+    /// Warms the stage up, then runs <paramref name="windows"/> windows of 60 frames at 33 ms and reports the least
+    /// allocation seen. <paramref name="beginWindow"/> is called before each window and returns a predicate, evaluated
+    /// after it, that says whether the window was steady (e.g. no page change); windows that were not are skipped.
+    /// </summary>
+    public static AllocationMeasurement MeasureSteadyAllocation(
+        this Stage stage, int windows = 6, int warmFrames = 100, Func<Func<bool>>? beginWindow = null)
+    {
+        for (int i = 0; i < warmFrames; i++) { stage.Step(33); stage.Render(); }
+
+        int measured = 0;
+        long least = long.MaxValue;
+        double ms = 0;
+        for (int window = 0; window < windows; window++)
+        {
+            var isSteady = beginWindow?.Invoke();
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            for (int i = 0; i < 60; i++) { stage.Step(33); stage.Render(); }
+            sw.Stop();
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            if (isSteady != null && !isSteady()) continue;
+            measured++;
+            ms = sw.Elapsed.TotalMilliseconds / 60;
+            least = Math.Min(least, allocated);
+        }
+
+        return new AllocationMeasurement(least, ms, measured);
+    }
+}

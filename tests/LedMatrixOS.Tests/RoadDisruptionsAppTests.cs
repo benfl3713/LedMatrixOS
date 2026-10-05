@@ -324,21 +324,8 @@ public class RoadDisruptionsAppTests(ITestOutputHelper output)
     public void SteadyState_DoesNotAllocate()
     {
         var (_, stage) = Board(Disruptions(), "Minimal");
-        for (int i = 0; i < 100; i++) { stage.Step(33); stage.Render(); }
+        var run = stage.MeasureSteadyAllocation(windows: 6);
 
-        long least = long.MaxValue;
-        double ms = 0;
-        for (int window = 0; window < 6; window++)
-        {
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            var sw = Stopwatch.StartNew();
-            for (int i = 0; i < 60; i++) { stage.Step(33); stage.Render(); }
-            sw.Stop();
-            ms = sw.Elapsed.TotalMilliseconds / 60;
-            least = Math.Min(least, GC.GetAllocatedBytesForCurrentThread() - before);
-        }
-
-        output.WriteLine($"road disruptions: {ms:F3} ms/frame");
-        Assert.True(least < 256, $"least allocation in a steady window: {least} bytes");
-    }
+        output.WriteLine($"road disruptions: {run.MsPerFrame:F3} ms/frame");
+        Assert.True(run.Least < 256, $"least allocation in a steady window: {run.Least} bytes");    }
 }
