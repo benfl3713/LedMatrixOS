@@ -21,8 +21,11 @@ public class HomeAssistantTilesApp : WidgetApp
     [Setting("Entities", Editor = "ha_entities", Description = "Comma separated entities as id|Label|flags (label and flags optional): sensor.lounge_temp|Lounge|spark, light.kitchen|Kitchen|icon. Flags: icon = pixel glyph for light, switch, lock and door/window/motion sensors; spark = 24h history line for numeric sensors. Unknown flags are ignored.")]
     public string Entities { get; set; } = "";
 
-    [Setting("Page Seconds", Description = "How long each page of four tiles stays up.", Min = 3, Max = 30)]
+    [Setting("Page Seconds", Description = "How long each page of tiles stays up.", Min = 3, Max = 30)]
     public int PageSeconds { get; set; } = 6;
+
+    [Setting("Tiles Per Page", Description = "How many tiles share a page. Fewer tiles are wider and show bigger values.", Min = 2, Max = 4)]
+    public int TilesPerPage { get; set; } = 4;
 
     private readonly HaApi _api;
     private volatile ILiveData<HaState?[]>? _data;
@@ -61,7 +64,8 @@ public class HomeAssistantTilesApp : WidgetApp
                 _board!.Tiles = tiles;
             }
         }
-        _board!.PageSeconds = PageSeconds;
+        _board!.PerPage = TilesPerPage;
+        _board.PageSeconds = PageSeconds;
         base.Update(context, cancellationToken);
     }
 

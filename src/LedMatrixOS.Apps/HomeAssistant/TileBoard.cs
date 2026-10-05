@@ -8,7 +8,7 @@ using SixLabors.ImageSharp;
 
 namespace LedMatrixOS.Apps.HomeAssistant;
 
-/// <summary>One page of up to <see cref="TileBoard.PerPage"/> tiles. Compared by reference so the pager rebuilds only when the app hands it new pages.</summary>
+/// <summary>One page of up to <see cref="TileBoard.MaxPerPage"/> tiles. Compared by reference so the pager rebuilds only when the app hands it new pages.</summary>
 internal sealed class TilePage(TileData[] tiles)
 {
     public TileData[] Tiles { get; } = tiles;
@@ -21,7 +21,9 @@ internal sealed class TilePage(TileData[] tiles)
 /// </summary>
 internal sealed class TileBoard : Panel
 {
-    public const int PerPage = 4;
+    public const int MaxPerPage = 4;
+
+    private int _perPage = MaxPerPage;
 
     private readonly Pager _pager;
     private IReadOnlyList<TilePage> _pages = [];
@@ -42,6 +44,19 @@ internal sealed class TileBoard : Panel
         set => _pager.Interval = TimeSpan.FromSeconds(Math.Max(1, value));
     }
 
+    /// <summary>How many tiles share a page (2 to 4); fewer tiles mean wider tiles and bigger digits.</summary>
+    public int PerPage
+    {
+        get => _perPage;
+        set
+        {
+            value = Math.Clamp(value, 2, MaxPerPage);
+            if (value == _perPage) return;
+            _perPage = value;
+            Tiles = _tiles;
+        }
+    }
+
     public Pager Pager => _pager;
 
     public int PageCount => _pager.PageCount;
@@ -53,8 +68,8 @@ internal sealed class TileBoard : Panel
         {
             _tiles = value;
             var pages = new List<TilePage>();
-            for (int i = 0; i < value.Count; i += PerPage)
-                pages.Add(new TilePage(value.Skip(i).Take(PerPage).ToArray()));
+            for (int i = 0; i < value.Count; i += _perPage)
+                pages.Add(new TilePage(value.Skip(i).Take(_perPage).ToArray()));
             _pages = pages;
         }
     }
@@ -129,6 +144,7 @@ internal sealed class TileFace : Node
     private readonly TileData _tile;
     private readonly bool _divider;
     private readonly TextRun _label = new(), _value = new(), _unit = new();
+    private int _unitX;   // offset of the unit from the left of the value+unit group
     private int _laidOutWidth = -1;
 
     public TileFace(TileData tile, bool divider)
@@ -170,11 +186,17 @@ internal sealed class TileFace : Node
         }
         else
         {
-            int vy = spark ? bounds.Y + 14 : bounds.Y + (bounds.Height - _value.Height) / 2 - 2;
-            _value.Draw(frame, x + (tileW - _value.Width) / 2, vy, color, shadow: true);
+            int vy = spark ? bounds.Y + 14 : bounds.Y + (bounds.Height - _value.Height) / 2 + (_inlineUnit ? 1 : -2);
+            int groupW = _inlineUnit ? _unitX + _unit.Width : _value.Width;
+            int gx = x + (tileW - groupW) / 2;
+            _value.Draw(frame, gx, vy, color, shadow: true);
+            // The unit sits inline after the value, bottom aligned with it.
+            if (_unit.Width > 0 && _inlineUnit) _unit.Draw(frame, gx + _unitX, vy + _value.Height - _unit.Height - _unitDrop, Grey);
         }
 
-        _unit.Draw(frame, x + (tileW - _unit.Width) / 2, bounds.Bottom - 12, Grey);
+        // Text tiles (setup, no entities) carry a sub line rather than a unit, which stays on its own row below the headline.
+        if (!_inlineUnit) _unit.Draw(frame, x + (tileW - _unit.Width) / 2, bounds.Bottom - 12, Grey);
+
         frame.Fill(new Rectangle(x + tileW / 2 - 8, bounds.Bottom - 3, 16, 2), color.WithBrightness(0.6f));
     }
 
@@ -183,18 +205,46 @@ internal sealed class TileFace : Node
         _laidOutWidth = tileW;
         int room = tileW - 6;
         _label.Set(Fonts.QuiteSmall, Fonts.QuiteSmall.TruncateWithEllipsis(_tile.Label, room));
-        var font = FitFont(_tile.Value, room);
-        _value.Set(font, font.TruncateWithEllipsis(_tile.Value, room));
-        _unit.Set(Fonts.QuiteSmall, Fonts.QuiteSmall.TruncateWithEllipsis(_tile.Unit, room));
+        bool spark = _tile.Series is { Length: > 1 };
+        string unit = _tile.Unit;
+        // Largest value font where "value unit" fits on one line; the unit is a smaller font so it reads as a suffix.
+        (BdfFont value, BdfFont unit)[] candidates = spark
+            ? [(Fonts.Big, Fonts.QuiteSmall), (Fonts.Small, Fonts.QuiteSmall)]
+            : [(Huge, Fonts.Small), (Fonts.Big, Fonts.QuiteSmall), (Fonts.Small, Fonts.QuiteSmall)];
+        BdfFont vf = Fonts.Small, uf = Fonts.QuiteSmall;
+        foreach (var (v, u) in candidates)
+        {
+            vf = v; uf = u;
+            int w = v.MeasureText(_tile.Value) + (unit.Length > 0 ? UnitGap + u.MeasureText(unit) : 0);
+            if (w <= room) break;
+        }
+        _inlineUnit = _tile.Kind == TileKind.Number;
+        if (!_inlineUnit)
+        {
+            if (!spark && Huge.MeasureText(_tile.Value) <= room) vf = Huge; else if (Fonts.Big.MeasureText(_tile.Value) <= room) vf = Fonts.Big; else vf = Fonts.Small;
+            _value.Set(vf, vf.TruncateWithEllipsis(_tile.Value, room));
+            _unit.Set(Fonts.QuiteSmall, Fonts.QuiteSmall.TruncateWithEllipsis(unit, room));
+            _unitX = 0;
+            return;
+        }
+        _value.Set(vf, vf.TruncateWithEllipsis(_tile.Value, room));
+        int left = room - _value.Width - UnitGap;
+        if (unit.Length > 0 && left >= uf.MeasureText(unit[..1]))
+        {
+            _unit.Set(uf, uf.TruncateWithEllipsis(unit, left));
+            _unitX = _value.Width + UnitGap;
+        }
+        else
+        {
+            _unit.Set(uf, "");
+            _unitX = 0;
+        }
+        _unitDrop = ReferenceEquals(vf, Huge) ? 4 : 2;
     }
 
-    private BdfFont FitFont(string value, int room)
-    {
-        bool spark = _tile.Series is { Length: > 1 };
-        if (!spark && Huge.MeasureText(value) <= room) return Huge;
-        if (Fonts.Big.MeasureText(value) <= room) return Fonts.Big;
-        return Fonts.Small;
-    }
+    private const int UnitGap = 2;
+    private int _unitDrop;
+    private bool _inlineUnit;
 }
 
 /// <summary>Small pixel icons (drawn at 2x) for on/off entities. '#' is solid, 'o' a dimmer accent, '.' empty.</summary>

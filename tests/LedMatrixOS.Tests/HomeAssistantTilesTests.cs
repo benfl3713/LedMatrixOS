@@ -119,7 +119,7 @@ public class HomeAssistantTilesTests
         Fonts.Load();
         var app = new HomeAssistantTilesApp(new HttpClient());
         Assert.Equal("ha-tiles", app.Id);
-        Assert.Equal(["entities", "pageSeconds"], app.GetSettings().Select(s => s.Key));
+        Assert.Equal(["entities", "pageSeconds", "tilesPerPage"], app.GetSettings().Select(s => s.Key));
     }
 
     [Fact]
@@ -134,6 +134,18 @@ public class HomeAssistantTilesTests
     {
         var (_, stage) = Rig("sensor.lounge_temp|Lounge", [S("sensor.lounge_temp", "21.5", "°C")]);
         Golden(stage, "ha_tiles_single");
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void Golden_TilesPerPage_WiderTilesGetBiggerValues(int perPage)
+    {
+        var (app, stage) = Rig(Four, FourStates(), steps: 1);
+        app.TilesPerPage = perPage;
+        stage.Step(33, 20);
+        Assert.Equal(perPage == 2 ? 2 : 2, app.Board!.PageCount);
+        Golden(stage, $"ha_tiles_per_page_{perPage}");
     }
 
     [Fact]
