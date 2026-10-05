@@ -219,6 +219,12 @@ class FakeApi implements LedApi {
   }
 
   @override
+  Future<Result<void>> sendInput(int player, String button, String state) async {
+    calls.add('input:$player:$button:$state');
+    return const Ok(null);
+  }
+
+  @override
   Future<Result<void>> sendAlert({String? message, String? color}) async {
     calls.add('alert:$message:$color');
     return const Ok(null);

@@ -13,8 +13,6 @@ namespace LedMatrixOS.Endpoints;
 /// </summary>
 public static class InputEndpoints
 {
-    public sealed record InputRequest(int? Player, string? Button, string? State);
-
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly byte[] Ok = Encoding.UTF8.GetBytes("{\"ok\":true}");
 
@@ -22,7 +20,7 @@ public static class InputEndpoints
     {
         endpoints.MapPost("/api/input", ([FromServices] RenderEngine engine, [FromBody] InputRequest request) =>
         {
-            if (!Apply(engine.Input, null, request, out var error)) return Results.BadRequest(error);
+            if (!request.TryApply(engine.Input, null, out var error)) return Results.BadRequest(error);
             return Results.Accepted();
         });
 
@@ -56,7 +54,7 @@ public static class InputEndpoints
                     try { request = JsonSerializer.Deserialize<InputRequest>(buffer.AsSpan(0, length), Json); }
                     catch (JsonException) { }
 
-                    if (request is not null && Apply(engine.Input, client, request, out error))
+                    if (request is not null && request.TryApply(engine.Input, client, out error))
                         await socket.SendAsync(Ok, WebSocketMessageType.Text, true, ct);
                     else
                         await socket.SendAsync(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { ok = false, error }, Json)), WebSocketMessageType.Text, true, ct);
@@ -73,15 +71,5 @@ public static class InputEndpoints
         var scratch = new byte[1024];
         WebSocketReceiveResult r;
         do { r = await socket.ReceiveAsync(scratch, ct); } while (!r.EndOfMessage);
-    }
-
-    /// <summary>Validates and queues a request. <paramref name="client"/> (a socket) tracks held buttons for release; null for REST.</summary>
-    public static bool Apply(InputHub hub, InputClient? client, InputRequest request, out string error)
-    {
-        if (!InputParser.TryParse(request.Player, request.Button, request.State, out var e, out bool press, out error)) return false;
-
-        if (press) _ = client?.SendPress(e.Player, e.Button) ?? hub.EnqueuePress(e.Player, e.Button);
-        else _ = client?.Send(e) ?? hub.Enqueue(e);
-        return true;
     }
 }

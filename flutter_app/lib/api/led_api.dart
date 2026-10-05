@@ -50,6 +50,9 @@ abstract class LedApi {
   /// With a [message] posts the coloured message alert; without one, the plain flash.
   Future<Result<void>> sendAlert({String? message, String? color});
 
+  /// Controller input. [button]: up, down, left, right, a, b, start, select. [state]: down, up or press (a tap).
+  Future<Result<void>> sendInput(int player, String button, String state);
+
   Future<Result<List<ScreenSummary>>> listScreens();
   Future<Result<ScreenDefinition>> getScreen(String id);
 
@@ -276,6 +279,13 @@ class HttpLedApi implements LedApi {
       (_) {},
     );
   }
+
+  @override
+  Future<Result<void>> sendInput(int player, String button, String state) => _send(
+        () => _client.post(_uri('/api/input'),
+            headers: _json, body: jsonEncode({'player': player, 'button': button, 'state': state})),
+        (_) {},
+      );
 
   static Map<String, int>? _rgb(String hex) {
     var s = hex.trim();
