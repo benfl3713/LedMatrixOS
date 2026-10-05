@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using System.Net;
 using LedMatrixOS.Apps.Attention;
+using LedMatrixOS.Apps.Calendar;
 using LedMatrixOS.Core.Scheduling;
 using Xunit;
 
@@ -292,6 +293,50 @@ public class AttentionSourceTests
             Assert.Equal("bin_day", source.Kind);
         }
         finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task BinDay_IncludesCalendarOneOffs_AndCachesTheFeedForFifteenMinutes()
+    {
+        var clock = new FakeTime { Now = new DateTimeOffset(2026, 10, 9, 18, 0, 0, TimeSpan.Zero) };   // Friday evening
+        int fetches = 0;
+        string? keyword = "bulky";
+        Task<List<CalEvent>> Fetch(CancellationToken _)
+        {
+            Interlocked.Increment(ref fetches);
+            return Task.FromResult(new List<CalEvent>
+            {
+                new("Bulky waste collection", new DateTimeOffset(2026, 10, 10, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 11, 0, 0, 0, TimeSpan.Zero), true, null),
+                new("Dentist", new DateTimeOffset(2026, 10, 9, 9, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 9, 10, 0, 0, TimeSpan.Zero), false, null),
+            });
+        }
+        // The regular rule (Monday) is not due on a Friday evening or Saturday.
+        var source = new BinDayDueSource(() => ("Black|#333|Mon|1|2026-10-05", null), () => keyword, Fetch, clock);
+
+        Assert.False(source.IsActive(null));                       // feed not loaded yet; this starts the first background fetch
+        for (int i = 0; i < 100 && Volatile.Read(ref fetches) < 1; i++) await Task.Delay(20);
+        await Task.Delay(50);
+        Assert.True(source.IsActive(null));                        // one-off on Saturday, evening before
+        // Inside 15 minutes of the last fetch nothing is fetched again.
+        clock.Now = new DateTimeOffset(2026, 10, 9, 18, 14, 0, TimeSpan.Zero);
+        Assert.True(source.IsActive(null));
+        await Task.Delay(50);
+        Assert.Equal(1, fetches);
+
+        // After 15 minutes a background refresh is started.
+        clock.Now = new DateTimeOffset(2026, 10, 9, 18, 16, 0, TimeSpan.Zero);
+        Assert.True(source.IsActive(null));
+        for (int i = 0; i < 100 && Volatile.Read(ref fetches) < 2; i++) await Task.Delay(20);
+        Assert.Equal(2, fetches);
+
+        clock.Now = new DateTimeOffset(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
+        Assert.True(source.IsActive(null));                        // the day itself
+        clock.Now = new DateTimeOffset(2026, 10, 11, 8, 0, 0, TimeSpan.Zero);
+        Assert.False(source.IsActive(null));                       // gone the day after
+
+        // Without a keyword the calendar is ignored.
+        keyword = "";
+        Assert.False(source.IsActive(null));
     }
 
     // ---- coordinator + schedule -----------------------------------------------------------------------------------

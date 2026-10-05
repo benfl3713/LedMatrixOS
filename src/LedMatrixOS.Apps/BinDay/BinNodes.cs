@@ -62,8 +62,11 @@ internal sealed class BinIcon : Node
 
     protected override void OnRender(FrameBuffer frame, Rectangle bounds)
     {
-        var body = Colour;
-        var edge = Mix(body, Pixel.White, 0.45f);
+        // A black bin would vanish on the panel: lift it to a visible grey and give it a lighter outline.
+        const float MinBodyLuma = 80f;
+        bool dim = TubeColors.Luma(Colour) < MinBodyLuma;
+        var body = TubeColors.Lift(Colour, MinBodyLuma);
+        var edge = Mix(body, Pixel.White, dim ? 0.7f : 0.45f);
         var lid = Mix(body, Pixel.White, 0.18f);
         var shade = Mix(body, Pixel.Black, 0.35f);
 
