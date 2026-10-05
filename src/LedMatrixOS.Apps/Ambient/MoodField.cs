@@ -43,9 +43,14 @@ internal sealed class MoodField : Node
             _r = look.Color.R; _g = look.Color.G; _b = look.Color.B;
             _primed = true;
         }
+        else if (look.FadeSeconds <= 0f)
+        {
+            _r = look.Color.R; _g = look.Color.G; _b = look.Color.B;
+        }
         else
         {
-            float k = 1f - MathF.Exp(-_dt / 0.15f);
+            // The time constant is a third of the fade so the colour has visibly settled by the end of it.
+            float k = 1f - MathF.Exp(-_dt / (look.FadeSeconds * 0.33f));
             _r += (look.Color.R - _r) * k;
             _g += (look.Color.G - _g) * k;
             _b += (look.Color.B - _b) * k;
