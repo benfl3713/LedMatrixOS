@@ -16,6 +16,8 @@ internal sealed class PlaneRow
     public bool HasTrack;
     public float Track;
     public double DistKm, BearingDeg;
+    /// <summary>Raw altitude (metres) and speed (m/s) for sorting; unknown sorts last.</summary>
+    public double AltitudeMetres, VelocityMs;
     /// <summary>Position on the radar as a fraction of its radius (x right, y down), within the unit circle.</summary>
     public float RadarX, RadarY;
 
@@ -28,6 +30,8 @@ internal sealed class PlaneRow
         var op = AirlineLookup.Describe(a.Callsign, a.Country);
         if (!string.Equals(op, Operator)) Operator = op;
 
+        AltitudeMetres = a.AltitudeMetres ?? double.NegativeInfinity;
+        VelocityMs = a.VelocityMs ?? double.NegativeInfinity;
         HasAltitude = a.AltitudeMetres is not null;
         if (a.AltitudeMetres is { } m)
         {
@@ -58,6 +62,14 @@ internal sealed class PlaneRow
 
 internal readonly record struct PlanePageToken(int Index);
 
+internal enum PlaneSort { Nearest, Highest, Fastest }
+
+/// <summary>
+/// Which aircraft the board keeps and how it orders them. The default value is the original behaviour: airborne aircraft only, any altitude,
+/// nearest first. Altitudes are in the display unit (feet or metres); 0 means no limit.
+/// </summary>
+internal readonly record struct PlaneFilter(int MinAltitude = 0, int MaxAltitude = 0, bool ShowGround = false, PlaneSort Sort = PlaneSort.Nearest);
+
 /// <summary>
 /// Turns polled aircraft into what the board shows: aircraft in range sorted nearest first (the hero, then the rest in pages),
 /// and the set of aircraft that have just entered range. Published arrays only change when a new snapshot (or a setting) arrives,
@@ -74,6 +86,7 @@ internal sealed class PlaneBoardModel
     private PlaneSnapshot? _applied;
     private double _radius = -1;
     private bool _feet, _baselined;
+    private PlaneFilter _filter;
     private PlaneRow[] _all = [];
     private PlaneRow[] _rest = [];
     private PlanePageToken[] _tokens = [];
@@ -90,6 +103,15 @@ internal sealed class PlaneBoardModel
     public IReadOnlyList<PlaneRow> NewRows => _new;
 
     /// <summary>Text for the status strip, rebuilt when the count changes.</summary>
+    private static bool InAltitudeBand(Aircraft a, PlaneFilter filter, bool feet)
+    {
+        if (filter.MinAltitude <= 0 && filter.MaxAltitude <= 0) return true;
+        // With a limit set, an aircraft that reports no altitude cannot be placed in the band.
+        if (a.AltitudeMetres is not { } m) return false;
+        double v = feet ? PlaneMath.MetresToFeet(m) : m;
+        return (filter.MinAltitude <= 0 || v >= filter.MinAltitude) && (filter.MaxAltitude <= 0 || v <= filter.MaxAltitude);
+    }
+
     public string CountText { get; private set; } = "0 in range";
 
     public void Reset()
@@ -97,6 +119,7 @@ internal sealed class PlaneBoardModel
         _applied = null;
         _baselined = false;
         _radius = -1;
+        _filter = default;
         _pool.Clear();
         _present.Clear();
         _new.Clear();
@@ -107,28 +130,35 @@ internal sealed class PlaneBoardModel
     }
 
     /// <summary>Applies a snapshot. Failed snapshots are ignored so the last good aircraft survive a blip. Returns true when the rows were rebuilt.</summary>
-    public bool Refresh(PlaneSnapshot? snapshot, double radiusKm, bool feet)
+    public bool Refresh(PlaneSnapshot? snapshot, double radiusKm, bool feet, PlaneFilter filter = default)
     {
         _new.Clear();
         if (snapshot is not { Status: PlaneStatus.Ok }) return false;
-        if (ReferenceEquals(snapshot, _applied) && radiusKm == _radius && feet == _feet) return false;
+        if (ReferenceEquals(snapshot, _applied) && radiusKm == _radius && feet == _feet && filter == _filter) return false;
 
         _applied = snapshot;
         _radius = radiusKm;
         _feet = feet;
+        _filter = filter;
 
         _scratch.Clear();
         foreach (var a in snapshot.Aircraft)
         {
-            if (a.OnGround || a.Latitude is not { } lat || a.Longitude is not { } lon) continue;
+            if ((a.OnGround && !filter.ShowGround) || a.Latitude is not { } lat || a.Longitude is not { } lon) continue;
             double d = PlaneMath.HaversineKm(snapshot.HomeLatitude, snapshot.HomeLongitude, lat, lon);
             if (d > radiusKm) continue;
+            if (!InAltitudeBand(a, filter, feet)) continue;
             if (!_pool.TryGetValue(a.Icao24, out var row)) _pool[a.Icao24] = row = new PlaneRow();
             row.Set(a, snapshot.HomeLatitude, snapshot.HomeLongitude, d, radiusKm, feet);
             _scratch.Add(row);
         }
 
-        _scratch.Sort(static (x, y) => x.DistKm.CompareTo(y.DistKm));
+        _scratch.Sort(filter.Sort switch
+        {
+            PlaneSort.Highest => static (x, y) => y.AltitudeMetres.CompareTo(x.AltitudeMetres) is var c and not 0 ? c : x.DistKm.CompareTo(y.DistKm),
+            PlaneSort.Fastest => static (x, y) => y.VelocityMs.CompareTo(x.VelocityMs) is var c and not 0 ? c : x.DistKm.CompareTo(y.DistKm),
+            _ => static (x, y) => x.DistKm.CompareTo(y.DistKm),
+        });
         // Duplicate icao24 in one response would share a row; keep the first.
         for (int i = _scratch.Count - 1; i > 0; i--)
             if (ReferenceEquals(_scratch[i], _scratch[i - 1])) _scratch.RemoveAt(i);

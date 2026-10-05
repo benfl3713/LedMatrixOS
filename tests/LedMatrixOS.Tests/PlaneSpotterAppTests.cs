@@ -285,14 +285,60 @@ public class PlaneSpotterAppTests(ITestOutputHelper output)
         var app = new PlaneSpotterApp(new FakePlaneSource());
         var settings = app.GetSettings().ToList();
 
-        Assert.Equal(new[] { "location", "radius", "alerts", "units", "pageSeconds" }, settings.Select(s => s.Key).ToArray());
-        Assert.Equal(new[] { AppSettingType.Search, AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Select, AppSettingType.Integer }, settings.Select(s => s.Type).ToArray());
+        Assert.Equal(new[] { "location", "radius", "alerts", "units", "minAltitude", "maxAltitude", "hideGroundTraffic", "sort", "pageSeconds" }, settings.Select(s => s.Key).ToArray());
+        Assert.Equal(new[] { AppSettingType.Search, AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Select, AppSettingType.Integer, AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Select, AppSettingType.Integer }, settings.Select(s => s.Type).ToArray());
         Assert.Equal(5, settings[1].MinValue);
         Assert.Equal(100, settings[1].MaxValue);
         Assert.Equal(25, app.Radius);
         Assert.True(app.Alerts);
         Assert.Equal("plane-spotter", app.Id);
         Assert.DoesNotContain(settings, s => s.Key.Contains("lat", StringComparison.OrdinalIgnoreCase) || s.Key.Contains("lon", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Filter_AltitudeBand_GroundTraffic_AndSort()
+    {
+        Aircraft[] planes =
+        [
+            Ac("a", "LOW", 0, 5, altM: 600, ms: 60),
+            Ac("b", "MID", 90, 10, altM: 3000, ms: 200),
+            Ac("c", "HIGH", 180, 15, altM: 11000, ms: 250),
+            Ac("d", "TAXI", 270, 2, altM: 0, ms: 5, ground: true),
+            Ac("e", "NOALT", 45, 3, altM: null, ms: 100),
+        ];
+        var model = new PlaneBoardModel();
+
+        model.Refresh(Snap(planes), 25, true);
+        Assert.Equal(["NOALT", "LOW", "MID", "HIGH"], model.All.Select(r => r.Callsign));            // default: nearest first, no ground
+
+        model.Refresh(Snap(planes), 25, true, new PlaneFilter(ShowGround: true));
+        Assert.Equal("TAXI", model.Hero!.Callsign);
+
+        model.Refresh(Snap(planes), 25, true, new PlaneFilter(Sort: PlaneSort.Highest));
+        Assert.Equal(["HIGH", "MID", "LOW", "NOALT"], model.All.Select(r => r.Callsign));
+
+        model.Refresh(Snap(planes), 25, true, new PlaneFilter(Sort: PlaneSort.Fastest));
+        Assert.Equal(["HIGH", "MID", "NOALT", "LOW"], model.All.Select(r => r.Callsign));
+
+        // 3000 m is about 9843 ft: a 2000-30000 ft band keeps MID and HIGH (36089 ft is out), and drops the aircraft with no altitude
+        model.Refresh(Snap(planes), 25, true, new PlaneFilter(MinAltitude: 2000, MaxAltitude: 30000));
+        Assert.Equal(["MID"], model.All.Select(r => r.Callsign));
+        model.Refresh(Snap(planes), 25, false, new PlaneFilter(MinAltitude: 2000));                  // metres this time
+        Assert.Equal(["MID", "HIGH"], model.All.Select(r => r.Callsign));
+    }
+
+    [Fact]
+    public void Golden_SortHighest_PutsTheHighestAircraftInTheHero()
+    {
+        var (_, stage, _) = Spotter(Snap(Several()), configure: a => a.Sort = "Highest");
+        Golden(stage, "plane_spotter_sort_highest");
+    }
+
+    [Fact]
+    public void Golden_AltitudeBand_KeepsOnlyTheMiddleOfTheSky()
+    {
+        var (_, stage, _) = Spotter(Snap(Several()), configure: a => { a.MinAltitude = 5000; a.MaxAltitude = 25000; });
+        Golden(stage, "plane_spotter_altitude_band");
     }
 
     private static IConfiguration Config(params (string, string)[] values) =>

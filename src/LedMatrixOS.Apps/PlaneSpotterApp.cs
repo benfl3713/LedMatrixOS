@@ -46,6 +46,18 @@ public sealed class PlaneSpotterApp : WidgetApp
     [Setting("Units", Description = "Altitude units.", Options = ["Feet", "Metres"])]
     public string Units { get; set; } = "Feet";
 
+    [Setting("Min Altitude", Description = "Hide aircraft below this altitude, in the chosen Units. 0 means no limit; aircraft that report no altitude are hidden while a limit is set.", Min = 0, Max = 60000)]
+    public int MinAltitude { get; set; }
+
+    [Setting("Max Altitude", Description = "Hide aircraft above this altitude, in the chosen Units. 0 means no limit.", Min = 0, Max = 60000)]
+    public int MaxAltitude { get; set; }
+
+    [Setting("Hide Ground Traffic", Description = "Leave out aircraft that are on the ground.")]
+    public bool HideGroundTraffic { get; set; } = true;
+
+    [Setting("Sort", Description = "Which aircraft comes first (the big one): the nearest, the highest or the fastest.", Options = ["Nearest", "Highest", "Fastest"])]
+    public string Sort { get; set; } = "Nearest";
+
     [Setting("Page Seconds", Description = "How long each page of further aircraft stays before sliding to the next.", Min = 3, Max = 30)]
     public int PageSeconds { get; set; } = 6;
 
@@ -225,7 +237,7 @@ public sealed class PlaneSpotterApp : WidgetApp
 
     private string HintText() => _state switch
     {
-        State.NoLocation => "Set PlaneSpotter lat/lon in config",
+        State.NoLocation => "Pick a Location in this app's settings",
         State.Busy => "Backing off, will retry",
         State.Offline => "Cannot reach OpenSky",
         _ => "Scanning the skies",
@@ -242,7 +254,7 @@ public sealed class PlaneSpotterApp : WidgetApp
         if (radius != _appliedRadius || feet != _appliedFeet) ApplyDisplaySettings(radius, feet);
 
         var snapshot = _data?.Value;
-        _model.Refresh(snapshot, radius, feet);
+        _model.Refresh(snapshot, radius, feet, new PlaneFilter(MinAltitude, MaxAltitude, !HideGroundTraffic, SortMode));
 
         _state = !_hasLocation ? State.NoLocation
             : snapshot is null ? State.Loading
@@ -266,6 +278,13 @@ public sealed class PlaneSpotterApp : WidgetApp
 
         base.Update(context, cancellationToken);
     }
+
+    private PlaneSort SortMode => Sort switch
+    {
+        _ when string.Equals(Sort, "Highest", StringComparison.OrdinalIgnoreCase) => PlaneSort.Highest,
+        _ when string.Equals(Sort, "Fastest", StringComparison.OrdinalIgnoreCase) => PlaneSort.Fastest,
+        _ => PlaneSort.Nearest,
+    };
 
     private void ApplyDisplaySettings(int radius, bool feet)
     {
