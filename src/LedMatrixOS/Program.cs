@@ -63,8 +63,20 @@ builder.Services.AddSingleton<SettingOptionsRegistry>(sp =>
 {
     var registry = new SettingOptionsRegistry();
     BuiltInSettingOptions.Register(registry, sp.GetRequiredService<IHttpClientFactory>().CreateClient(), builder.Configuration);
+    registry.Register("media", "items", new MediaItemOptions(sp.GetRequiredService<LedMatrixOS.Core.Media.MediaLibrary>()));
     return registry;
 });
+// Media library (pictures, GIFs, videos): <DataDir>/media. Video needs the ffmpeg executable (Media:FfmpegPath, default "ffmpeg" on PATH).
+builder.Services.AddSingleton(_ => LedMatrixOS.Core.Media.MediaConfig.From(builder.Configuration, width, height));
+builder.Services.AddSingleton<LedMatrixOS.Core.Media.IVideoTranscoder>(sp =>
+{
+    var media = sp.GetRequiredService<LedMatrixOS.Core.Media.MediaConfig>();
+    return new LedMatrixOS.Core.Media.FfmpegVideoTranscoder(media.FfmpegPath, TimeSpan.FromSeconds(media.TranscodeTimeoutSeconds));
+});
+builder.Services.AddSingleton(sp => new LedMatrixOS.Core.Media.MediaLibrary(
+    Path.Combine(dataDir, "media"),
+    sp.GetRequiredService<LedMatrixOS.Core.Media.MediaConfig>(),
+    sp.GetRequiredService<LedMatrixOS.Core.Media.IVideoTranscoder>()));
 builder.Services.AddSingleton<LedMatrixOS.Core.Screens.ScreenStore>();
 builder.Services.AddSingleton<LedMatrixOS.Core.Screens.IScreenStore>(sp => sp.GetRequiredService<LedMatrixOS.Core.Screens.ScreenStore>());
 builder.Services.AddSingleton(sp => new LedMatrixOS.Core.Screens.ScreenCatalog(
@@ -248,5 +260,6 @@ app.MapNotificationEndpoints();
 app.MapInputEndpoints();
 app.MapOverlayEndpoints(schedulePath);
 app.MapScreenEndpoints();
+app.MapMediaEndpoints();
 
 app.Run();
