@@ -6,6 +6,8 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose pictures, GIFs and videos to show on your LED matrix.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Led Matrix</string>
 	<key>CFBundleExecutable</key>

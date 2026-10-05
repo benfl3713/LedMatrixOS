@@ -14,10 +14,12 @@ class FakePicker implements MediaPicker {
 
   PickedMedia? file;
   bool? allowedVideo;
+  MediaSource? usedSource;
 
   @override
-  Future<PickedMedia?> pick({required bool allowVideo}) async {
+  Future<PickedMedia?> pick({required bool allowVideo, MediaSource source = MediaSource.files}) async {
     allowedVideo = allowVideo;
+    usedSource = source;
     return file;
   }
 }
@@ -25,7 +27,7 @@ class FakePicker implements MediaPicker {
 PickedMedia _file(String name, int length) =>
     PickedMedia(name: name, length: length, open: () => Stream.value(List.filled(length, 1)));
 
-Future<void> _open(WidgetTester tester, FakeApi api, {FakePicker? picker}) async {
+Future<void> _open(WidgetTester tester, FakeApi api, {FakePicker? picker, bool photoLibrary = false}) async {
   tester.view.physicalSize = const Size(800, 2400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -35,6 +37,7 @@ Future<void> _open(WidgetTester tester, FakeApi api, {FakePicker? picker}) async
       apiProvider.overrideWithValue(api),
       pollIntervalProvider.overrideWithValue(null),
       previewFeedProvider.overrideWith((ref) => Stream.value(const PreviewUpdate(connected: true))),
+      photoLibraryAvailableProvider.overrideWithValue(photoLibrary),
       if (picker != null) mediaPickerProvider.overrideWithValue(picker),
     ],
     child: const LedMatrixApp(),
@@ -79,6 +82,43 @@ void main() {
     await tester.tap(find.byKey(const Key('media-upload')));
     await tester.pumpAndSettle();
     expect(picker.allowedVideo, isFalse);
+  });
+
+  testWidgets('phones offer the photo library next to files', (tester) async {
+    final picker = FakePicker(null);
+    await _open(tester, FakeApi(), picker: picker, photoLibrary: true);
+    await tester.tap(find.byKey(const Key('media-upload')));
+    await tester.pumpAndSettle();
+    expect(find.text('Photo library'), findsOneWidget);
+    expect(find.text('Files'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('media-source-photos')));
+    await tester.pumpAndSettle();
+    expect(picker.usedSource, MediaSource.photos);
+
+    await tester.tap(find.byKey(const Key('media-upload')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('media-source-files')));
+    await tester.pumpAndSettle();
+    expect(picker.usedSource, MediaSource.files);
+  });
+
+  testWidgets('dismissing the source sheet does not open a picker', (tester) async {
+    final picker = FakePicker(null);
+    await _open(tester, FakeApi(), picker: picker, photoLibrary: true);
+    await tester.tap(find.byKey(const Key('media-upload')));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(picker.usedSource, isNull);
+  });
+
+  testWidgets('desktop and web go straight to the file chooser', (tester) async {
+    final picker = FakePicker(null);
+    await _open(tester, FakeApi(), picker: picker);
+    await tester.tap(find.byKey(const Key('media-upload')));
+    await tester.pumpAndSettle();
+    expect(find.text('Photo library'), findsNothing);
+    expect(picker.usedSource, MediaSource.files);
   });
 
   testWidgets('delete asks for confirmation', (tester) async {

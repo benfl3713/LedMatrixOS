@@ -11,9 +11,11 @@ class MediaPage extends ConsumerWidget {
 
   Future<void> _upload(BuildContext context, WidgetRef ref, MediaCapabilities caps) async {
     final messenger = ScaffoldMessenger.of(context);
+    final MediaSource? source = ref.read(photoLibraryAvailableProvider) ? await _chooseSource(context) : MediaSource.files;
+    if (source == null) return;
     final PickedMedia? file;
     try {
-      file = await ref.read(mediaPickerProvider).pick(allowVideo: caps.video);
+      file = await ref.read(mediaPickerProvider).pick(allowVideo: caps.video, source: source);
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Could not open the file chooser: $e')));
       return;
@@ -29,6 +31,29 @@ class MediaPage extends ConsumerWidget {
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text('Uploaded ${file.name}')));
     }
+  }
+
+  Future<MediaSource?> _chooseSource(BuildContext context) {
+    return showModalBottomSheet<MediaSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            key: const Key('media-source-photos'),
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Photo library'),
+            onTap: () => Navigator.pop(context, MediaSource.photos),
+          ),
+          ListTile(
+            key: const Key('media-source-files'),
+            leading: const Icon(Icons.folder_open_outlined),
+            title: const Text('Files'),
+            onTap: () => Navigator.pop(context, MediaSource.files),
+          ),
+        ]),
+      ),
+    );
   }
 
   @override

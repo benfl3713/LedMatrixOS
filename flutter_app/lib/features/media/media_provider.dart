@@ -1,5 +1,7 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../api/media_models.dart';
 import '../../api/result.dart';
@@ -17,17 +19,33 @@ class PickedMedia {
 const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
 const videoExtensions = ['mp4', 'mov', 'm4v', 'webm', 'mkv', 'avi'];
 
-/// Opens the system file chooser. Tests override [mediaPickerProvider].
+/// Where a media file comes from. [photos] is the system photo library picker (PHPicker on iOS, the Android
+/// photo picker), which the generic file chooser often does not surface; [files] is the document chooser.
+enum MediaSource { photos, files }
+
+/// Opens a system chooser. Tests override [mediaPickerProvider].
 abstract class MediaPicker {
-  /// Null when the user cancels. Video extensions are offered only when [allowVideo].
-  Future<PickedMedia?> pick({required bool allowVideo});
+  /// Null when the user cancels. Video is offered only when [allowVideo].
+  Future<PickedMedia?> pick({required bool allowVideo, MediaSource source = MediaSource.files});
 }
 
-class FilePickerMediaPicker implements MediaPicker {
-  const FilePickerMediaPicker();
+class SystemMediaPicker implements MediaPicker {
+  const SystemMediaPicker();
 
   @override
-  Future<PickedMedia?> pick({required bool allowVideo}) async {
+  Future<PickedMedia?> pick({required bool allowVideo, MediaSource source = MediaSource.files}) {
+    return source == MediaSource.photos ? _pickPhoto(allowVideo) : _pickFile(allowVideo);
+  }
+
+  Future<PickedMedia?> _pickPhoto(bool allowVideo) async {
+    final picker = ImagePicker();
+    // No resizing or quality arguments: the original bytes (including GIFs) go to the device untouched.
+    final XFile? file = allowVideo ? await picker.pickMedia() : await picker.pickImage(source: ImageSource.gallery);
+    if (file == null) return null;
+    return PickedMedia(name: file.name, length: await file.length(), open: file.openRead);
+  }
+
+  Future<PickedMedia?> _pickFile(bool allowVideo) async {
     final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: [...imageExtensions, if (allowVideo) ...videoExtensions],
@@ -38,7 +56,12 @@ class FilePickerMediaPicker implements MediaPicker {
   }
 }
 
-final mediaPickerProvider = Provider<MediaPicker>((ref) => const FilePickerMediaPicker());
+final mediaPickerProvider = Provider<MediaPicker>((ref) => const SystemMediaPicker());
+
+/// Whether the platform has a native photo library picker worth offering next to the file chooser.
+final photoLibraryAvailableProvider = Provider<bool>(
+  (ref) => !kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android),
+);
 
 /// What the server accepts. Falls back to images only if the endpoint is missing (older firmware).
 final mediaCapabilitiesProvider = FutureProvider<MediaCapabilities>((ref) async {
