@@ -35,6 +35,8 @@ public static class BuiltInSettingOptions
         var places = new PlaceOptions(geocoder);
         registry.Register("weather", "location", places);
         registry.Register("commute", "location", places);
+        registry.Register("sky-clock", "location", places);
+        registry.Register("tides", "location", places);
         registry.Register("air-quality", "location", places);
         registry.Register("plane-spotter", "location", places);
         registry.Register("iss-tracker", "location", places);
