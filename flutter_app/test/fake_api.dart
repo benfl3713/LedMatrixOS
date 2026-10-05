@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:led_matrix_controller/api/led_api.dart';
+import 'package:led_matrix_controller/api/media_models.dart';
 import 'package:led_matrix_controller/api/models.dart';
 import 'package:led_matrix_controller/api/result.dart';
 import 'package:led_matrix_controller/api/schedule_models.dart';
@@ -317,6 +318,56 @@ class FakeApi implements LedApi {
 
   @override
   Future<Result<ScreenSchema>> getScreenSchema() async => const Ok(screenSchema);
+
+  // Media -------------------------------------------------------------------
+
+  List<MediaItem> media = [
+    const MediaItem(id: 'cat', name: 'Cat', kind: 'image', width: 256, height: 64),
+    const MediaItem(id: 'dance', name: 'Dance', kind: 'gif', width: 128, height: 64, frames: 12, durationMs: 1200),
+  ];
+  MediaCapabilities mediaCaps = const MediaCapabilities(video: true, maxBytes: 1024 * 1024);
+
+  /// The error the next upload returns (cleared after use).
+  ApiError? uploadError;
+  final List<String> uploaded = [];
+
+  @override
+  Future<Result<List<MediaItem>>> listMedia() async => Ok(List.of(media));
+
+  @override
+  Future<Result<MediaCapabilities>> getMediaCapabilities() async => Ok(mediaCaps);
+
+  @override
+  Future<Result<MediaItem>> uploadMedia({
+    required String filename,
+    required int length,
+    required Stream<List<int>> data,
+    String? name,
+    void Function(double progress)? onProgress,
+  }) async {
+    calls.add('upload:$filename');
+    final err = uploadError;
+    if (err != null) {
+      uploadError = null;
+      return Err(err);
+    }
+    await data.drain<void>();
+    onProgress?.call(1);
+    uploaded.add(filename);
+    final item = MediaItem(id: 'new${media.length}', name: name ?? filename, kind: 'image', width: 64, height: 64);
+    media = [...media, item];
+    return Ok(item);
+  }
+
+  @override
+  Future<Result<void>> deleteMedia(String id) async {
+    calls.add('deleteMedia:$id');
+    media = [for (final m in media) if (m.id != id) m];
+    return const Ok(null);
+  }
+
+  @override
+  String mediaThumbUrl(String id) => 'http://fake/api/media/$id/thumb';
 
   @override
   Uri get previewSocketUri => Uri.parse('ws://fake/ws/preview');

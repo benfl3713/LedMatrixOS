@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'media_models.dart';
 import 'models.dart';
 import 'schedule_models.dart';
 import 'screen_models.dart';
@@ -60,6 +61,20 @@ abstract class LedApi {
   Future<Result<ScreenDefinition>> putScreen(ScreenDefinition screen);
   Future<Result<void>> deleteScreen(String id);
   Future<Result<ScreenSchema>> getScreenSchema();
+
+  Future<Result<List<MediaItem>>> listMedia();
+  Future<Result<MediaCapabilities>> getMediaCapabilities();
+
+  /// Uploads one file (multipart field `file`, optional `name`). [onProgress] reports 0..1 as bytes are sent.
+  Future<Result<MediaItem>> uploadMedia({
+    required String filename,
+    required int length,
+    required Stream<List<int>> data,
+    String? name,
+    void Function(double progress)? onProgress,
+  });
+  Future<Result<void>> deleteMedia(String id);
+  String mediaThumbUrl(String id);
 
   Uri get previewSocketUri;
   String previewUrl({int? cacheBust});
@@ -324,6 +339,60 @@ class HttpLedApi implements LedApi {
   @override
   Future<Result<ScreenSchema>> getScreenSchema() =>
       _send(() => _client.get(_uri('/api/screens/schema')), (b) => ScreenSchema.fromJson(_map(b)));
+
+  @override
+  Future<Result<List<MediaItem>>> listMedia() => _send(
+        () => _client.get(_uri('/api/media')),
+        (b) => (jsonDecode(b) as List).map((e) => MediaItem.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  @override
+  Future<Result<MediaCapabilities>> getMediaCapabilities() =>
+      _send(() => _client.get(_uri('/api/media/capabilities')), (b) => MediaCapabilities.fromJson(_map(b)));
+
+  @override
+  Future<Result<MediaItem>> uploadMedia({
+    required String filename,
+    required int length,
+    required Stream<List<int>> data,
+    String? name,
+    void Function(double progress)? onProgress,
+  }) async {
+    var sent = 0;
+    final counted = data.map((chunk) {
+      sent += chunk.length;
+      if (length > 0) onProgress?.call((sent / length).clamp(0.0, 1.0));
+      return chunk;
+    });
+    final request = http.MultipartRequest('POST', _uri('/api/media'));
+    if (name != null && name.trim().isNotEmpty) request.fields['name'] = name.trim();
+    request.files.add(http.MultipartFile('file', counted, length, filename: filename));
+    // Uploads can be large; allow far longer than a normal call.
+    const uploadTimeout = Duration(minutes: 10);
+    final http.Response response;
+    try {
+      response = await http.Response.fromStream(await _client.send(request).timeout(uploadTimeout));
+    } on TimeoutException {
+      return const Err(ApiError(ApiErrorKind.timeout, 'The upload timed out'));
+    } catch (e) {
+      return Err(ApiError(ApiErrorKind.network, 'Cannot reach the device: $e'));
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      return Err(ApiError(ApiErrorKind.http, _httpMessage(response), statusCode: response.statusCode));
+    }
+    try {
+      return Ok(MediaItem.fromJson(_map(response.body)));
+    } catch (e) {
+      return Err(ApiError(ApiErrorKind.parse, 'Unexpected response from the device: $e'));
+    }
+  }
+
+  @override
+  Future<Result<void>> deleteMedia(String id) =>
+      _send(() => _client.delete(_uri('/api/media/${Uri.encodeComponent(id)}')), (_) {});
+
+  @override
+  String mediaThumbUrl(String id) => '$baseUrl/api/media/${Uri.encodeComponent(id)}/thumb';
 
   @override
   Uri get previewSocketUri {

@@ -60,6 +60,20 @@ class _AppsPageState extends ConsumerState<AppsPage> {
                 child: Card(
                   margin: EdgeInsets.zero,
                   child: ListTile(
+                    key: const Key('media-entry'),
+                    leading: const Icon(Icons.photo_library_rounded),
+                    title: const Text('Media'),
+                    subtitle: const Text('Pictures, GIFs and videos'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/apps/media'),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Card(
+                  margin: EdgeInsets.zero,
+                  child: ListTile(
                     key: const Key('gamepad-entry'),
                     leading: const Icon(Icons.sports_esports_rounded),
                     title: const Text('Gamepad'),

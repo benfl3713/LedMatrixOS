@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/apps/apps_page.dart';
 import '../features/gamepad/gamepad_page.dart';
+import '../features/media/media_page.dart';
 import '../features/notify/notify_page.dart';
 import '../features/now/display_page.dart';
 import '../features/now/now_page.dart';
@@ -54,6 +55,7 @@ final List<AppTab> appTabs = [
     selectedIcon: Icons.grid_view_rounded,
     builder: (_) => const AppsPage(),
     routes: [
+      GoRoute(path: 'media', builder: (context, state) => const MediaPage()),
       GoRoute(
         path: 'screens',
         builder: (context, state) => const ScreensPage(),
