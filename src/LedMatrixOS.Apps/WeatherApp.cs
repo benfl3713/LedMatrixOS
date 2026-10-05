@@ -53,6 +53,29 @@ public sealed class WeatherApp : WidgetApp
     [Setting("Page Seconds", Description = "Seconds each forecast page stays up.", Min = 3, Max = 30)]
     public int PageSeconds { get; set; } = 6;
 
+    [Setting("Show Feels Like", Description = "Show the feels-like temperature under the conditions.")]
+    public bool ShowFeelsLike { get; set; } = true;
+
+    [Setting("Show Location", Description = "Show the place name under the conditions. Long names scroll.")]
+    public bool ShowLocation { get; set; } = true;
+
+    [Setting("Wind Unit", Description = "Auto follows Units: km/h for Celsius, mph for Fahrenheit.", Options = ["Auto", "km/h", "mph", "m/s", "kn"])]
+    public string WindUnit { get; set; } = "Auto";
+
+    [Setting("Pressure Unit", Description = "Unit for the air pressure shown when Show Pressure is on.", Options = ["hPa", "inHg", "mmHg"])]
+    public string PressureUnit { get; set; } = "hPa";
+
+    [Setting("Show Pressure", Description = "Show air pressure on the Today page in place of the sunrise/sunset row.")]
+    public bool ShowPressure { get; set; }
+
+    [Setting("Forecast Hours", Description = "How many hours the hourly and rain charts look ahead (6-24).", Min = 6, Max = 24)]
+    public int ForecastHours { get; set; } = 12;
+
+    [Setting("Show Rain Page", Description = "Include the rain chance chart in the rotating pages.")]
+    public bool ShowRainPage { get; set; } = true;
+
+    private bool _rebuilt;
+
     [ActivatorUtilitiesConstructor]
     public WeatherApp(HttpClient http) : this(new OpenMeteoWeatherSource(http)) { }
 
@@ -86,6 +109,7 @@ public sealed class WeatherApp : WidgetApp
     {
         if (key == "location") _locationFromUser = true;
         if (_active && key is "location" or "units") StartPolling();
+        if (key == "showRainPage" && _scene is not null) { Host.Root = Build(); _rebuilt = true; }
     }
 
     private void StartPolling()
@@ -127,6 +151,34 @@ public sealed class WeatherApp : WidgetApp
         return stops[^1].C;
     }
 
+    private static string PlaceLine(WeatherSnapshot s, bool stale, bool showLocation, bool showFeels)
+    {
+        string loc = showLocation ? s.Location.ToUpperInvariant() : "";
+        string tail = stale ? "OFFLINE" : showFeels ? "FEELS " + Math.Round(s.Feels) + "°" : "";
+        return loc.Length > 0 && tail.Length > 0 ? loc + "  " + tail : loc + tail;
+    }
+
+    /// <summary>Wind speed in the unit the user asked for ("Auto" keeps the query's own unit) with its label.</summary>
+    internal static string FormatWind(WeatherSnapshot s, string unit)
+    {
+        double kmh = s.Fahrenheit ? s.WindSpeed * 1.609344 : s.WindSpeed;
+        return unit switch
+        {
+            "km/h" => Math.Round(kmh) + " km/h",
+            "mph" => Math.Round(kmh / 1.609344) + " mph",
+            "m/s" => Math.Round(kmh / 3.6) + " m/s",
+            "kn" => Math.Round(kmh / 1.852) + " kn",
+            _ => Math.Round(s.WindSpeed) + (s.Fahrenheit ? " mph" : " kph"),
+        };
+    }
+
+    internal static string FormatPressure(WeatherSnapshot s, string unit) => s.Pressure <= 0 ? "-" : unit switch
+    {
+        "inHg" => (s.Pressure * 0.0295300).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + " inHg",
+        "mmHg" => Math.Round(s.Pressure * 0.750062) + " mmHg",
+        _ => Math.Round(s.Pressure) + " hPa",
+    };
+
     // ---- view ------------------------------------------------------------------------------------------------------------------
 
     protected override Node Build()
@@ -138,8 +190,8 @@ public sealed class WeatherApp : WidgetApp
             State.Offline when c.Item2 is null => "Offline",
             _ => c.Item2 is { } s ? WeatherCodes.Describe(s.Code, s.IsDay) : "",
         });
-        var place = new Memo<(State, WeatherSnapshot?, bool)>(() => (_state, Snap(), _stale), p =>
-            p.Item2 is { } s ? s.Location.ToUpperInvariant() + (p.Item3 ? "  OFFLINE" : "  FEELS " + Math.Round(s.Feels) + "°")
+        var place = new Memo<(State, WeatherSnapshot?, bool, bool, bool)>(() => (_state, Snap(), _stale, ShowLocation, ShowFeelsLike), p =>
+            p.Item2 is { } s ? PlaceLine(s, p.Item3, p.Item4, p.Item5)
             : p.Item1 == State.Offline ? (_data?.Error is LocationNotFoundException ? "UNKNOWN LOCATION" : "RETRYING...") : PlaneSpotter.PlaceGeocoder.DisplayName(Location).ToUpperInvariant());
         var hi = new Memo<WeatherSnapshot?>(Snap, s => s is null ? "" : "▲" + Math.Round(s.High));
         var lo = new Memo<WeatherSnapshot?>(Snap, s => s is null ? "" : "▼" + Math.Round(s.Low));
@@ -181,8 +233,11 @@ public sealed class WeatherApp : WidgetApp
 
         _pagerNode = new Pager(1, TimeSpan.FromSeconds(PageSeconds), new SlideTransition(MoveDirection.Up))
         {
-            WeatherPages.Now(Snap, LocalNow, Sky), WeatherPages.Hours(Snap, Sky), WeatherPages.Rain(Snap, Sky), WeatherPages.Days(Snap, Sky),
+            WeatherPages.Now(Snap, LocalNow, Sky, () => WindUnit, () => PressureUnit, () => ShowPressure),
+            WeatherPages.Hours(Snap, Sky, () => ForecastHours),
         };
+        if (ShowRainPage) _pagerNode.Add(WeatherPages.Rain(Snap, Sky, () => ForecastHours));
+        _pagerNode.Add(WeatherPages.Days(Snap, Sky));
         _pager = _pagerNode;
         _skeleton = new Skeleton(Sky, () => _state == State.Loading);
         _panel = new Panel
@@ -195,6 +250,8 @@ public sealed class WeatherApp : WidgetApp
         var dots = new PageDots(_pagerNode) { HAlign = Align.End, VAlign = Align.Start, Margin = new Thickness(0, 4, 5, 0) };
         ((Panel)_panel).Add(dots);
 
+        _stale = false;          // a rebuilt tree has fresh nodes: let Update restyle them
+        _styledColor = default;
         return new Dock { Fill = left, Right = _panel };
     }
 
@@ -212,8 +269,9 @@ public sealed class WeatherApp : WidgetApp
             _place.Style = new TextStyle(Fonts.QuiteSmall, stale ? new Pixel(255, 176, 0) : new Pixel(200, 215, 245));
         }
 
-        if (state != _state)
+        if (state != _state || _rebuilt)
         {
+            _rebuilt = false;
             _state = state;
             bool ready = state == State.Ready;
             _readout.Visible = ready;

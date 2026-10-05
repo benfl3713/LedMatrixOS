@@ -61,7 +61,7 @@ public sealed record HourlyPoint(DateTime LocalTime, double Temp, int Code, bool
 
 public sealed record DailyPoint(DateTime Date, double High, double Low, int Code, int PrecipChance);
 
-/// <summary>Everything the weather screen shows. Temperatures and wind are in the unit the query asked for.</summary>
+/// <summary>Everything the weather screen shows. Temperatures and wind are in the unit the query asked for; <c>Pressure</c> is sea-level hPa (0 when unknown).</summary>
 public sealed record WeatherSnapshot(
     string Location,
     DateTimeOffset ObservedAt,
@@ -78,7 +78,8 @@ public sealed record WeatherSnapshot(
     TimeSpan Sunset,
     bool Fahrenheit,
     IReadOnlyList<HourlyPoint> Hourly,
-    IReadOnlyList<DailyPoint> Daily)
+    IReadOnlyList<DailyPoint> Daily,
+    double Pressure = 0)
 {
     public WeatherKind Kind => WeatherCodes.KindOf(Code);
     public TimeSpan UtcOffset => ObservedAt.Offset;
