@@ -236,7 +236,7 @@ internal sealed class CountdownView : Node
         }
         else
         {
-            paint = TextPaint.Vertical(Gfx.Mix(main, Pixel.White, 0.5f), main);
+            paint = TextPaint.Vertical(Pixel.Lerp(main, Pixel.White, 0.5f), main);
         }
         paint.Shadow = true;
         paint.ShadowColor = Gfx.Dim(main, 0.12f);
@@ -251,7 +251,7 @@ internal sealed class CountdownView : Node
         int w = _strip.TotalWidth;
         _strip.Position = new Vector2(68f + (182f - w) / 2f, hasLabel ? 8f : 0f);
 
-        var dp = TextPaint.Solid(Gfx.Mix(main, Pixel.White, 0.6f));
+        var dp = TextPaint.Solid(Pixel.Lerp(main, Pixel.White, 0.6f));
         dp.Shadow = true;
         dp.Bold = true;
         _days.Paint = dp;
@@ -314,7 +314,7 @@ internal sealed class CountdownView : Node
             {
                 // Brightest at the leading edge so the arc seems to chase the time away.
                 float lead = Gfx.Saturate(1f - (progress - a) * 5f);
-                c = Gfx.Mix(Gfx.Dim(main, 0.75f), Pixel.White, lead * 0.55f);
+                c = Pixel.Lerp(Gfx.Dim(main, 0.75f), Pixel.White, lead * 0.55f);
             }
             else c = track;
             frame.BlendPixel(_rx[i], _ry[i], c, _cov[i]);
@@ -324,7 +324,7 @@ internal sealed class CountdownView : Node
         {
             float ang = progress * 2f * MathF.PI;
             float hx = RingCx + MathF.Sin(ang) * 26.5f, hy = RingCy - MathF.Cos(ang) * 26.5f;
-            Gfx.GlowDisc(frame, hx, hy, 6f, Gfx.Mix(main, Pixel.White, 0.4f), 0.55f);
+            Gfx.GlowDisc(frame, hx, hy, 6f, Pixel.Lerp(main, Pixel.White, 0.4f), 0.55f);
         }
 
         // A ripple leaves the middle every second (every tick is a heartbeat), or a label for the day count.
@@ -357,7 +357,7 @@ internal sealed class CountdownView : Node
 
         var p = done
             ? TextPaint.Rainbow(t * 200f, 4f, 0.8f, 1f)
-            : TextPaint.Solid(Gfx.Mix(main, Pixel.White, 0.25f));
+            : TextPaint.Solid(Pixel.Lerp(main, Pixel.White, 0.25f));
         p.Shadow = true;
         p.Bold = true;
         if (done)
