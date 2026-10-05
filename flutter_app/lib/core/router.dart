@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/apps/apps_page.dart';
 import '../features/notify/notify_page.dart';
+import '../features/now/display_page.dart';
 import '../features/now/now_page.dart';
 import '../features/schedule/schedule_page.dart';
 import '../features/screens/screen_editor_page.dart';
@@ -103,6 +104,8 @@ GoRouter buildRouter({List<AppTab>? tabs}) {
             ),
         ],
       ),
+      // Outside the shell so the navigation bar is hidden.
+      GoRoute(path: '/display', builder: (context, state) => const DisplayPage()),
     ],
   );
 }
