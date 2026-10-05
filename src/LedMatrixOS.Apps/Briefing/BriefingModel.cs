@@ -26,11 +26,67 @@ internal readonly record struct BriefingInputs(
     bool ShowBins,
     string StationId,
     int WalkMinutes,
-    string Bins);
+    string Bins,
+    string GreetingName = "",
+    int ActiveFrom = 5,
+    int ActiveUntil = 12,
+    string CardOrder = BriefingGreeting.DefaultOrder);
 
 internal static class BriefingGreeting
 {
+    public const string DefaultOrder = "Weather, Calendar, Commute, Bins";
+
+    /// <summary>The longest name that still fits next to the weather glyph on the greeting card; longer names are cut.</summary>
+    public const int MaxNameLength = 10;
+
+    private static readonly BriefingPage[] DefaultPages = [BriefingPage.Weather, BriefingPage.Calendar, BriefingPage.Commute, BriefingPage.Bins];
+
     public static string ForHour(int hour) => hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
+    /// <summary>"Good morning" or "Good morning, Ben" (the name is trimmed and cut to <see cref="MaxNameLength"/>).</summary>
+    public static string Greeting(int hour, string? name)
+    {
+        var n = (name ?? "").Trim();
+        if (n.Length > MaxNameLength) n = n[..MaxNameLength].TrimEnd();
+        return n.Length == 0 ? ForHour(hour) : ForHour(hour) + ", " + n;
+    }
+
+    /// <summary>
+    /// True when <paramref name="hour"/> (0-23) is inside the window from <paramref name="from"/> (inclusive) to <paramref name="until"/> (exclusive).
+    /// A window that ends before it starts wraps over midnight (22 to 4); equal values mean always.
+    /// </summary>
+    public static bool InWindow(int hour, int from, int until)
+    {
+        from = Math.Clamp(from, 0, 24) % 24;
+        until = Math.Clamp(until, 0, 24) % 24;
+        if (from == until) return true;
+        return from < until ? hour >= from && hour < until : hour >= from || hour < until;
+    }
+
+    /// <summary>
+    /// The movable cards in the order given by a comma separated list of Weather, Calendar, Commute and Bins (any case). Unknown or repeated
+    /// names are ignored and cards the list leaves out follow in the default order, so the Show switches stay the only way to hide a card.
+    /// </summary>
+    public static BriefingPage[] ParseOrder(string? order)
+    {
+        var result = new List<BriefingPage>(4);
+        foreach (var part in (order ?? "").Split([',', ';', '>', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            BriefingPage? page = part.ToLowerInvariant() switch
+            {
+                "weather" => BriefingPage.Weather,
+                "calendar" => BriefingPage.Calendar,
+                "commute" => BriefingPage.Commute,
+                "bins" => BriefingPage.Bins,
+                _ => null,
+            };
+            if (page is { } p && !result.Contains(p)) result.Add(p);
+        }
+
+        foreach (var p in DefaultPages)
+            if (!result.Contains(p)) result.Add(p);
+        return result.ToArray();
+    }
 }
 
 /// <summary>
@@ -51,6 +107,8 @@ internal sealed class BriefingModel
 
     // greeting
     public string GreetingText = "", DateText = "", TempText = "";
+    /// <summary>True when the greeting is too long for the big font (a name was added), so the card uses the small one.</summary>
+    public bool GreetingSmall;
     public bool HasWeather;
     public WeatherKind WeatherKind;
     public bool WeatherDay = true;
@@ -90,6 +148,8 @@ internal sealed class BriefingModel
     private TflArrival[]? _arrivals;
     private bool _showWeather, _showCalendar, _showBins;
     private bool _eventsOk, _weatherOk;
+    private string? _name, _orderText;
+    private BriefingPage[] _order = [BriefingPage.Weather, BriefingPage.Calendar, BriefingPage.Commute, BriefingPage.Bins];
 
     public BriefingModel()
     {
@@ -108,6 +168,7 @@ internal sealed class BriefingModel
         _statuses = null;
         _arrivals = null;
         _bins = null;
+        _name = null;
         _lastTrain = null;
         _lastMinutes = -1;
         Pages.Clear();
@@ -121,13 +182,15 @@ internal sealed class BriefingModel
 
         bool changed = minute != _minute || !ReferenceEquals(i.Weather, _weather) || !ReferenceEquals(i.Events, _events)
             || !ReferenceEquals(i.Statuses, _statuses) || i.ShowWeather != _showWeather || i.ShowCalendar != _showCalendar
-            || i.ShowBins != _showBins || !string.Equals(i.Bins, _bins, StringComparison.Ordinal);
+            || i.ShowBins != _showBins || !string.Equals(i.Bins, _bins, StringComparison.Ordinal)
+            || !string.Equals(i.GreetingName, _name, StringComparison.Ordinal);
 
         if (changed)
         {
-            if (day != _day || i.Now.Hour != _hour)
+            if (day != _day || i.Now.Hour != _hour || !string.Equals(i.GreetingName, _name, StringComparison.Ordinal))
             {
-                GreetingText = BriefingGreeting.ForHour(i.Now.Hour);
+                GreetingText = BriefingGreeting.Greeting(i.Now.Hour, i.GreetingName);
+                GreetingSmall = GreetingText.Length > 17;
                 DateText = i.Now.ToString("dddd d MMMM", CultureInfo.InvariantCulture);
                 _day = day;
                 _hour = i.Now.Hour;
@@ -145,6 +208,13 @@ internal sealed class BriefingModel
             _showCalendar = i.ShowCalendar;
             _showBins = i.ShowBins;
             _bins = i.Bins;
+            _name = i.GreetingName;
+        }
+
+        if (!string.Equals(i.CardOrder, _orderText, StringComparison.Ordinal))
+        {
+            _orderText = i.CardOrder;
+            _order = BriefingGreeting.ParseOrder(i.CardOrder);
         }
 
         RefreshCommute(i);
@@ -303,11 +373,21 @@ internal sealed class BriefingModel
     private void RefreshPages(in BriefingInputs i)
     {
         _scratch.Clear();
-        _scratch.Add(BriefingPage.Greeting);
-        if (_weatherOk) _scratch.Add(BriefingPage.Weather);
-        if (_eventsOk) _scratch.Add(BriefingPage.Calendar);
-        if (i.ShowCommute && !string.IsNullOrWhiteSpace(i.StationId) && _board.Visible.Count > 0) _scratch.Add(BriefingPage.Commute);
-        if (_binsDue) _scratch.Add(BriefingPage.Bins);
+        // The greeting card belongs to the active hours; outside them the briefing still plays, from the first data card.
+        if (BriefingGreeting.InWindow(i.Now.Hour, i.ActiveFrom, i.ActiveUntil)) _scratch.Add(BriefingPage.Greeting);
+        foreach (var page in _order)
+        {
+            bool available = page switch
+            {
+                BriefingPage.Weather => _weatherOk,
+                BriefingPage.Calendar => _eventsOk,
+                BriefingPage.Commute => i.ShowCommute && !string.IsNullOrWhiteSpace(i.StationId) && _board.Visible.Count > 0,
+                BriefingPage.Bins => _binsDue,
+                _ => false,
+            };
+            if (available) _scratch.Add(page);
+        }
+
         _scratch.Add(BriefingPage.SignOff);
 
         bool same = _scratch.Count == Pages.Count;

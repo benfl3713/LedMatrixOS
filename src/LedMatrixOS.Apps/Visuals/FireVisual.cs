@@ -127,6 +127,42 @@ internal sealed class FireVisual : VisualNode
                 (0.00f, new Pixel(0, 0, 0)), (0.12f, new Pixel(55, 0, 90)), (0.32f, new Pixel(170, 10, 190)),
                 (0.55f, new Pixel(255, 60, 150)), (0.78f, new Pixel(255, 170, 190)), (1.00f, new Pixel(255, 240, 245)),
             ],
+            "Neon" =>
+            [
+                (0.00f, new Pixel(0, 0, 0)), (0.12f, new Pixel(70, 0, 60)), (0.32f, new Pixel(230, 0, 140)),
+                (0.55f, new Pixel(150, 40, 255)), (0.78f, new Pixel(0, 200, 255)), (1.00f, new Pixel(235, 250, 255)),
+            ],
+            "Sunset" =>
+            [
+                (0.00f, new Pixel(0, 0, 0)), (0.12f, new Pixel(70, 0, 40)), (0.32f, new Pixel(220, 30, 90)),
+                (0.55f, new Pixel(255, 110, 20)), (0.78f, new Pixel(255, 215, 70)), (1.00f, new Pixel(255, 250, 215)),
+            ],
+            "Ocean" =>
+            [
+                (0.00f, new Pixel(0, 0, 0)), (0.12f, new Pixel(0, 20, 80)), (0.32f, new Pixel(0, 90, 220)),
+                (0.55f, new Pixel(0, 215, 235)), (0.78f, new Pixel(120, 255, 225)), (1.00f, new Pixel(235, 255, 250)),
+            ],
+            "Candy" =>
+            [
+                (0.00f, new Pixel(0, 0, 0)), (0.12f, new Pixel(80, 20, 70)), (0.32f, new Pixel(255, 90, 170)),
+                (0.55f, new Pixel(190, 130, 255)), (0.78f, new Pixel(120, 255, 230)), (1.00f, new Pixel(255, 250, 235)),
+            ],
+            "Aurora" =>
+            [
+                (0.00f, new Pixel(0, 0, 0)), (0.12f, new Pixel(0, 50, 40)), (0.32f, new Pixel(30, 200, 110)),
+                (0.55f, new Pixel(0, 220, 200)), (0.78f, new Pixel(150, 100, 255)), (1.00f, new Pixel(245, 235, 255)),
+            ],
+            "Rainbow" =>
+            [
+                (0.00f, new Pixel(0, 0, 0)), (0.12f, new Pixel(60, 0, 110)), (0.30f, new Pixel(30, 70, 255)),
+                (0.50f, new Pixel(0, 230, 120)), (0.70f, new Pixel(255, 230, 0)), (0.88f, new Pixel(255, 70, 40)),
+                (1.00f, new Pixel(255, 245, 235)),
+            ],
+            "Mono" =>
+            [
+                (0.00f, new Pixel(0, 0, 0)), (0.12f, new Pixel(25, 25, 32)), (0.32f, new Pixel(90, 92, 108)),
+                (0.55f, new Pixel(170, 174, 190)), (0.78f, new Pixel(225, 228, 240)), (1.00f, new Pixel(255, 255, 255)),
+            ],
             _ =>
             [
                 (0.00f, new Pixel(0, 0, 0)), (0.10f, new Pixel(80, 0, 0)), (0.30f, new Pixel(205, 22, 0)),

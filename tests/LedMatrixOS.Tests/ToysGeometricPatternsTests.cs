@@ -59,8 +59,8 @@ public class ToysGeometricPatternsTests
     [Fact]
     public void Speed_ScalesAnimationTime()
     {
-        var slow = new ToyRunner(App("spirograph", a => a.Speed = 50));
-        var fast = new ToyRunner(App("spirograph", a => a.Speed = 200));
+        var slow = new ToyRunner(App("spirograph", a => a.Speed = 2)); // 50 percent
+        var fast = new ToyRunner(App("spirograph", a => a.Speed = 8)); // 200 percent
         slow.Advance(4000);
         fast.Advance(4000);
         Assert.Equal(2f, ((GeometricPatternsApp)slow.App).Field!.AnimationTime, 0.1f);
@@ -117,20 +117,51 @@ public class ToysGeometricPatternsTests
         static JsonElement J(string s) => JsonDocument.Parse(s).RootElement.Clone();
         app.UpdateSetting("pattern", J("\"lissajous\""));
         app.UpdateSetting("palette", J("\"aurora\""));
-        app.UpdateSetting("speed", J("250"));
+        app.UpdateSetting("speed", J("7"));
         app.UpdateSetting("interval", J("\"20\""));
-        Assert.Equal("lissajous", app.Pattern);
-        Assert.Equal("aurora", app.Palette);
-        Assert.Equal(250, app.Speed);
+        Assert.Equal("Lissajous", app.Pattern);
+        Assert.Equal("Aurora", app.Palette);
+        Assert.Equal(7, app.Speed);
         Assert.Equal(20, app.Interval);
         var settings = app.GetSettings().ToDictionary(s => s.Key);
         Assert.Equal(4, settings.Count);
         Assert.Equal(AppSettingType.Select, settings["pattern"].Type);
         Assert.Equal(AppSettingType.Integer, settings["speed"].Type);
-        app.UpdateSetting("speed", J("9999"));
-        Assert.Equal(400, app.Speed);
+        app.UpdateSetting("speed", J("9999")); // an old percentage: migrated to the top level
+        Assert.Equal(10, app.Speed);
         app.UpdateSetting("pattern", J("\"bogus\""));
-        Assert.Equal("lissajous", app.Pattern);
+        Assert.Equal("Lissajous", app.Pattern);
+    }
+
+    [Theory]
+    [InlineData(100, 5)]
+    [InlineData(200, 8)]
+    [InlineData(400, 10)]
+    [InlineData(50, 2)]
+    [InlineData(25, 1)]
+    public void Migration_OldPercentSpeedsMapToLevels_AndKeepTheirPace(int percent, int level)
+    {
+        var app = App();
+        app.UpdateSetting("speed", JsonDocument.Parse(percent.ToString()).RootElement.Clone());
+        Assert.Equal(level, app.Speed);
+        var r = new ToyRunner(App("spirograph", a => a.UpdateSetting("speed", percent)));
+        r.Advance(2000);
+        // Pace after migration is the old percentage (to the nearest level).
+        Assert.Equal(2f * ToySpeed.Percent(level) / 100f, ((GeometricPatternsApp)r.App).Field!.AnimationTime, 0.1f);
+    }
+
+    [Fact]
+    public void Migration_OldLowercaseOptionsAreAccepted()
+    {
+        var app = App();
+        app.UpdateSetting("pattern", "kaleidoscope");
+        app.UpdateSetting("palette", "candy");
+        Assert.Equal("Kaleidoscope", app.Pattern);
+        Assert.Equal("Candy", app.Palette);
+        app.UpdateSetting("pattern", "auto");
+        Assert.Equal("Auto", app.Pattern);
+        app.UpdateSetting("speed", 3); // a new-style level is kept as is
+        Assert.Equal(3, app.Speed);
     }
 
     [Theory]

@@ -6,7 +6,7 @@ namespace LedMatrixOS.Apps.Toys;
 /// <summary>Named colour palettes shared by the toy apps. Colours are bright and saturated so they survive an LED panel.</summary>
 public static class ToyPalettes
 {
-    public static readonly string[] Names = ["neon", "sunset", "ocean", "candy", "aurora"];
+    public static readonly string[] Names = ["Neon", "Sunset", "Ocean", "Candy", "Aurora", "Rainbow", "Mono"];
 
     private static readonly Pixel[] Neon = [P(255, 40, 120), P(255, 200, 0), P(40, 255, 120), P(0, 200, 255), P(170, 70, 255), P(255, 110, 20)];
     private static readonly Pixel[] Sunset = [P(255, 70, 40), P(255, 140, 0), P(255, 215, 60), P(255, 60, 130), P(200, 40, 220), P(255, 100, 80)];
@@ -14,16 +14,23 @@ public static class ToyPalettes
     private static readonly Pixel[] Candy = [P(255, 90, 170), P(120, 255, 230), P(255, 240, 90), P(190, 130, 255), P(255, 150, 90), P(110, 220, 120)];
     private static readonly Pixel[] Aurora = [P(60, 255, 130), P(0, 220, 200), P(90, 140, 255), P(180, 90, 255), P(255, 80, 200), P(160, 255, 60)];
 
+    private static readonly Pixel[] Rainbow = [P(255, 40, 40), P(255, 190, 0), P(60, 255, 60), P(0, 220, 255), P(90, 90, 255), P(255, 60, 220)];
+    private static readonly Pixel[] Mono = [P(255, 255, 255), P(200, 205, 220), P(150, 155, 175), P(235, 240, 255), P(110, 115, 135), P(180, 185, 200)];
+
     private static Pixel P(byte r, byte g, byte b) => new(r, g, b);
 
-    public static Pixel[] Get(string? name) => name switch
+    /// <summary>The palette for a name (any casing; unknown names give Neon). Allocation-free.</summary>
+    public static Pixel[] Get(string? name)
     {
-        "sunset" => Sunset,
-        "ocean" => Ocean,
-        "candy" => Candy,
-        "aurora" => Aurora,
-        _ => Neon,
-    };
+        if (name is null) return Neon;
+        if (name.Equals("Sunset", StringComparison.OrdinalIgnoreCase)) return Sunset;
+        if (name.Equals("Ocean", StringComparison.OrdinalIgnoreCase)) return Ocean;
+        if (name.Equals("Candy", StringComparison.OrdinalIgnoreCase)) return Candy;
+        if (name.Equals("Aurora", StringComparison.OrdinalIgnoreCase)) return Aurora;
+        if (name.Equals("Rainbow", StringComparison.OrdinalIgnoreCase)) return Rainbow;
+        if (name.Equals("Mono", StringComparison.OrdinalIgnoreCase)) return Mono;
+        return Neon;
+    }
 
     /// <summary>Smooth cyclic lookup; <paramref name="t"/> wraps around the palette.</summary>
     public static Pixel Sample(Pixel[] palette, float t)
@@ -228,3 +235,37 @@ public static class ToyGfx
     }
 }
 
+
+/// <summary>
+/// The shared speed convention of the toy apps: a 1-10 level (5 is the normal pace). Older versions of Dvd Logo and Geometric Patterns
+/// stored a percentage (20-400), which <see cref="LevelFromPercent"/> maps onto the nearest level when such a value is loaded.
+/// </summary>
+public static class ToySpeed
+{
+    private static readonly int[] Percents = [25, 50, 70, 85, 100, 125, 150, 200, 300, 400];
+
+    /// <summary>Animation speed percentage (100 = normal) for a 1-10 level.</summary>
+    public static int Percent(int level) => Percents[Math.Clamp(level, 1, 10) - 1];
+
+    /// <summary>The 1-10 level whose percentage is nearest <paramref name="percent"/>.</summary>
+    public static int LevelFromPercent(int percent)
+    {
+        int best = 1, bestDiff = int.MaxValue;
+        for (int i = 0; i < Percents.Length; i++)
+        {
+            int d = Math.Abs(Percents[i] - percent);
+            if (d < bestDiff) { bestDiff = d; best = i + 1; }
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// Converts a stored/posted speed to a level: values above 10 can only be old percentages (the new range tops out at 10), so they are
+    /// migrated; 1-10 are levels already. (An old 10 percent, the lowest Geometric Patterns ever allowed, reads as level 10: accepted ambiguity.)
+    /// </summary>
+    public static object Migrate(object value)
+    {
+        int n = LedMatrixOS.Core.Settings.SettingsBinder.CoerceInt(value, -1);
+        return n > 10 ? LevelFromPercent(n) : value;
+    }
+}

@@ -20,7 +20,7 @@ public sealed class DvdLogoField : Node
     private const int AssistAfterBounces = 9;
     private const float CornerTolerance = 1.5f;
 
-    public static readonly string[] PaletteNames = ["classic", "neon", "sunset", "ocean", "candy", "aurora"];
+    public static readonly string[] PaletteNames = ["Classic", "Neon", "Sunset", "Ocean", "Candy", "Aurora", "Rainbow", "Mono"];
 
     private static readonly Pixel[] Classic =
     [
@@ -56,7 +56,7 @@ public sealed class DvdLogoField : Node
     private float _time;
 
     private Pixel[] _pal = Classic;
-    private string _paletteName = "classic";
+    private string _paletteName = "Classic";
     private int _colorIndex;
     private int _speed = 100;
     private bool _trails = true, _assist = true;
@@ -76,7 +76,7 @@ public sealed class DvdLogoField : Node
         set
         {
             _paletteName = value;
-            _pal = value == "classic" ? Classic : ToyPalettes.Get(value);
+            _pal = value.Equals("Classic", StringComparison.OrdinalIgnoreCase) ? Classic : ToyPalettes.Get(value);
             _colorIndex %= _pal.Length;
             if (_built) BuildSparks();
         }

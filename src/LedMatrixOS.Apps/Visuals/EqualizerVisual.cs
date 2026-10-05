@@ -208,7 +208,9 @@ internal sealed class EqualizerVisual : VisualNode
         {
             _sparks.X = _w / 2f; _sparks.Y = _h / 2f; _sparks.Width = 0; _sparks.Height = 0;
             _sparks.Angle = 0f; _sparks.Spread = 360f; _sparks.GravityY = 0f;
+            _sparks.SpeedMin = 30f; _sparks.SpeedMax = 120f; // faster so the burst reaches across the wide ring
             _particles!.Burst(_sparks, 14);
+            _sparks.SpeedMin = 20f; _sparks.SpeedMax = 75f;
             return;
         }
 
@@ -480,47 +482,59 @@ internal sealed class EqualizerVisual : VisualNode
         }
     }
 
+    /// <summary>
+    /// A sunburst stretched over the whole panel: every bar is a ray from a small inner ellipse out towards the panel edge (the ellipse
+    /// has the panel's own aspect, so at 256x64 it spans the full width instead of a flat disc in the middle). With Mirror the spectrum
+    /// runs down the left and right halves symmetrically; without it the spectrum wraps once around the ring, bass at the top.
+    /// </summary>
     private void DrawRadial(FrameBuffer frame)
     {
         float cx = (_w - 1) / 2f, cy = (_h - 1) / 2f;
-        const float aspect = 3.4f;
-        float r0 = 4f + 3f * _pulse;
-        float maxLen = _h / 2f - r0 - 1f;
-        int m = _n;                           // one ray per bar, mirrored left/right so the spectrum is symmetric
-        int rays = m * 2;
-                for (int ray = 0; ray < rays; ray++)
+        float ax = cx - 1f, ay = cy - 1f;     // semi-axes of the outer ellipse
+        float s0 = 0.16f + 0.05f * _pulse;    // inner ellipse (fraction of the outer one)
+        float maxLen = 1f - s0 - 0.04f;
+        int rays = _n * 2;
+        bool mirror = _app.Mirror;
+        for (int ray = 0; ray < rays; ray++)
         {
-            int i = ray < m ? ray : rays - 1 - ray;
-            float theta = (ray + 0.5f) / rays;
-            float turns = theta - 0.25f;
+            int i = mirror ? (ray < _n ? ray : rays - 1 - ray) : ray / 2;
+            float turns = (ray + 0.5f) / rays - 0.25f;
             float ca = FastTrig.Cos(turns), sa = FastTrig.Sin(turns);
             float len = _value[i] * maxLen;
-            int steps = (int)(len * 1.5f) + 1;
-            for (int s = 0; s <= steps; s++)
+            float pxLen = len * MathF.Sqrt(ca * ca * ax * ax + sa * sa * ay * ay);
+            int steps = (int)pxLen + 1;
+            bool horizontal = MathF.Abs(ca * ax) > MathF.Abs(sa * ay);
+            for (int st = 0; st <= steps; st++)
             {
-                float r = r0 + len * s / steps;
-                var c = GradAt(i, (int)(s / (float)steps * (Rows - 1) * Math.Min(1f, _value[i] * 1.3f)));
-                int px = (int)MathF.Round(cx + ca * r * aspect), py = (int)MathF.Round(cy + sa * r);
+                float t = st / (float)steps;
+                float sc = s0 + len * t;
+                var c = GradAt(i, (int)(t * (Rows - 1) * Math.Min(1f, _value[i] * 1.3f)));
+                int px = (int)MathF.Round(cx + ca * ax * sc), py = (int)MathF.Round(cy + sa * ay * sc);
                 frame.SetPixel(px, py, c);
-                if (_n <= 32) frame.SetPixel(px + 1, py, Kit.Scale(c, 0.8f));
+                // Thicken the ray across its short direction so neighbouring rays leave no gaps.
+                var side = Kit.Scale(c, 0.75f);
+                if (horizontal) frame.SetPixel(px, py + 1, side);
+                else frame.SetPixel(px + 1, py, side);
             }
 
             if (_app.PeakCaps && _peak[i] > 0.04f)
             {
-                float r = r0 + _peak[i] * maxLen + 1.5f;
-                int px = (int)MathF.Round(cx + ca * r * aspect), py = (int)MathF.Round(cy + sa * r);
+                float sc = s0 + _peak[i] * maxLen + 0.02f;
+                int px = (int)MathF.Round(cx + ca * ax * sc), py = (int)MathF.Round(cy + sa * ay * sc);
                 var cap = Pixel.Lerp(GradAt(i, Rows - 1), Pixel.White, 0.7f);
                 frame.SetPixel(px, py, cap);
+                if (horizontal) frame.SetPixel(px, py + 1, cap); else frame.SetPixel(px + 1, py, cap);
             }
         }
 
         // Pulsing core ring.
-        int ringSteps = 120;
+        int ringSteps = 160;
         var core = Kit.Scale(GradAt(_n / 2, Rows / 2), 0.35f + 0.65f * _pulse);
+        float rs = s0 - 0.04f;
         for (int s = 0; s < ringSteps; s++)
         {
             float a = s / (float)ringSteps;
-            frame.SetPixel((int)MathF.Round(cx + FastTrig.Cos(a) * (r0 - 2f) * aspect), (int)MathF.Round(cy + FastTrig.Sin(a) * (r0 - 2f)), core);
+            frame.SetPixel((int)MathF.Round(cx + FastTrig.Cos(a) * ax * rs), (int)MathF.Round(cy + FastTrig.Sin(a) * ay * rs), core);
         }
     }
 }

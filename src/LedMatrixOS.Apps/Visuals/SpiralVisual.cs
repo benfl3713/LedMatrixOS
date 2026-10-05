@@ -129,6 +129,16 @@ internal sealed class SpiralVisual : VisualNode
                     (0f, new Pixel(10, 40, 255)), (0.3f, new Pixel(0, 170, 255)), (0.55f, new Pixel(0, 255, 200)),
                     (0.8f, new Pixel(70, 90, 255)), (1f, new Pixel(10, 40, 255))]);
                 break;
+            case "Candy":
+                _ramp.Fill([
+                    (0f, new Pixel(255, 90, 170)), (0.25f, new Pixel(120, 255, 230)), (0.5f, new Pixel(255, 240, 90)),
+                    (0.75f, new Pixel(190, 130, 255)), (1f, new Pixel(255, 90, 170))]);
+                break;
+            case "Mono":
+                _ramp.Fill([
+                    (0f, new Pixel(90, 95, 120)), (0.3f, new Pixel(235, 240, 255)), (0.55f, new Pixel(140, 145, 170)),
+                    (0.8f, new Pixel(255, 255, 255)), (1f, new Pixel(90, 95, 120))]);
+                break;
             case "Aurora":
                 _ramp.Fill([
                     (0f, new Pixel(30, 255, 90)), (0.3f, new Pixel(0, 230, 200)), (0.55f, new Pixel(120, 70, 255)),

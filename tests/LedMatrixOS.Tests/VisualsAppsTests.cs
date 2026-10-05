@@ -134,6 +134,79 @@ public class VisualsAppsTests
         Assert.False(SnapshotHelper.IsBlank(f));
     }
 
+    // ------------------------------------------------------------ palettes, mirror
+
+    [Theory]
+    [InlineData("Neon")]
+    [InlineData("Candy")]
+    [InlineData("Rainbow")]
+    [InlineData("Mono")]
+    public void Fire_SharedPalettes_RenderAndDiffer(string palette)
+    {
+        var fire = new VisualDriver(new FireApp { Seed = 3, Palette = palette }).RunTo(Ms(2000));
+        var classic = new VisualDriver(new FireApp { Seed = 3 }).RunTo(Ms(2000));
+        Assert.False(SnapshotHelper.IsBlank(fire));
+        Assert.False(VisualDriver.Same(fire, classic));
+    }
+
+    [Theory]
+    [InlineData("Candy")]
+    [InlineData("Mono")]
+    public void Spiral_SharedPalettes_RenderAndDiffer(string palette)
+    {
+        var spiral = new VisualDriver(new RainbowSpiralApp { Seed = 3, Palette = palette }).RunTo(Ms(2000));
+        var rainbow = new VisualDriver(new RainbowSpiralApp { Seed = 3 }).RunTo(Ms(2000));
+        Assert.False(SnapshotHelper.IsBlank(spiral));
+        Assert.False(VisualDriver.Same(spiral, rainbow));
+    }
+
+    [Fact]
+    public void FireAndSpiral_OfferTheSharedPaletteNames()
+    {
+        foreach (var name in new[] { "Neon", "Sunset", "Ocean", "Candy", "Aurora", "Rainbow", "Mono" })
+        {
+            Assert.Contains(name, ((IConfigurableApp)new FireApp()).GetSettings().Single(s => s.Key == "palette").Options!);
+            Assert.Contains(name, ((IConfigurableApp)new RainbowSpiralApp()).GetSettings().Single(s => s.Key == "palette").Options!);
+        }
+
+        // Existing persisted values (and any casing) keep working.
+        var fire = new FireApp();
+        fire.UpdateSetting("palette", "purple");
+        Assert.Equal("Purple", fire.Palette);
+    }
+
+    [Fact]
+    public void Equalizer_MirrorSettingExists_AndChangesRadial()
+    {
+        var setting = ((IConfigurableApp)new EqualizerApp()).GetSettings().Single(s => s.Key == "mirror");
+        Assert.Equal(true, setting.CurrentValue);
+        var svc = new AudioDataService();
+        var mirrored = new VisualDriver(LiveApp(svc, "Radial")).RunTo(Ms(1500), () => svc.AddAudioSamples(Samples(0.9f)));
+        var wrapped = LiveApp(svc, "Radial");
+        wrapped.Mirror = false;
+        var wrappedFrame = new VisualDriver(wrapped).RunTo(Ms(1500), () => svc.AddAudioSamples(Samples(0.9f)));
+        Assert.False(VisualDriver.Same(mirrored, wrappedFrame));
+        SnapshotHelper.AssertMatchesSnapshot(wrappedFrame, "visuals_eq_radial_unmirrored_loud");
+    }
+
+    [Fact]
+    public void Equalizer_RadialSpansTheWholeWidth()
+    {
+        var svc = new AudioDataService();
+        var f = new VisualDriver(LiveApp(svc, "Radial")).RunTo(Ms(1500), () => svc.AddAudioSamples(Samples(0.9f)));
+        int minX = f.Width, maxX = -1;
+        for (int y = 0; y < f.Height; y++)
+            for (int x = 0; x < f.Width; x++)
+            {
+                var p = f.GetPixel(x, y);
+                if (p.R + p.G + p.B < 60) continue;
+                minX = Math.Min(minX, x);
+                maxX = Math.Max(maxX, x);
+            }
+
+        Assert.True(maxX - minX > f.Width * 0.8, $"radial spans {minX}..{maxX}");
+    }
+
     // ------------------------------------------------------------ equalizer audio behaviour
 
     private static float[] Samples(float level)

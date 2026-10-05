@@ -16,6 +16,8 @@ namespace LedMatrixOS.Apps;
 
 /// <summary>
 /// A one-shot morning briefing: full-width cards (greeting, weather, calendar, commute, bins, sign-off) shown one after another with a slide,
+/// <c>Greeting Name</c> personalises the greeting; the greeting card is shown only between <c>Active From</c> and <c>Active Until</c> (default 5 to 12;
+/// outside that window the briefing still plays, from the first data card); <c>Card Order</c> reorders the data cards.
 /// <c>Page Seconds</c> each, stopping on the sign-off. Cards whose data is missing or not configured are skipped, so only greeting and sign-off may remain.
 /// The data comes from the same adapters as the Home chips, Commute and Bin Day apps (feed URLs and keys stay configuration: <c>Calendar:IcsUrl</c>,
 /// <c>TFL:AppKey</c>, <c>Weather:Location</c>). Activating the app again replays from the first card; give the playlist entry <see cref="TotalSeconds"/>.
@@ -54,6 +56,18 @@ public class MorningBriefingApp : WidgetApp
 
     [Setting("Show Bins", Description = "Include the bins card when bins are due.")]
     public bool ShowBins { get; set; } = true;
+
+    [Setting("Greeting Name", Description = "Name to greet, e.g. \"Good morning, Ben\" (up to 10 characters). Empty greets without a name.")]
+    public string GreetingName { get; set; } = "";
+
+    [Setting("Active From", Description = "First hour (0-23) of the day the greeting card is shown. Outside Active From to Active Until the briefing still plays, starting at the first data card instead of the greeting. A window that ends before it starts wraps over midnight; equal hours mean always.", Min = 0, Max = 23)]
+    public int ActiveFrom { get; set; } = 5;
+
+    [Setting("Active Until", Description = "Hour (1-24) the greeting stops being shown (that hour itself is outside). See Active From.", Min = 0, Max = 24)]
+    public int ActiveUntil { get; set; } = 12;
+
+    [Setting("Card Order", Description = "Order of the data cards as a comma separated list of Weather, Calendar, Commute and Bins. The greeting is always first and the sign-off last; cards left out follow in the default order and the Show switches still decide what appears.")]
+    public string CardOrder { get; set; } = BriefingGreeting.DefaultOrder;
 
     [Setting("Units", Description = "Temperature units.", Options = ["Celsius", "Fahrenheit"])]
     public string Units { get; set; } = "Celsius";
@@ -129,7 +143,8 @@ public class MorningBriefingApp : WidgetApp
         _model.Refresh(new BriefingInputs(
             Time.GetLocalNow(), Time.LocalTimeZone, context.Time,
             _weather?.Value, _events?.Value, _arrivals?.Value, _statuses?.Value,
-            ShowWeather, ShowCalendar, ShowCommute, ShowBins, StationId ?? "", WalkMinutes, Bins ?? ""));
+            ShowWeather, ShowCalendar, ShowCommute, ShowBins, StationId ?? "", WalkMinutes, Bins ?? "",
+            GreetingName ?? "", ActiveFrom, ActiveUntil, CardOrder ?? ""));
 
         // A card's whole cycle (rest plus slide) is Page Seconds, so N cards take exactly N x Page Seconds and the sign-off gets its full share.
         int seconds = Math.Clamp(PageSeconds, 3, 20);

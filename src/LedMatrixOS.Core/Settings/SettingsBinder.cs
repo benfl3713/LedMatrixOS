@@ -68,7 +68,13 @@ public static class SettingsBinder
                 var s = CoerceString(value, (string?)current ?? "");
                 if (entry.Type == AppSettingType.Search) s = s.Trim();
                 // Ignore values that are not one of the allowed options
-                if (entry.Attribute.Options is { } options && !options.Contains(s)) return true;
+                // (a differently cased spelling of an option, e.g. an old persisted "neon", selects the canonical "Neon")
+                if (entry.Attribute.Options is { } options)
+                {
+                    var canonical = options.FirstOrDefault(o => string.Equals(o, s, StringComparison.OrdinalIgnoreCase));
+                    if (canonical is null) return true;
+                    s = canonical;
+                }
                 property.SetValue(target, s);
                 break;
         }

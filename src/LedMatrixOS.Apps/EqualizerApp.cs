@@ -10,7 +10,7 @@ namespace LedMatrixOS.Apps;
 /// <summary>
 /// Punchy music visualiser. Bands come from <see cref="AudioDataService"/> (phone microphone stream); with no audio it plays a synthetic
 /// demo groove (Auto Generate) or, when that is off, a slow idle "breathing" ripple. Fast-attack/slow-release smoothing, peak-hold caps that
-/// fall with gravity, per-style gradients, beat detection driving particles and bloom, and five styles.
+/// fall with gravity, per-style gradients, beat detection driving particles and bloom, and five styles (Radial is a full-width sunburst).
 /// </summary>
 public sealed class EqualizerApp : WidgetApp
 {
@@ -51,6 +51,9 @@ public sealed class EqualizerApp : WidgetApp
 
     [Setting("Peak Caps", Description = "Hold a falling cap at each bar's recent peak")]
     public bool PeakCaps { get; set; } = true;
+
+    [Setting("Mirror", Description = "Radial style: mirror the spectrum left and right (off wraps it once around the ring)")]
+    public bool Mirror { get; set; } = true;
 
     [Setting("Sensitivity", Description = "Gain applied to incoming audio (1-10)", Min = 1, Max = 10)]
     public int Sensitivity { get; set; } = 5;
