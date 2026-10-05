@@ -1,3 +1,4 @@
+using LedMatrixOS.Core.Settings;
 using LedMatrixOS.Core.Overlays;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,6 +7,9 @@ namespace LedMatrixOS.Core;
 
 /// <summary>Static description of a registered app, available without activating it.</summary>
 public sealed record AppInfo(string Id, string Name, bool HasSettings);
+
+/// <summary>A user-created screen: an alias of a registered app with a preset, listed alongside the built-in apps.</summary>
+public sealed record ScreenInfo(string Id, string Name, string TargetId, bool HasSettings);
 
 public enum SettingsStatus { Ok, NotFound, NotConfigurable }
 
@@ -22,7 +26,7 @@ public sealed class AppManager
     private readonly Dictionary<string, Type> _appsById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AppInfo> _infoById = new(StringComparer.OrdinalIgnoreCase);
     private readonly AppSettingsStorage? _settingsStorage;
-    private readonly Dictionary<string, (string TargetId, IReadOnlyDictionary<string, object> Preset)> _aliases = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (string TargetId, IReadOnlyDictionary<string, object> Preset, string? DisplayName, bool IsScreen)> _aliases = new(StringComparer.OrdinalIgnoreCase);
     private IMatrixApp? _activeApp;
     private string? _activeKey; // the id settings are persisted under: the requested id, so an alias keeps its own saved profile
 
@@ -31,6 +35,17 @@ public sealed class AppManager
     public IEnumerable<string> AliasIds => _aliases.Keys;
     public IEnumerable<AppInfo> AppInfos => _infoById.Values;
     public IMatrixApp? ActiveApp => _activeApp;
+
+    /// <summary>
+    /// The id the active app was activated under: the alias id for an alias (ActiveApp.Id is the target's id), otherwise
+    /// the app's own id. Null when nothing is active.
+    /// </summary>
+    public string? ActiveAppId => _activeApp == null ? null : _activeKey ?? _activeApp.Id;
+
+    /// <summary>User-created screens (aliases registered with isScreen: true). Built-in aliases are never listed.</summary>
+    public IEnumerable<ScreenInfo> Screens => _aliases
+        .Where(a => a.Value.IsScreen && _infoById.ContainsKey(a.Value.TargetId))
+        .Select(a => new ScreenInfo(a.Key, a.Value.DisplayName ?? a.Key, a.Value.TargetId, _infoById[a.Value.TargetId].HasSettings));
 
     /// <summary>Handed to apps on activation so they can raise overlays (the engine's overlay manager).</summary>
     public IOverlayService? Overlays { get; set; }
@@ -63,12 +78,19 @@ public sealed class AppManager
     /// configuring the alias uses the target app with <paramref name="preset"/> applied on top of the alias's own persisted
     /// settings (stored under the alias id, so existing app-settings.json entries keep applying).
     /// </summary>
-    public void RegisterAlias(string alias, string targetId, IReadOnlyDictionary<string, object> preset)
+    public void RegisterAlias(string alias, string targetId, IReadOnlyDictionary<string, object> preset, string? displayName = null, bool isScreen = false)
     {
         if (!_appsById.ContainsKey(targetId)) throw new ArgumentException($"Unknown target app '{targetId}'", nameof(targetId));
         if (_appsById.ContainsKey(alias)) throw new ArgumentException($"'{alias}' is already a registered app", nameof(alias));
-        _aliases[alias] = (targetId, preset);
+        _aliases[alias] = (targetId, preset, displayName, isScreen); // re-registering replaces the alias in place (editing a screen)
     }
+
+    /// <summary>
+    /// Removes an alias. Returns false if it does not exist. If the alias is currently active its instance is left
+    /// running until something else is activated (it already holds its preset); it just stops resolving for new activations.
+    /// Persisted settings under the alias id are not deleted.
+    /// </summary>
+    public bool UnregisterAlias(string alias) => _aliases.Remove(alias);
 
     private bool TryResolve(string id, out Type type, out string key, out IReadOnlyDictionary<string, object>? preset)
     {
@@ -81,6 +103,14 @@ public sealed class AppManager
         return false;
     }
 
+    /// <summary>
+    /// The id of the registered app that serves <paramref name="id"/> (itself, or an alias's target), or null when unknown.
+    /// Never constructs an app.
+    /// </summary>
+    public string? ResolveAppId(string id) => TryResolve(id, out var type, out var key, out _)
+        ? (_aliases.TryGetValue(id, out var alias) && !_appsById.ContainsKey(id) ? _infoById[alias.TargetId].Id : key)
+        : null;
+
     private static void ApplyPreset(IMatrixApp app, IReadOnlyDictionary<string, object>? preset)
     {
         if (preset == null || app is not IConfigurableApp configurable) return;
@@ -91,7 +121,12 @@ public sealed class AppManager
     }
 
     // Apps are built through DI so their constructors can take services (HttpClient factory, AudioDataService, ...)
-    private IMatrixApp Create(Type app) => (IMatrixApp)ActivatorUtilities.CreateInstance(_services, app);
+    private IMatrixApp Create(Type app)
+    {
+        var instance = (IMatrixApp)ActivatorUtilities.CreateInstance(_services, app);
+        SettingsBinder.CaptureDefaults(instance); // before presets or persisted values touch it
+        return instance;
+    }
 
     public async Task<bool> ActivateAsync(string id, CancellationToken cancellationToken)
     {
@@ -197,7 +232,16 @@ public sealed class AppManager
             foreach (var (key, value) in updates)
             {
                 var before = configurable.GetSettings().FirstOrDefault(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase));
-                if (before == null) { rejected.Add(key); continue; }
+                if (before == null)
+                {
+                    // A retired key (e.g. stationSearch/stationSelect) is still accepted: applied to its replacement, or ignored
+                    if (!SettingsBinder.IsLegacyKey(configurable, key)) { rejected.Add(key); continue; }
+                    try { configurable.UpdateSetting(key, value); } catch { /* see below */ }
+                    foreach (var changed in configurable.GetSettings().Where(x => x.Type is AppSettingType.Search or AppSettingType.MultiSearch))
+                        _settingsStorage?.UpdateAppSetting(storageKey, changed.Key, changed.CurrentValue);
+                    continue;
+                }
+
                 try { configurable.UpdateSetting(key, value); }
                 catch { /* an app that was never activated may fail in its change hook; the value itself is read back below */ }
 

@@ -69,9 +69,9 @@ public class BusArrivalsAppTests(ITestOutputHelper output)
         var app = NewApp();
         var settings = app.GetSettings().ToList();
 
-        Assert.Equal(new[] { "stopSearch", "stopSelect", "stopIds", "routeFilter", "maxBuses", "pageSeconds" }, settings.Select(s => s.Key).ToArray());
+        Assert.Equal(new[] { "stopIds", "routeFilter", "maxBuses", "pageSeconds" }, settings.Select(s => s.Key).ToArray());
         Assert.Equal(
-            new[] { AppSettingType.String, AppSettingType.Select, AppSettingType.String, AppSettingType.String, AppSettingType.Integer, AppSettingType.Integer },
+            new[] { AppSettingType.MultiSearch, AppSettingType.String, AppSettingType.Integer, AppSettingType.Integer },
             settings.Select(s => s.Type).ToArray());
         Assert.Equal(4, settings.Single(s => s.Key == "maxBuses").MaxValue);
         Assert.Equal("bus-arrivals", app.Id);

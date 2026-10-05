@@ -20,4 +20,32 @@ public sealed class SettingAttribute : Attribute
     public object? Max { get; set; }
     /// <summary>Allowed values; makes a string setting a Select.</summary>
     public string[]? Options { get; set; }
+    /// <summary>Makes a string setting a Search: one id picked through the options endpoint (see <see cref="SettingOptionsRegistry"/>).</summary>
+    public bool Search { get; set; }
+    /// <summary>
+    /// Makes a string setting a MultiSearch: a comma separated list of ids picked through the options endpoint.
+    /// <see cref="Max"/> (an int) limits how many ids are kept.
+    /// </summary>
+    public bool MultiSearch { get; set; }
+    /// <summary>
+    /// With <see cref="Search"/>/<see cref="MultiSearch"/>: the options are a short list the client shows straight away (no typing needed),
+    /// computed from the app's other settings.
+    /// </summary>
+    public bool Browse { get; set; }
+    /// <summary>Rarely used or raw setting: clients may hide it under an "Advanced" section.</summary>
+    public bool Advanced { get; set; }
+    /// <summary>Hint for clients: use this structured editor (e.g. "ha_entities", "bins", "reminders") instead of a plain text field. The stored value stays a string; unknown editors fall back to text.</summary>
+    public string? Editor { get; set; }
+}
+
+/// <summary>
+/// Declares a setting key an app used to have, so persisted values, schedule presets and clients that still post it keep working.
+/// With <c>mapsTo</c> the value is applied to that setting (an "id | name" value is reduced to the id, and a MultiSearch target gets
+/// the id added); without it the value is accepted and ignored.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
+public sealed class LegacySettingKeyAttribute(string key, string? mapsTo = null) : Attribute
+{
+    public string Key { get; } = key;
+    public string? MapsTo { get; } = mapsTo;
 }

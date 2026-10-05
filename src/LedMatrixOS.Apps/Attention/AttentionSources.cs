@@ -33,6 +33,41 @@ public sealed class LineDisruptionSource : PollingAttentionSource
 }
 
 /// <summary>
+/// <c>road_disrupted:&lt;corridorId|any&gt;</c>: true while TfL reports a road disruption of at least <see cref="MinSeverity"/>
+/// (configuration <c>Attention:RoadMinSeverity</c>: Minimal, Moderate, Serious or Severe; default Serious) on that corridor
+/// (e.g. <c>a406</c>), or anywhere on the network for <c>any</c>. Polls every 5 minutes, only for referenced arguments.
+/// </summary>
+public sealed class RoadDisruptionSource : PollingAttentionSource
+{
+    public static readonly TimeSpan PollInterval = TimeSpan.FromMinutes(5);
+    public const string Any = "any";
+    private readonly TflApi _api;
+
+    public RoadSeverity MinSeverity { get; }
+
+    public RoadDisruptionSource(HttpClient http, IConfiguration configuration, TimeProvider? time = null)
+        : this(AttentionHttp.Configure(http), configuration["TFL:AppKey"], ParseMin(configuration["Attention:RoadMinSeverity"]), time ?? TimeProvider.System) { }
+
+    internal RoadDisruptionSource(HttpClient http, string? appKey, RoadSeverity minSeverity, TimeProvider time) : base(time, PollInterval)
+    {
+        _api = new TflApi(http) { AppKey = appKey };
+        MinSeverity = minSeverity;
+    }
+
+    public override string Kind => "road_disrupted";
+
+    private static RoadSeverity ParseMin(string? text) =>
+        Enum.TryParse<RoadSeverity>(text?.Trim(), ignoreCase: true, out var s) ? s : RoadSeverity.Serious;
+
+    protected override async Task<bool> QueryAsync(string argument, CancellationToken ct)
+    {
+        var corridors = argument.Equals(Any, StringComparison.OrdinalIgnoreCase) || argument.Length == 0 ? null : new[] { argument.ToLowerInvariant() };
+        var disruptions = await _api.GetRoadDisruptionsAsync(corridors, ct).ConfigureAwait(false);
+        return disruptions.Any(d => d.Severity >= MinSeverity);
+    }
+}
+
+/// <summary>
 /// <c>bus_due:&lt;stopId&gt;</c>: true while a bus is predicted within <see cref="DueMinutes"/> minutes (configuration
 /// <c>Attention:BusDueMinutes</c>, default 3). Polls every 30 seconds, only for referenced stops.
 /// </summary>

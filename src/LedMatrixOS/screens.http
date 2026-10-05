@@ -1,0 +1,22 @@
+### List screens
+GET http://localhost:5005/api/screens
+
+### Editor schema (node types, props, slots, binding keys)
+GET http://localhost:5005/api/screens/schema
+
+### Get one screen
+GET http://localhost:5005/api/screens/demo
+
+### Create or replace a screen
+PUT http://localhost:5005/api/screens/demo
+Content-Type: application/json
+
+{"id":"demo","name":"Demo","root":{"type":"stack","direction":"vertical","padding":4,"children":[
+  {"type":"clock","format":"HH:mm","font":"Big","color":"#ffffff"},
+  {"type":"label","text":"{weather.temp} degrees","color":"#ffd24a"}]}}
+
+### Show it
+POST http://localhost:5005/api/apps/screen:demo
+
+### Delete it
+DELETE http://localhost:5005/api/screens/demo

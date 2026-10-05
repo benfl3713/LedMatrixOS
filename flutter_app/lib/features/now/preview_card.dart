@@ -15,9 +15,21 @@ class PreviewCard extends ConsumerStatefulWidget {
   ConsumerState<PreviewCard> createState() => _PreviewCardState();
 }
 
-class _PreviewCardState extends ConsumerState<PreviewCard> {
+class _PreviewCardState extends ConsumerState<PreviewCard> with WidgetsBindingObserver {
   ui.Image? _image;
   bool _decoding = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// Sockets silently die while the app is backgrounded; reconnect as soon as it is visible again.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) ref.invalidate(previewFeedProvider);
+  }
 
   Future<void> _onFrame(PreviewFrame frame) async {
     if (_decoding) return; // drop frames while one is still decoding
@@ -38,6 +50,7 @@ class _PreviewCardState extends ConsumerState<PreviewCard> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _image?.dispose();
     super.dispose();
   }
@@ -83,7 +96,10 @@ class _PreviewCardState extends ConsumerState<PreviewCard> {
         children: [
           AspectRatio(
             aspectRatio: aspect,
-            child: ColoredBox(color: Colors.black, child: content),
+            child: GestureDetector(
+              onLongPress: () => ref.invalidate(previewFeedProvider),
+              child: ColoredBox(color: Colors.black, child: content),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -95,6 +111,14 @@ class _PreviewCardState extends ConsumerState<PreviewCard> {
                   _image != null ? 'Live' : (connected ? 'Waiting for frames' : 'Reconnecting (polling preview)'),
                   style: Theme.of(context).textTheme.labelMedium,
                 ),
+                if (_image == null && !connected) ...[
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () => ref.invalidate(previewFeedProvider),
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                    child: const Text('Retry now'),
+                  ),
+                ],
                 const Spacer(),
                 if (settings != null)
                   Text(

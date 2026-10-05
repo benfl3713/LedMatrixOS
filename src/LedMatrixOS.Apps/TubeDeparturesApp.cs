@@ -17,6 +17,8 @@ namespace LedMatrixOS.Apps;
 /// station, the station name (which swaps to the current disruption when there is one) and the clock. TfL polling lives here, the board
 /// derivation in <see cref="DepartureBoardModel"/>, the HTTP calls in <see cref="TflApi"/>.
 /// </summary>
+[LegacySettingKey("stationSearch")]
+[LegacySettingKey("stationSelect", "stationId")]
 public class TubeDeparturesApp : WidgetApp
 {
     public override string Id => "tube-departures";
@@ -25,13 +27,13 @@ public class TubeDeparturesApp : WidgetApp
 
     private static readonly IReadOnlyList<LineStatus> NoStatuses = [];
 
-    [Setting("Station Search", Description = "Type a station name (e.g. Baker Street).")]
-    public string StationSearch { get; set; } = "";
-
-    [Setting("Station ID", Description = "TfL Naptan ID (auto-filled when you select from Station Select).")]
+    [Setting("Station", Description = "Search for a station (e.g. Baker Street).", Search = true)]
     public string StationId { get; set; } = "";
 
-    [Setting("Platform Filter", Description = "Filter by platform name (e.g. 'Eastbound'). Leave empty to show all platforms.")]
+    [Setting("Routes", Description = "Only show these lines and directions (e.g. Metropolitan towards Aldgate). Leave empty to show everything.", MultiSearch = true, Browse = true)]
+    public string Routes { get; set; } = "";
+
+    [Setting("Platform Filter", Description = "Advanced: filter by platform name text (e.g. 'Eastbound'). Prefer Routes; leave empty to show everything.", Advanced = true)]
     public string PlatformFilter { get; set; } = "";
 
     [Setting("Board Style", Description = "Split: a column per direction with the next trains of each. Platform: classic amber platform sign. Hero: the next train big, the rest paged below.",
@@ -60,11 +62,10 @@ public class TubeDeparturesApp : WidgetApp
     private volatile ILiveData<string>? _stationName;
     private CancellationTokenSource? _stationPollCts;
 
-    private readonly TflStopPicker _picker;
-
     private Node? _board, _strip;
     private Node? _heroBody, _splitBody, _platformBody, _splitDivider, _splitSecond, _stripNormal, _stripPlatform;
     private Ticker? _platformTicker;
+    private Block? _stripe0, _stripe1;
     private Node? _rest;
     private Pager? _pager;
     private StateScreen? _state;
@@ -76,8 +77,6 @@ public class TubeDeparturesApp : WidgetApp
         _http = httpClient;
         _http.Timeout = TimeSpan.FromSeconds(10);
         _api = new TflApi(_http);
-        _picker = new TflStopPicker("stationSearch", "stationSelect", "Station Select", "Choose a result to set the station automatically.",
-            () => StationSearch, _api.SearchStationsAsync, ApplyStationId, RunInBackground);
     }
 
     // ---- view -------------------------------------------------------------------------------------------------------------------
@@ -157,6 +156,9 @@ public class TubeDeparturesApp : WidgetApp
     {
         Node Column(int index)
         {
+            // With routes selected the header carries the line colour as a stripe; the label reads "Metropolitan towards Aldgate"
+            var stripe = new Block(default, width: 3) { Visible = false, HAlign = Align.Start };
+            if (index == 0) _stripe0 = stripe; else _stripe1 = stripe;
             var header = new Panel
             {
                 Height = 10,
@@ -164,8 +166,9 @@ public class TubeDeparturesApp : WidgetApp
                 Children =
                 {
                     new Block(new Pixel(22, 22, 30)),
+                    stripe,
                     new Label(() => _model.ColumnLabel(index) is { Length: > 0 } label ? label : "Next trains")
-                        { Style = styles.TinyAmber, VAlign = Align.Center, Margin = new Thickness(5, 0, 0, 0) },
+                        { Style = styles.TinyAmber, VAlign = Align.Center, Margin = new Thickness(7, 0, 0, 0) },
                 },
             };
             var rows = new ListView<Departure>(() => _model.Column(index),
@@ -189,8 +192,7 @@ public class TubeDeparturesApp : WidgetApp
             HAlign = Align.Stretch,
             Children =
             {
-                new Label("PLAT") { Style = caption, VAlign = Align.Center, Margin = new Thickness(6, 0, 0, 0) },
-                new Label("DESTINATION") { Style = caption, VAlign = Align.Center, Margin = new Thickness(30, 0, 0, 0) },
+                new Label("DESTINATION") { Style = caption, VAlign = Align.Center, Margin = new Thickness(20, 0, 0, 0) },
                 new Label("MINS") { Style = caption, VAlign = Align.Center, HAlign = Align.End, Margin = new Thickness(0, 0, 8, 0) },
                 new Block(TubeGfx.Amber.WithBrightness(0.3f), height: 1) { VAlign = Align.End },
             },
@@ -211,7 +213,14 @@ public class TubeDeparturesApp : WidgetApp
         _ = Host;   // builds the tree on the first frame
         var style = CurrentStyle;
         int max = style == Style.Platform ? 5 : MaxDepartures;
-        _model.Refresh(context.Time, _arrivals?.Value, PlatformFilter, max, perDirection: style == Style.Split);
+        _model.Refresh(context.Time, _arrivals?.Value, PlatformFilter, max, perDirection: style == Style.Split, Routes);
+        bool byRoute = _model.ColumnsByRoute;
+        _stripe0!.Visible = _stripe1!.Visible = byRoute;
+        if (byRoute)
+        {
+            _stripe0.Color = _model.ColumnColor(0);
+            _stripe1.Color = _model.ColumnColor(1);
+        }
 
         _heroBody!.Visible = style == Style.Hero;
         _splitBody!.Visible = style == Style.Split;
@@ -253,19 +262,10 @@ public class TubeDeparturesApp : WidgetApp
 
     // ---- settings ---------------------------------------------------------------------------------------------------------------
 
-    // stationSelect has options that change as the user types, so it is not a [Setting] property.
-    public override IEnumerable<AppSetting> GetSettings() => _picker.WithSelect(base.GetSettings());
-
-    public override void UpdateSetting(string key, object value)
-    {
-        if (!_picker.TryUpdate(key, value)) base.UpdateSetting(key, value);
-    }
-
     protected override void OnSettingChanged(string key)
     {
         switch (key)
         {
-            case "stationSearch": _picker.OnQueryChanged(); break;
             case "stationId": ApplyStationId(StationId); break;
             case "pageSeconds":
                 if (_pager is not null) _pager.Interval = PageSeconds.Seconds();
@@ -307,7 +307,7 @@ public class TubeDeparturesApp : WidgetApp
 
         var arrivals = Poll(_refreshInterval, ct => _api.GetArrivalsAsync(stationId, ct), cts.Token);
         _arrivals = arrivals;
-        _lineStatuses = Poll(_lineStatusRefreshInterval, ct => TflStopPicker.FetchLineStatusesAsync(_api, arrivals, ct), cts.Token);
+        _lineStatuses = Poll(_lineStatusRefreshInterval, ct => TflLookups.FetchLineStatusesAsync(_api, arrivals, ct), cts.Token);
         _stationName = Poll(_stationNameRefreshInterval, ct => _api.GetStationNameAsync(stationId, ct), cts.Token);
     }
 

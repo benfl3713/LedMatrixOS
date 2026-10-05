@@ -4,6 +4,7 @@ import 'package:led_matrix_controller/api/led_api.dart';
 import 'package:led_matrix_controller/api/models.dart';
 import 'package:led_matrix_controller/api/result.dart';
 import 'package:led_matrix_controller/api/schedule_models.dart';
+import 'package:led_matrix_controller/api/screen_models.dart';
 import 'package:led_matrix_controller/core/providers.dart';
 import 'package:led_matrix_controller/main.dart';
 
@@ -15,6 +16,9 @@ class FakeApi implements LedApi {
 
   bool failActivate;
   bool failApps;
+
+  /// When set, settings updates fail with this error (nothing is applied).
+  ApiError? failUpdate;
   String active = 'clock';
   int brightness = 128;
   bool power = true;
@@ -22,6 +26,16 @@ class FakeApi implements LedApi {
 
   final List<String> calls = [];
   final List<Map<String, Object?>> settingUpdates = [];
+  final List<String> optionQueries = [];
+
+  /// The `ctx` the client sent with each option query (parallel to [optionQueries]).
+  final List<Map<String, String>> optionContexts = [];
+
+  /// Answers option searches; defaults to no results.
+  Future<Result<List<SettingOption>>> Function(String key, String q)? optionsHandler;
+
+  /// Labels the fake reports for picked ids (falls back to the id).
+  final Map<String, String> knownLabels = {};
 
   final apps = const [
     MatrixApp(id: 'clock', name: 'Clock', hasSettings: true),
@@ -61,7 +75,29 @@ class FakeApi implements LedApi {
   @override
   Future<Result<void>> updateAppSettings(String id, Map<String, Object?> values) async {
     settingUpdates.add(values);
+    if (failUpdate != null) return Err(failUpdate!);
+    for (var i = 0; i < settings.length; i++) {
+      final s = settings[i];
+      if (!values.containsKey(s.key)) continue;
+      final v = values[s.key];
+      settings[i] = s.type == AppSettingType.search
+          ? s.copyWith(currentValue: v, currentLabel: v == '' ? '' : (knownLabels['$v'] ?? '$v'))
+          : s.type == AppSettingType.multiSearch
+              ? s.copyWith(currentValue: v, currentLabels: [
+                  for (final id in '$v'.split(',').where((e) => e.isNotEmpty)) knownLabels[id] ?? id
+                ])
+              : s.copyWith(currentValue: v);
+    }
     return const Ok(null);
+  }
+
+  @override
+  Future<Result<List<SettingOption>>> getSettingOptions(String appId, String key, String q, {Map<String, String> context = const {}}) async {
+    optionQueries.add(q);
+    optionContexts.add(context);
+    final h = optionsHandler;
+    if (h == null) return const Ok(<SettingOption>[]);
+    return h(key, q);
   }
 
   @override
@@ -187,6 +223,94 @@ class FakeApi implements LedApi {
     calls.add('alert:$message:$color');
     return const Ok(null);
   }
+
+  // Screens -----------------------------------------------------------------
+
+  final Map<String, ScreenDefinition> screens = {
+    'demo': ScreenDefinition(
+      id: 'demo',
+      name: 'Demo',
+      root: ScreenNode(type: 'stack', props: {'direction': 'vertical'}, children: [
+        ScreenNode(type: 'label', props: {'text': 'Hello {weather.temp}', 'color': '#FFFFFF', 'mystery': 7}),
+      ]),
+    ),
+  };
+
+  /// Validation errors the next putScreen returns (cleared after use).
+  List<FieldError> screenErrors = [];
+  final List<ScreenDefinition> putScreens = [];
+
+  static const screenSchema = ScreenSchema(
+    maxDepth: 8,
+    maxNodes: 200,
+    fonts: ['Big', 'Small'],
+    slots: ['children', 'top', 'bottom', 'left', 'right', 'fill', 'item'],
+    commonProps: [
+      PropSchema(name: 'width', kind: PropKind.int),
+      PropSchema(name: 'halign', kind: PropKind.enumeration, options: ['left', 'center', 'right']),
+      PropSchema(name: 'visible', kind: PropKind.bool),
+    ],
+    nodeTypes: [
+      NodeTypeSchema(type: 'stack', props: [
+        PropSchema(name: 'direction', kind: PropKind.enumeration, options: ['horizontal', 'vertical']),
+        PropSchema(name: 'gap', kind: PropKind.int),
+      ], slots: ['children']),
+      NodeTypeSchema(type: 'dock', props: [], slots: ['top', 'bottom', 'left', 'right', 'fill']),
+      NodeTypeSchema(type: 'label', props: [
+        PropSchema(name: 'text', kind: PropKind.binding),
+        PropSchema(name: 'font', kind: PropKind.enumeration, options: ['Big', 'Small']),
+        PropSchema(name: 'color', kind: PropKind.color),
+      ], slots: []),
+      NodeTypeSchema(type: 'clock', props: [
+        PropSchema(name: 'format', kind: PropKind.string),
+        PropSchema(name: 'color', kind: PropKind.color),
+      ], slots: []),
+      NodeTypeSchema(type: 'list', props: [
+        PropSchema(name: 'source', kind: PropKind.binding),
+      ], slots: ['item']),
+    ],
+    bindingKeys: [
+      BindingKeyInfo(key: 'time', kind: 'time', description: 'Current time'),
+      BindingKeyInfo(key: 'weather.<field>', kind: 'weather', description: 'Weather value', fields: ['temp', 'high']),
+      BindingKeyInfo(key: 'item', kind: 'item', description: 'Current list item', insideListOnly: true),
+    ],
+  );
+
+  @override
+  Future<Result<List<ScreenSummary>>> listScreens() async =>
+      Ok([for (final s in screens.values) ScreenSummary(id: s.id, name: s.name)]);
+
+  @override
+  Future<Result<ScreenDefinition>> getScreen(String id) async {
+    final s = screens[id];
+    if (s == null) return const Err(ApiError(ApiErrorKind.http, 'HTTP 404: not found', statusCode: 404));
+    return Ok(s.clone());
+  }
+
+  @override
+  Future<Result<ScreenDefinition>> putScreen(ScreenDefinition screen) async {
+    calls.add('putScreen:${screen.id}');
+    if (screenErrors.isNotEmpty) {
+      final errors = screenErrors;
+      screenErrors = [];
+      return Err(ApiError(ApiErrorKind.http, 'HTTP 400: ${errors.join('; ')}',
+          statusCode: 400, errors: [for (final e in errors) e.toString()], fieldErrors: errors));
+    }
+    final copy = screen.clone();
+    putScreens.add(copy);
+    screens[screen.id] = copy;
+    return Ok(copy.clone());
+  }
+
+  @override
+  Future<Result<void>> deleteScreen(String id) async {
+    calls.add('deleteScreen:$id');
+    screens.remove(id);
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<ScreenSchema>> getScreenSchema() async => const Ok(screenSchema);
 
   @override
   Uri get previewSocketUri => Uri.parse('ws://fake/ws/preview');

@@ -38,8 +38,10 @@ internal sealed class HeroRow : Stack
     private readonly Stack _countdown;
     private readonly DueBadge _due;
     private readonly Label _unit;
+    private readonly Pill _platform;
     private bool _tinted;
     private bool _isDue;
+    private bool _platformShown;
     private TimeSpan _time;
 
     public HeroRow(Departure dep, DepartureBoardModel model, BoardStyles styles, Func<bool> byLine) : base(Orientation.Horizontal)
@@ -50,26 +52,25 @@ internal sealed class HeroRow : Stack
         _byLine = byLine;
         CrossAlign = Align.Center;
 
-        _destination = new MarqueeLabel(dep.Destination) { Style = styles.Big, Grow = 1, Margin = new Thickness(7, 0, 4, 0) };
+        _destination = new MarqueeLabel(dep.Destination) { Style = styles.Big, Grow = 1, Margin = new Thickness(8, 0, 4, 0) };
         _minutes = new RollingNumber(() => dep.Minutes(model.Now)) { Style = styles.BigAmber };
         _unit = new Label("min") { Style = styles.TinyAmber, VAlign = Align.End, Margin = new Thickness(2, 0, 0, 4) };
         _countdown = new Stack(Orientation.Horizontal) { Children = { _minutes, _unit } };
         _due = new DueBadge(Fonts.Big, filled: true) { Visible = false };
 
         Add(new Block(dep.Color, width: 4));
-        if (dep.PlatformNumber.Length > 0)
+        // The platform badge only appears where the route is served from several platforms
+        _platform = new Pill(dep.PlatformNumber, new Pixel(235, 235, 240))
         {
-            Add(new Pill(dep.PlatformNumber, new Pixel(235, 235, 240))
-            {
-                Style = new TextStyle(Fonts.Small, Pixel.Black, Shadow: false),
-                Width = 15,
-                Height = 15,
-                Radius = 3,
-                Padding = new Thickness(0),
-                Margin = new Thickness(6, 0, 0, 0),
-            });
-        }
-        else _destination.Margin = new Thickness(8, 0, 4, 0);
+            Style = new TextStyle(Fonts.Small, Pixel.Black, Shadow: false),
+            Width = 15,
+            Height = 15,
+            Radius = 3,
+            Padding = new Thickness(0),
+            Margin = new Thickness(6, 0, 0, 0),
+            Visible = false,
+        };
+        Add(_platform);
 
         Add(_destination);
         Add(new Panel { Width = 66, Margin = new Thickness(0, 0, 4, 0), Children = { _countdown, _due } });
@@ -83,6 +84,14 @@ internal sealed class HeroRow : Stack
     {
         base.Update(ctx);
         _time = ctx.Time;
+
+        bool showPlatform = _dep.ShowPlatform && _dep.PlatformNumber.Length > 0;
+        if (showPlatform != _platformShown)
+        {
+            _platformShown = showPlatform;
+            _platform.Visible = showPlatform;
+            _destination.Margin = showPlatform ? new Thickness(7, 0, 4, 0) : new Thickness(8, 0, 4, 0);
+        }
 
         bool due = _dep.Minutes(_model.Now) == 0 && !_minutes.IsRolling;
         if (due != _isDue)
@@ -123,8 +132,10 @@ internal sealed class CompactRow : Stack
     private readonly RollingNumber _minutes;
     private readonly Stack _countdown;
     private readonly DueBadge _due;
+    private readonly Label _platform;
     private bool _tinted;
     private bool _isDue;
+    private bool _platformShown;
 
     public CompactRow(Departure dep, DepartureBoardModel model, BoardStyles styles, Func<bool> byLine, int countdownWidth = 48, int platformWidth = 13)
         : base(Orientation.Horizontal)
@@ -135,7 +146,7 @@ internal sealed class CompactRow : Stack
         _byLine = byLine;
         CrossAlign = Align.Center;
 
-        _destination = new MarqueeLabel(dep.Destination) { Style = styles.Small, Grow = 1, Margin = new Thickness(2, 0, 4, 0) };
+        _destination = new MarqueeLabel(dep.Destination) { Style = styles.Small, Grow = 1, Margin = new Thickness(4, 0, 4, 0) };
         _minutes = new RollingNumber(() => dep.Minutes(model.Now)) { Style = styles.SmallAmber };
         _countdown = new Stack(Orientation.Horizontal)
         {
@@ -144,7 +155,9 @@ internal sealed class CompactRow : Stack
         _due = new DueBadge(Fonts.Small, filled: false) { Visible = false };
 
         Add(new Block(dep.Color, width: 3) { Margin = new Thickness(0, 1, 0, 1) });
-        Add(new Label(dep.PlatformNumber) { Style = styles.Tiny, TextAlignment = TextAlign.Center, Width = platformWidth });
+        // The platform only takes room where the route is served from several platforms
+        _platform = new Label(dep.PlatformNumber) { Style = styles.Tiny, TextAlignment = TextAlign.Center, Width = platformWidth, Visible = false };
+        Add(_platform);
         Add(_destination);
         Add(new Panel { Width = countdownWidth, Margin = new Thickness(0, 0, 4, 0), Children = { _countdown, _due } });
         _countdown.HAlign = Align.End;
@@ -156,6 +169,14 @@ internal sealed class CompactRow : Stack
     public override void Update(FrameContext ctx)
     {
         base.Update(ctx);
+
+        bool showPlatform = _dep.ShowPlatform && _dep.PlatformNumber.Length > 0;
+        if (showPlatform != _platformShown)
+        {
+            _platformShown = showPlatform;
+            _platform.Visible = showPlatform;
+            _destination.Margin = showPlatform ? new Thickness(2, 0, 4, 0) : new Thickness(4, 0, 4, 0);
+        }
 
         bool due = _dep.Minutes(_model.Now) == 0 && !_minutes.IsRolling;
         if (due != _isDue)
@@ -192,6 +213,7 @@ internal sealed class PlatformRow : Stack
     private readonly RollingNumber _minutes;
     private readonly Stack _countdown;
     private readonly DueBadge _due;
+    private readonly Label _platform;
     private bool _tinted;
     private bool _isDue;
 
@@ -211,7 +233,10 @@ internal sealed class PlatformRow : Stack
         };
         _due = new DueBadge(Fonts.QuiteSmall, filled: false) { Visible = false };
 
-        Add(new Label(dep.PlatformNumber) { Style = styles.TinyAmber, Width = 24, Margin = new Thickness(6, 0, 0, 0), VAlign = Align.Center });
+        // Line colour stripe, then a platform cell that is only filled where the route is served from several platforms
+        Add(new Block(dep.Color.WithBrightness(0.8f), width: 2) { Margin = new Thickness(6, 1, 0, 1) });
+        _platform = new Label(() => _dep.ShowPlatform ? _dep.PlatformNumber : "") { Style = styles.TinyAmber, Width = 12, TextAlignment = TextAlign.Center, VAlign = Align.Center };
+        Add(_platform);
         Add(_destination);
         Add(new Panel { Width = 40, Margin = new Thickness(0, 0, 6, 0), Children = { _countdown, _due } });
         _countdown.HAlign = Align.End;

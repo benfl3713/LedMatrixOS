@@ -26,7 +26,10 @@ public static class BuiltInApps
         yield return typeof(BusArrivalsApp);
         yield return typeof(RailDeparturesApp);
         yield return typeof(CycleHubApp);
+        yield return typeof(RoadDisruptionsApp);
+        yield return typeof(AirQualityApp);
         yield return typeof(PlaneSpotterApp);
+        yield return typeof(IssTrackerApp);
         yield return typeof(JourneyApp);
         yield return typeof(BinDayApp);
         yield return typeof(MorningBriefingApp);
@@ -34,6 +37,7 @@ public static class BuiltInApps
         yield return typeof(HomeAssistantTilesApp);
         yield return typeof(CalendarApp);
         yield return typeof(WidgetDemoApp);
+        yield return typeof(Screens.ScreenApp);
     }
 
     /// <summary>Retired app ids that still work in schedules, the API and persisted settings: (alias, target id, preset settings).</summary>

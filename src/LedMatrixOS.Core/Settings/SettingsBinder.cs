@@ -14,14 +14,23 @@ public static class SettingsBinder
 
     private static readonly ConcurrentDictionary<Type, Entry[]> Cache = new();
 
+    // The property values of a freshly constructed instance, per app type (what "reset to default" goes back to).
+    private static readonly ConcurrentDictionary<Type, Dictionary<string, object>> Defaults = new();
+
+    /// <summary>Remembers the current values of <paramref name="target"/> as its type's defaults. Call on a new instance; later calls for the type are ignored.</summary>
+    public static void CaptureDefaults(object target) => Defaults.GetOrAdd(target.GetType(), _ =>
+        Cache.GetOrAdd(target.GetType(), Discover).ToDictionary(e => e.Key, e => e.Property.GetValue(target) ?? ""));
+
     public static IEnumerable<AppSetting> GetSettings(object target)
     {
+        Defaults.TryGetValue(target.GetType(), out var defaults);
         foreach (var e in Cache.GetOrAdd(target.GetType(), Discover))
         {
             var current = e.Property.GetValue(target) ?? "";
+            var fallback = defaults != null && defaults.TryGetValue(e.Key, out var d) ? d : current;
             yield return new AppSetting(
                 e.Key, e.Attribute.Name, e.Attribute.Description, e.Type,
-                current, current, e.Attribute.Min, e.Attribute.Max, e.Attribute.Options);
+                fallback, current, e.Attribute.Min, e.Attribute.Max, e.Attribute.Options, Browse: e.Attribute.Browse, Advanced: e.Attribute.Advanced, Editor: e.Attribute.Editor);
         }
     }
 
@@ -34,7 +43,7 @@ public static class SettingsBinder
         canonicalKey = key;
         var entry = Cache.GetOrAdd(target.GetType(), Discover)
             .FirstOrDefault(e => string.Equals(e.Key, key, StringComparison.OrdinalIgnoreCase));
-        if (entry == null) return false;
+        if (entry == null) return TryUpdateLegacy(target, key, value, out canonicalKey);
         canonicalKey = entry.Key;
 
         var property = entry.Property;
@@ -50,8 +59,14 @@ public static class SettingsBinder
                 if (entry.Attribute.Max is int max) n = Math.Min(n, max);
                 property.SetValue(target, n);
                 break;
+            case AppSettingType.MultiSearch:
+                var kept = SplitIds(CoerceIds(value, (string?)current ?? ""));
+                if (entry.Attribute.Max is int maxItems && maxItems > 0) kept = kept.Take(maxItems).ToArray();
+                property.SetValue(target, string.Join(",", kept));
+                break;
             default:
                 var s = CoerceString(value, (string?)current ?? "");
+                if (entry.Type == AppSettingType.Search) s = s.Trim();
                 // Ignore values that are not one of the allowed options
                 if (entry.Attribute.Options is { } options && !options.Contains(s)) return true;
                 property.SetValue(target, s);
@@ -59,6 +74,72 @@ public static class SettingsBinder
         }
 
         return true;
+    }
+
+    /// <summary>True when <paramref name="key"/> is a retired setting key the target declares with <see cref="LegacySettingKeyAttribute"/>.</summary>
+    public static bool IsLegacyKey(object target, string key) => FindLegacy(target, key) != null;
+
+    private static LegacySettingKeyAttribute? FindLegacy(object target, string key) => target.GetType()
+        .GetCustomAttributes<LegacySettingKeyAttribute>(inherit: true)
+        .FirstOrDefault(a => string.Equals(a.Key, key, StringComparison.OrdinalIgnoreCase));
+
+    private static bool TryUpdateLegacy(object target, string key, object value, out string canonicalKey)
+    {
+        canonicalKey = key;
+        if (FindLegacy(target, key) is not { } legacy) return false;
+        if (legacy.MapsTo == null) return true; // accepted, nothing to apply
+
+        var entry = Cache.GetOrAdd(target.GetType(), Discover).FirstOrDefault(e => e.Key == legacy.MapsTo);
+        if (entry == null) return true;
+        canonicalKey = entry.Key;
+
+        // Old selects held "id | name"; anything else (the empty value that used to be persisted) selected nothing.
+        var picked = CoerceString(value, "");
+        var split = picked.IndexOf(" | ", StringComparison.Ordinal);
+        if (split <= 0 || picked[..split].Trim() is not { Length: > 0 } id) return true;
+
+        if (entry.Type == AppSettingType.MultiSearch)
+        {
+            var ids = SplitIds((string?)entry.Property.GetValue(target)).ToList();
+            if (ids.Contains(id, StringComparer.OrdinalIgnoreCase)) return true;
+            ids.Add(id);
+            if (entry.Attribute.Max is int max && max > 0) while (ids.Count > max) ids.RemoveAt(0); // the oldest pick makes room
+            entry.Property.SetValue(target, string.Join(",", ids));
+        }
+        else
+        {
+            entry.Property.SetValue(target, id);
+        }
+
+        return true;
+    }
+
+    /// <summary>The ids of a comma separated MultiSearch value: trimmed, without blanks or duplicates.</summary>
+    public static string[] SplitIds(string? value) => (value ?? "")
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    // A list may arrive as a comma separated string, a JSON array string or a JSON array.
+    private static string CoerceIds(object value, string fallback)
+    {
+        try
+        {
+            if (value is JsonElement { ValueKind: JsonValueKind.Array } array)
+                return string.Join(",", array.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.ToString()));
+            if (value is IEnumerable<object> list && value is not string) return string.Join(",", list.Select(o => o.ToString()));
+            var text = CoerceString(value, fallback).Trim();
+            if (text.StartsWith('[') && text.EndsWith(']'))
+            {
+                using var doc = JsonDocument.Parse(text);
+                return string.Join(",", doc.RootElement.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.ToString()));
+            }
+            return text;
+        }
+        catch
+        {
+            return fallback;
+        }
     }
 
     private static Entry[] Discover(Type type)
@@ -73,7 +154,8 @@ public static class SettingsBinder
 
             var settingType = p.PropertyType == typeof(bool) ? AppSettingType.Boolean
                 : p.PropertyType == typeof(int) ? AppSettingType.Integer
-                : p.PropertyType == typeof(string) ? (attr.Options != null ? AppSettingType.Select : AppSettingType.String)
+                : p.PropertyType == typeof(string) ? (attr.Options != null ? AppSettingType.Select
+                    : attr.MultiSearch ? AppSettingType.MultiSearch : attr.Search ? AppSettingType.Search : AppSettingType.String)
                 : throw new InvalidOperationException($"Setting property {type.Name}.{p.Name} has unsupported type {p.PropertyType.Name}");
 
             entries.Add(new Entry(char.ToLowerInvariant(p.Name[0]) + p.Name[1..], p, attr, settingType));

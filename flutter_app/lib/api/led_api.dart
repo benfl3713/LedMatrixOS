@@ -5,7 +5,14 @@ import 'package:http/http.dart' as http;
 
 import 'models.dart';
 import 'schedule_models.dart';
+import 'screen_models.dart';
 import 'result.dart';
+
+/// The query string of an options request: `q=<query>` plus one `ctx.<key>=<value>` per context entry.
+String optionsQuery(String q, Map<String, String> context) => [
+      'q=${Uri.encodeQueryComponent(q)}',
+      for (final e in context.entries) 'ctx.${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}',
+    ].join('&');
 
 /// The device REST API. Every call returns a [Result]; nothing throws.
 abstract class LedApi {
@@ -15,6 +22,11 @@ abstract class LedApi {
   Future<Result<void>> activateApp(String id);
   Future<Result<List<AppSetting>>> getAppSettings(String id);
   Future<Result<void>> updateAppSettings(String id, Map<String, Object?> values);
+
+  /// Live options for a Search/MultiSearch setting; empty for queries under 2 characters (except `browse` settings).
+  /// [context] carries the current values of the app's other settings (sent as `ctx.<key>`), for options that depend on
+  /// them; where a key is absent the device falls back to the persisted value.
+  Future<Result<List<SettingOption>>> getSettingOptions(String appId, String key, String q, {Map<String, String> context = const {}});
   Future<Result<DeviceSettings>> getSettings();
   Future<Result<void>> setBrightness(int value);
   Future<Result<void>> setPower(bool enabled);
@@ -37,6 +49,14 @@ abstract class LedApi {
 
   /// With a [message] posts the coloured message alert; without one, the plain flash.
   Future<Result<void>> sendAlert({String? message, String? color});
+
+  Future<Result<List<ScreenSummary>>> listScreens();
+  Future<Result<ScreenDefinition>> getScreen(String id);
+
+  /// Creates or replaces a screen. A 400 comes back as an [ApiError] whose `fieldErrors` lists the problems.
+  Future<Result<ScreenDefinition>> putScreen(ScreenDefinition screen);
+  Future<Result<void>> deleteScreen(String id);
+  Future<Result<ScreenSchema>> getScreenSchema();
 
   Uri get previewSocketUri;
   String previewUrl({int? cacheBust});
@@ -68,7 +88,9 @@ class HttpLedApi implements LedApi {
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       return Err(ApiError(ApiErrorKind.http, _httpMessage(response),
-          statusCode: response.statusCode, errors: _validationErrors(response)));
+          statusCode: response.statusCode,
+          errors: _validationErrors(response),
+          fieldErrors: _fieldErrors(response)));
     }
     try {
       return Ok(parse(response.body));
@@ -81,10 +103,28 @@ class HttpLedApi implements LedApi {
     try {
       final decoded = jsonDecode(r.body);
       if (decoded is Map && decoded['errors'] is List) {
-        return (decoded['errors'] as List).map((e) => e.toString()).toList();
+        return (decoded['errors'] as List).map((e) => _describeError(e)).toList();
       }
     } catch (_) {
       // Not a JSON validation body; the plain message is used instead.
+    }
+    return const [];
+  }
+
+  static String _describeError(Object? e) =>
+      e is Map && e['message'] is String ? FieldError('${e['path'] ?? ''}', e['message'] as String).toString() : e.toString();
+
+  static List<FieldError> _fieldErrors(http.Response r) {
+    try {
+      final decoded = jsonDecode(r.body);
+      if (decoded is Map && decoded['errors'] is List) {
+        return [
+          for (final e in decoded['errors'] as List)
+            if (e is Map && e['message'] is String) FieldError('${e['path'] ?? ''}', e['message'] as String),
+        ];
+      }
+    } catch (_) {
+      // Not a JSON validation body.
     }
     return const [];
   }
@@ -94,7 +134,7 @@ class HttpLedApi implements LedApi {
     try {
       final decoded = jsonDecode(detail);
       if (decoded is Map && decoded['errors'] is List) {
-        detail = (decoded['errors'] as List).join('; ');
+        detail = (decoded['errors'] as List).map(_describeError).join('; ');
       } else if (decoded is Map && decoded['message'] is String) {
         detail = decoded['message'] as String;
         if (decoded['rejected'] is List) detail = '$detail: ${(decoded['rejected'] as List).join(', ')}';
@@ -132,6 +172,14 @@ class HttpLedApi implements LedApi {
         () => _client.post(_uri('/api/apps/${Uri.encodeComponent(id)}/settings'),
             headers: _json, body: jsonEncode(values)),
         (_) {},
+      );
+
+  @override
+  Future<Result<List<SettingOption>>> getSettingOptions(String appId, String key, String q,
+          {Map<String, String> context = const {}}) =>
+      _send(
+        () => _client.get(_uri('/api/apps/${Uri.encodeComponent(appId)}/settings/${Uri.encodeComponent(key)}/options?${optionsQuery(q, context)}')),
+        (b) => (jsonDecode(b) as List).map((e) => SettingOption.fromJson(e as Map<String, dynamic>)).toList(),
       );
 
   @override
@@ -237,6 +285,35 @@ class HttpLedApi implements LedApi {
     if (v == null) return null;
     return {'r': (v >> 16) & 255, 'g': (v >> 8) & 255, 'b': v & 255};
   }
+
+  @override
+  Future<Result<List<ScreenSummary>>> listScreens() => _send(
+        () => _client.get(_uri('/api/screens')),
+        (b) => ((_map(b)['screens'] ?? const []) as List)
+            .map((e) => ScreenSummary.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+
+  @override
+  Future<Result<ScreenDefinition>> getScreen(String id) => _send(
+        () => _client.get(_uri('/api/screens/${Uri.encodeComponent(id)}')),
+        (b) => ScreenDefinition.fromJson(_map(b)),
+      );
+
+  @override
+  Future<Result<ScreenDefinition>> putScreen(ScreenDefinition screen) => _send(
+        () => _client.put(_uri('/api/screens/${Uri.encodeComponent(screen.id)}'),
+            headers: _json, body: jsonEncode(screen.toJson())),
+        (b) => ScreenDefinition.fromJson(_map(b)),
+      );
+
+  @override
+  Future<Result<void>> deleteScreen(String id) =>
+      _send(() => _client.delete(_uri('/api/screens/${Uri.encodeComponent(id)}')), (_) {});
+
+  @override
+  Future<Result<ScreenSchema>> getScreenSchema() =>
+      _send(() => _client.get(_uri('/api/screens/schema')), (b) => ScreenSchema.fromJson(_map(b)));
 
   @override
   Uri get previewSocketUri {

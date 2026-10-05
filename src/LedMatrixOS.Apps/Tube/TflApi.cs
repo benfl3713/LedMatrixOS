@@ -23,7 +23,19 @@ internal sealed record LineStatus(string LineId, string Name, int Severity, stri
     public Health Health => LineHealth.Classify(Severity, Description);
 }
 
-internal sealed record StationMatch(string Id, string Name);
+/// <summary>How bad a road disruption is, ordered from least to worst (TfL: Minimal, Moderate, Serious, Severe).</summary>
+public enum RoadSeverity { Minimal, Moderate, Serious, Severe }
+
+/// <summary>
+/// One current road disruption. <paramref name="Corridors"/> is the comma separated TfL corridor ids it affects (e.g. "a406,north-circular-a406");
+/// <paramref name="Corridor"/> is the first one as a display name. Value equality, so a list view can tell when it really changed.
+/// </summary>
+internal sealed record RoadDisruption(string Id, RoadSeverity Severity, string Corridor, string Corridors, string Location, string Comment, string Category);
+
+/// <summary>A TfL road corridor (a main road or route) that can be watched.</summary>
+internal sealed record RoadCorridor(string Id, string Name);
+
+internal sealed record StationMatch(string Id, string Name, string? Detail = null);
 
 /// <summary>Live state of one Santander Cycles docking station. Value equality, so a label only reformats when something changed.</summary>
 internal sealed record BikePointInfo(string Id, string Name, int NbBikes, int NbEmptyDocks, int NbStandardBikes, int NbEBikes)
@@ -75,24 +87,76 @@ internal sealed class TflApi(HttpClient http)
     }
 
     /// <summary>
-    /// Rail stops matching <paramref name="query"/> as "id | name" strings (the format of the stationSelect options),
-    /// or a single message such as "No matches".
+    /// Current road disruptions, worst first. With no <paramref name="corridorIds"/> every disruption on TfL's road network is returned
+    /// (<c>Road/all/Disruption</c>), otherwise only those on the given corridors (<c>Road/{ids}/Disruption</c>).
     /// </summary>
-    public async Task<(string[] Options, bool Succeeded)> SearchStationsAsync(string query, CancellationToken ct)
+    public async Task<RoadDisruption[]> GetRoadDisruptionsAsync(IEnumerable<string>? corridorIds, CancellationToken ct)
+    {
+        var ids = (corridorIds ?? []).Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => Uri.EscapeDataString(id.Trim().ToLowerInvariant())).ToArray();
+        var path = ids.Length == 0 ? "all" : string.Join(",", ids);
+        var data = await http.GetFromJsonAsync<ApiRoadDisruption[]>(WithKey($"{Root}/Road/{path}/Disruption"), ct) ?? [];
+        return ShapeRoad(data);
+    }
+
+    /// <summary>Every road corridor TfL knows, ordered by name.</summary>
+    public async Task<RoadCorridor[]> GetRoadCorridorsAsync(CancellationToken ct)
+    {
+        var data = await http.GetFromJsonAsync<ApiRoad[]>(WithKey($"{Root}/Road"), ct) ?? [];
+        return data
+            .Where(r => !string.IsNullOrWhiteSpace(r.Id))
+            .DistinctBy(r => r.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(r => new RoadCorridor(r.Id.Trim().ToLowerInvariant(), string.IsNullOrWhiteSpace(r.DisplayName) ? PrettyCorridor(r.Id) : r.DisplayName.Trim()))
+            .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    /// <summary>"a406" becomes "A406" and "north-circular-a406" becomes "North Circular A406".</summary>
+    public static string PrettyCorridor(string id)
+    {
+        var words = (id ?? "").Split(['-', '_', ' '], StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(' ', words.Select(w => w.Any(char.IsDigit) && w.Length <= 5 ? w.ToUpperInvariant() : char.ToUpperInvariant(w[0]) + w[1..].ToLowerInvariant()));
+    }
+
+    public static RoadSeverity ParseRoadSeverity(string? severity) => (severity ?? "").Trim().ToLowerInvariant() switch
+    {
+        "severe" => RoadSeverity.Severe,
+        "serious" => RoadSeverity.Serious,
+        "moderate" => RoadSeverity.Moderate,
+        _ => RoadSeverity.Minimal,
+    };
+
+    private static RoadDisruption[] ShapeRoad(ApiRoadDisruption[] items) => items
+        .Where(d => !string.IsNullOrWhiteSpace(d.Id))
+        .DistinctBy(d => d.Id)
+        .Select(d =>
+        {
+            var ids = (d.CorridorIds ?? []).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim().ToLowerInvariant()).ToArray();
+            var comment = string.IsNullOrWhiteSpace(d.Comments) ? d.CurrentUpdate ?? "" : d.Comments;
+            return new RoadDisruption(d.Id, ParseRoadSeverity(d.Severity), ids.Length > 0 ? PrettyCorridor(ids[0]) : "Road", string.Join(',', ids),
+                CleanText(d.Location), CleanText(comment), d.Category ?? "");
+        })
+        .OrderByDescending(d => d.Severity)
+        .ThenBy(d => d.Corridor, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(d => d.Id, StringComparer.Ordinal)
+        .ToArray();
+
+    private static string CleanText(string? text) => string.Join(' ', (text ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    /// <summary>Rail stops matching <paramref name="query"/> (empty when TfL has none or answers with an error).</summary>
+    public async Task<StationMatch[]> FindStationsAsync(string query, CancellationToken ct)
     {
         var url = WithKey($"{Root}/StopPoint/Search/{Uri.EscapeDataString(query)}", "modes=tube,dlr,overground,elizabeth-line,tram");
-        var response = await http.GetAsync(url, ct);
-        if (!response.IsSuccessStatusCode) return (["No matches"], false);
+        using var response = await http.GetAsync(url, ct);
+        if (!response.IsSuccessStatusCode) return [];
 
         var data = await response.Content.ReadFromJsonAsync<SearchResponse>(ct);
-        var matches = (data?.Matches ?? [])
+        return (data?.Matches ?? [])
             .Where(m => !string.IsNullOrWhiteSpace(m.Id) && !string.IsNullOrWhiteSpace(m.Name))
             .Where(IsLikelyRailStop)
             .DistinctBy(m => m.Id)
             .Take(12)
-            .Select(m => $"{m.Id} | {StripStationSuffix(m.Name)}")
+            .Select(m => new StationMatch(m.Id, StripStationSuffix(m.Name), string.Join(", ", m.Modes ?? [])))
             .ToArray();
-        return (matches.Length > 0 ? matches : ["No matches"], true);
     }
 
     /// <summary>A bus stop's display name with its indicator, e.g. "Victoria Station (Stop B)".</summary>
@@ -104,21 +168,20 @@ internal sealed class TflApi(HttpClient http)
         return string.IsNullOrWhiteSpace(data.Indicator) ? name : $"{name} ({data.Indicator.Trim()})";
     }
 
-    /// <summary>Bus stops matching <paramref name="query"/> as "id | name" strings, or a single message such as "No matches".</summary>
-    public async Task<(string[] Options, bool Succeeded)> SearchBusStopsAsync(string query, CancellationToken ct)
+    /// <summary>Bus stops matching <paramref name="query"/> (empty when TfL has none or answers with an error).</summary>
+    public async Task<StationMatch[]> FindBusStopsAsync(string query, CancellationToken ct)
     {
         var url = WithKey($"{Root}/StopPoint/Search/{Uri.EscapeDataString(query)}", "modes=bus&maxResults=12");
-        var response = await http.GetAsync(url, ct);
-        if (!response.IsSuccessStatusCode) return (["No matches"], false);
+        using var response = await http.GetAsync(url, ct);
+        if (!response.IsSuccessStatusCode) return [];
 
         var data = await response.Content.ReadFromJsonAsync<SearchResponse>(ct);
-        var matches = (data?.Matches ?? [])
+        return (data?.Matches ?? [])
             .Where(m => !string.IsNullOrWhiteSpace(m.Id) && !string.IsNullOrWhiteSpace(m.Name))
             .DistinctBy(m => m.Id)
             .Take(12)
-            .Select(m => $"{m.Id} | {m.Name.Trim()}")
+            .Select(m => new StationMatch(m.Id, m.Name.Trim()))
             .ToArray();
-        return (matches.Length > 0 ? matches : ["No matches"], true);
     }
 
     /// <summary>One Santander Cycles docking station (e.g. "BikePoints_1") with its current bike and dock counts.</summary>
@@ -155,20 +218,19 @@ internal sealed class TflApi(HttpClient http)
         }
     }
 
-    /// <summary>Docking stations matching <paramref name="query"/> as "id | name" strings, or a single message such as "No matches".</summary>
-    public async Task<(string[] Options, bool Succeeded)> SearchBikePointsAsync(string query, CancellationToken ct)
+    /// <summary>Docking stations matching <paramref name="query"/> (empty when TfL has none or answers with an error).</summary>
+    public async Task<StationMatch[]> FindBikePointsAsync(string query, CancellationToken ct)
     {
-        var response = await http.GetAsync(WithKey($"{Root}/BikePoint/Search", $"query={Uri.EscapeDataString(query)}"), ct);
-        if (!response.IsSuccessStatusCode) return (["No matches"], false);
+        using var response = await http.GetAsync(WithKey($"{Root}/BikePoint/Search", $"query={Uri.EscapeDataString(query)}"), ct);
+        if (!response.IsSuccessStatusCode) return [];
 
         var data = await response.Content.ReadFromJsonAsync<ApiBikePoint[]>(ct) ?? [];
-        var matches = data
+        return data
             .Where(m => !string.IsNullOrWhiteSpace(m.Id) && !string.IsNullOrWhiteSpace(m.CommonName))
             .DistinctBy(m => m.Id)
             .Take(12)
-            .Select(m => $"{m.Id} | {CleanDockName(m.CommonName)}")
+            .Select(m => new StationMatch(m.Id, CleanDockName(m.CommonName)))
             .ToArray();
-        return (matches.Length > 0 ? matches : ["No matches"], true);
     }
 
     /// <summary>TfL names read "River Street , Clerkenwell"; tidy the stray space before the comma.</summary>
@@ -224,6 +286,23 @@ internal sealed class TflApi(HttpClient http)
         [JsonPropertyName("id")] public string Id { get; set; } = "";
         [JsonPropertyName("name")] public string Name { get; set; } = "";
         [JsonPropertyName("modes")] public string[]? Modes { get; set; }
+    }
+
+    private sealed class ApiRoad
+    {
+        [JsonPropertyName("id")] public string Id { get; set; } = "";
+        [JsonPropertyName("displayName")] public string? DisplayName { get; set; }
+    }
+
+    private sealed class ApiRoadDisruption
+    {
+        [JsonPropertyName("id")] public string Id { get; set; } = "";
+        [JsonPropertyName("category")] public string? Category { get; set; }
+        [JsonPropertyName("severity")] public string? Severity { get; set; }
+        [JsonPropertyName("location")] public string? Location { get; set; }
+        [JsonPropertyName("comments")] public string? Comments { get; set; }
+        [JsonPropertyName("currentUpdate")] public string? CurrentUpdate { get; set; }
+        [JsonPropertyName("corridorIds")] public string[]? CorridorIds { get; set; }
     }
 
     private sealed class ApiLine

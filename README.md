@@ -386,6 +386,10 @@ LED matrix control requires root privileges:
 sudo dotnet run
 ```
 
+### Settings, screens or schedule won't save
+
+The LED library drops root privileges (to the `daemon` user) once the matrix is initialised, so files written next to the binary can fail. Either start the app with `--led-no-drop-privs`, or set `DataDir` (config or environment variable) to a directory that user can write, e.g. `sudo mkdir -p /var/lib/ledmatrixos && sudo chown daemon:daemon /var/lib/ledmatrixos` and `DataDir=/var/lib/ledmatrixos`. `app-settings.json`, `screens.json` and `schedule.json` are stored there, and existing copies next to the binary are copied over on first start.
+
 ### Flickering or artifacts on display
 
 Try adjusting these settings in `appsettings.json`:

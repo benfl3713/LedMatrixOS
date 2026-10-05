@@ -44,7 +44,7 @@ public sealed class WeatherApp : WidgetApp
     public override string Name => "Weather";
     public override int FrameRate => 30;
 
-    [Setting("Location", Description = "Place name (e.g. London) or coordinates as 'lat,lon'.")]
+    [Setting("Location", Description = "Search for a place.", Search = true)]
     public string Location { get; set; } = "London";
 
     [Setting("Units", Description = "Temperature and wind units.", Options = ["Celsius", "Fahrenheit"])]
@@ -142,7 +142,7 @@ public sealed class WeatherApp : WidgetApp
         });
         var place = new Memo<(State, WeatherSnapshot?, bool)>(() => (_state, Snap(), _stale), p =>
             p.Item2 is { } s ? s.Location.ToUpperInvariant() + (p.Item3 ? "  OFFLINE" : "  FEELS " + Math.Round(s.Feels) + "°")
-            : p.Item1 == State.Offline ? (_data?.Error is LocationNotFoundException ? "UNKNOWN LOCATION" : "RETRYING...") : Location.ToUpperInvariant());
+            : p.Item1 == State.Offline ? (_data?.Error is LocationNotFoundException ? "UNKNOWN LOCATION" : "RETRYING...") : PlaneSpotter.PlaceGeocoder.DisplayName(Location).ToUpperInvariant());
         var hi = new Memo<WeatherSnapshot?>(Snap, s => s is null ? "" : "▲" + Math.Round(s.High));
         var lo = new Memo<WeatherSnapshot?>(Snap, s => s is null ? "" : "▼" + Math.Round(s.Low));
         var unit = new Memo<WeatherSnapshot?>(Snap, s => s is { Fahrenheit: true } ? "F" : "C");

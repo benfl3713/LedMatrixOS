@@ -18,7 +18,11 @@ Phases 1-4 are implemented and merged on `transport-apps` (full `dotnet test` an
 | 2 Display refresh | Done | Tube Departures (Split / Platform / Hero), Spotify rewrite, Tube Status two-row tiles, Home data chips, Weather rain and hourly charts, Calendar timeline + recurrence overrides, HA tiles (pager, icons, history sparklines), one `Clock` app with `Style` (old ids kept as aliases). |
 | 3 New apps | Done | Bus Arrivals, Rail Departures (hard-coded sample source), Cycle Hub, Plane Spotter, Journey Planner, Bin Day, Morning Briefing. |
 | 4 Flutter rewrite | Done | Riverpod + go_router; Now, Apps, Schedule, Notify and Settings screens. |
-| 5 Stretch | Not started | Declarative screens, `QrCode` node + Party Mode, gallery page, platform gaps. |
+| 5 Stretch | Declarative screens done | User-defined JSON screens (`ScreenApp`, `/api/screens`, Flutter editor, `screens.json`). **Open:** `QrCode` node + Party Mode, gallery page, platform gaps. Screens are verified against the simulator only. |
+
+## v3 status (2026-10-04, branch `live-pickers`)
+Done: live pickers (`GET /api/apps/{id}/settings/{key}/options`, Search/MultiSearch settings, typeahead and chips in the phone app); Tube/Commute `routes` filter replacing platform-first boards; settings sheet polish (reset, Advanced section, save indicator, searchable select, colour swatches, structured HA/Bin Day editors); new apps Air Quality, Road Disruptions (+ `road_disrupted:` condition), ISS Tracker.
+Open: Tides/Waves, RSS ticker, sports/stocks (check provider terms), `DataDir` setting for the daemon-user write problem, push and PR, prune old branches/worktrees, small visual fixes, hardware verification.
 
 ### Known follow-ups
 - **Rail Departures** uses `HardcodedRailSource`; the real integration goes behind `IRailDepartureSource`.
@@ -111,7 +115,7 @@ Each item ships with updated or new goldens and a zero-allocation test.
 - Delete the template test.
 
 ## Phase 5: Stretch
-- Declarative JSON screens (widget tree plus bindings), creatable from the phone.
+- ~~Declarative JSON screens (widget tree plus bindings), creatable from the phone.~~ Done: `Core/Screens`, `Apps/Screens`, `Endpoints/ScreenEndpoints.cs`, `flutter_app/lib/features/screens`.
 - `QrCode` node and Party Mode.
 - Widget and transition gallery page in `wwwroot`.
 - Platform gaps: `Panel` absolute positioning, transparent `Pager` transitions, a writable `FrameBuffer` span API.

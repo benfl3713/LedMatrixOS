@@ -279,20 +279,20 @@ public class PlaneSpotterAppTests(ITestOutputHelper output)
     // ---- location & settings ----------------------------------------------------------------------------------------
 
     [Fact]
-    public void Settings_KeepTheirKeysOrderAndTypes_AndNoLocationIsExposed()
+    public void Settings_KeepTheirKeysOrderAndTypes_AndNoCoordinatesAreExposed()
     {
         Fonts.Load();
         var app = new PlaneSpotterApp(new FakePlaneSource());
         var settings = app.GetSettings().ToList();
 
-        Assert.Equal(new[] { "radius", "alerts", "units", "pageSeconds" }, settings.Select(s => s.Key).ToArray());
-        Assert.Equal(new[] { AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Select, AppSettingType.Integer }, settings.Select(s => s.Type).ToArray());
-        Assert.Equal(5, settings[0].MinValue);
-        Assert.Equal(100, settings[0].MaxValue);
+        Assert.Equal(new[] { "location", "radius", "alerts", "units", "pageSeconds" }, settings.Select(s => s.Key).ToArray());
+        Assert.Equal(new[] { AppSettingType.Search, AppSettingType.Integer, AppSettingType.Boolean, AppSettingType.Select, AppSettingType.Integer }, settings.Select(s => s.Type).ToArray());
+        Assert.Equal(5, settings[1].MinValue);
+        Assert.Equal(100, settings[1].MaxValue);
         Assert.Equal(25, app.Radius);
         Assert.True(app.Alerts);
         Assert.Equal("plane-spotter", app.Id);
-        Assert.DoesNotContain(settings, s => s.Key.Contains("lat", StringComparison.OrdinalIgnoreCase) || s.Key.Contains("lon", StringComparison.OrdinalIgnoreCase) || s.Key.Contains("location", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(settings, s => s.Key.Contains("lat", StringComparison.OrdinalIgnoreCase) || s.Key.Contains("lon", StringComparison.OrdinalIgnoreCase));
     }
 
     private static IConfiguration Config(params (string, string)[] values) =>

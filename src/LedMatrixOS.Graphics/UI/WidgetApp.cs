@@ -55,6 +55,13 @@ public abstract class WidgetApp : SettingsAppBase
         _host = null;
     }
 
+    /// <summary>Discards the built tree so the next frame calls <see cref="Build"/> again (as an activation does).</summary>
+    protected void InvalidateTree()
+    {
+        _host?.Animator.Clear();
+        _host = null;
+    }
+
     /// <summary>Raises a banner toast across the top of the screen. Returns its id (null when the app has no overlay service). It is removed when the app deactivates.</summary>
     protected string? ShowToast(string text, Pixel foreground, Pixel background, TimeSpan duration)
     {

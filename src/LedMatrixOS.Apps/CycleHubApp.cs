@@ -17,6 +17,8 @@ namespace LedMatrixOS.Apps;
 /// e-bikes, free docks); the right side shows the verdict from the next hours of rain, wind and temperature (<see cref="RideVerdict"/>)
 /// with a rain sparkline. Docks come from the TfL BikePoint API, the forecast from Open-Meteo.
 /// </summary>
+[LegacySettingKey("dockSearch")]
+[LegacySettingKey("dockSelect", "dockIds")]
 public class CycleHubApp : WidgetApp
 {
     public override string Id => "cycle-hub";
@@ -29,10 +31,7 @@ public class CycleHubApp : WidgetApp
     private static readonly IReadOnlyList<DockToken> NoTokens = [];
     private static readonly float[] NoRain = [];
 
-    [Setting("Dock Search", Description = "Type a docking station name (e.g. Hyde Park Corner).")]
-    public string DockSearch { get; set; } = "";
-
-    [Setting("Dock IDs", Description = "Comma separated Santander Cycles dock IDs, up to 3 (added automatically when you pick from Dock Select).")]
+    [Setting("Docks", Description = "Search for docking stations, up to 3.", MultiSearch = true, Max = MaxDocks)]
     public string DockIds { get; set; } = "";
 
     [Setting("Page Seconds", Description = "How long each dock stays before sliding to the next.", Min = 3, Max = 30)]
@@ -43,7 +42,6 @@ public class CycleHubApp : WidgetApp
 
     private readonly TflApi _api;
     private IWeatherSource _weatherSource;
-    private readonly TflStopPicker _picker;
     private readonly TimeSpan _dockInterval = TimeSpan.FromSeconds(60);
     private readonly TimeSpan _weatherInterval = TimeSpan.FromMinutes(10);
 
@@ -72,8 +70,6 @@ public class CycleHubApp : WidgetApp
         httpClient.Timeout = TimeSpan.FromSeconds(10);
         _api = new TflApi(httpClient);
         _weatherSource = weatherSource;
-        _picker = new TflStopPicker("dockSearch", "dockSelect", "Dock Select", "Choose a result to add the dock.",
-            () => DockSearch, _api.SearchBikePointsAsync, AddDock, RunInBackground);
     }
 
     // ---- view -------------------------------------------------------------------------------------------------------------------
@@ -213,19 +209,10 @@ public class CycleHubApp : WidgetApp
 
     // ---- settings ---------------------------------------------------------------------------------------------------------------
 
-    // dockSelect has options that change as the user types, so it is not a [Setting] property.
-    public override IEnumerable<AppSetting> GetSettings() => _picker.WithSelect(base.GetSettings());
-
-    public override void UpdateSetting(string key, object value)
-    {
-        if (!_picker.TryUpdate(key, value)) base.UpdateSetting(key, value);
-    }
-
     protected override void OnSettingChanged(string key)
     {
         switch (key)
         {
-            case "dockSearch": _picker.OnQueryChanged(); break;
             case "dockIds": RestartDockPolling(); break;
             case "units": RestartWeatherPolling(); break;
             case "pageSeconds":
@@ -296,16 +283,6 @@ public class CycleHubApp : WidgetApp
     {
         _feeds = feeds;
         _tokens = feeds.Select((f, i) => new DockToken(i, f.DockId)).ToArray();
-    }
-
-    private void AddDock(string dockId)
-    {
-        var ids = ParseDockIds(DockIds).ToList();
-        if (ids.Contains(dockId, StringComparer.OrdinalIgnoreCase)) return;
-        if (ids.Count >= MaxDocks) ids.RemoveAt(0);
-        ids.Add(dockId);
-        DockIds = string.Join(",", ids);
-        RestartDockPolling();
     }
 
     internal IReadOnlyList<DockFeed> Feeds => _feeds;

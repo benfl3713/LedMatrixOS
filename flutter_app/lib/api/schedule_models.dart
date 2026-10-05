@@ -4,7 +4,7 @@ import 'dart:convert';
 const allDaysMask = 127;
 
 /// Supported rule conditions, shown as a hint in the rule editor.
-const conditionHint = 'spotify_playing, line_disrupted:<id>, bus_due:<stop>, ha_state:<entity>=<value>, bin_day';
+const conditionHint = 'spotify_playing, line_disrupted:<id>, bus_due:<stop>, ha_state:<entity>=<value>, bin_day, road_disrupted:<corridor|any>';
 
 int _int(Object? v, int fallback) => v is num ? v.round() : fallback;
 

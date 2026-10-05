@@ -90,6 +90,9 @@ public sealed class OpenSkyPlaneSource(HttpClient http, TimeProvider? time = nul
         i < row.GetArrayLength() && row[i].ValueKind == JsonValueKind.Number && row[i].TryGetDouble(out var d) && double.IsFinite(d) ? d : null;
 }
 
+/// <summary>One geocoding hit: <see cref="Label"/> is the full display text, <see cref="Name"/> the bare place name.</summary>
+public sealed record PlaceMatch(string Name, string Label, double Lat, double Lon);
+
 /// <summary>Resolves a Weather-style location (a place name, or "lat,lon") to coordinates with the keyless Open-Meteo geocoder. Results are cached.</summary>
 public sealed class PlaceGeocoder(HttpClient http)
 {
@@ -100,6 +103,7 @@ public sealed class PlaceGeocoder(HttpClient http)
         place = place.Trim();
         if (place.Length == 0) return null;
         if (TryParseCoordinates(place, out var direct)) return direct;
+        if (TryParseEncoded(place, out _, out var encoded)) return encoded;
         if (_cache.TryGetValue(place, out var cached)) return cached;
 
         var url = "https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=" + Uri.EscapeDataString(place);
@@ -107,6 +111,44 @@ public sealed class PlaceGeocoder(HttpClient http)
         if (!doc.RootElement.TryGetProperty("results", out var results) || results.GetArrayLength() == 0) return _cache[place] = null;
         var first = results[0];
         return _cache[place] = (first.GetProperty("latitude").GetDouble(), first.GetProperty("longitude").GetDouble());
+    }
+
+    /// <summary>A place that was picked from <see cref="SearchAsync"/>, stored as "Name|lat,lon" so it needs no geocoding and cannot be ambiguous.</summary>
+    public static string Encode(string name, double lat, double lon) =>
+        string.Create(CultureInfo.InvariantCulture, $"{name.Replace('|', ' ').Trim()}|{Math.Round(lat, 4)},{Math.Round(lon, 4)}");
+
+    public static bool TryParseEncoded(string text, out string name, out (double Lat, double Lon) value)
+    {
+        name = text;
+        value = default;
+        var bar = text.LastIndexOf('|');
+        if (bar <= 0 || !TryParseCoordinates(text[(bar + 1)..], out value)) return false;
+        name = text[..bar].Trim();
+        return true;
+    }
+
+    /// <summary>The name to show for a stored location: the name part of an encoded pick, otherwise the text itself.</summary>
+    public static string DisplayName(string location) => TryParseEncoded(location, out var name, out _) ? name : location;
+
+    /// <summary>Places matching <paramref name="query"/> with their coordinates and a label like "London, England, United Kingdom".</summary>
+    public async Task<IReadOnlyList<PlaceMatch>> SearchAsync(string query, int count, CancellationToken ct)
+    {
+        query = query.Trim();
+        if (query.Length == 0) return [];
+        var url = $"https://geocoding-api.open-meteo.com/v1/search?count={count}&language=en&format=json&name=" + Uri.EscapeDataString(query);
+        using var doc = JsonDocument.Parse(await http.GetStringAsync(url, ct).ConfigureAwait(false));
+        if (!doc.RootElement.TryGetProperty("results", out var results)) return [];
+
+        static string Str(JsonElement e, string prop) => e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+        var matches = new List<PlaceMatch>();
+        foreach (var r in results.EnumerateArray())
+        {
+            var name = Str(r, "name");
+            if (name.Length == 0 || !r.TryGetProperty("latitude", out var la) || !r.TryGetProperty("longitude", out var lo)) continue;
+            var label = string.Join(", ", new[] { name, Str(r, "admin1"), Str(r, "country") }.Where(p => p.Length > 0).Distinct());
+            matches.Add(new PlaceMatch(name, label, la.GetDouble(), lo.GetDouble()));
+        }
+        return matches;
     }
 
     public static bool TryParseCoordinates(string text, out (double Lat, double Lon) value)

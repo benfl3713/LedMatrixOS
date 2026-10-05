@@ -36,7 +36,7 @@ public class RailDeparturesApp : WidgetApp
     [Setting("Max Services", Description = "Number of services listed on the board", Min = 1, Max = MaxServicesLimit)]
     public int MaxServices { get; set; } = MaxServicesLimit;
 
-    [Setting("Platform Filter", Description = "Only show these platforms, comma separated (e.g. 1,2). Leave empty to show all.")]
+    [Setting("Platform Filter", Description = "Only show these platforms, comma separated (e.g. 1,2). Leave empty to show all.", Advanced = true)]
     public string PlatformFilter { get; set; } = "";
 
     [Setting("Page Seconds", Description = "How long each page of services stays before sliding to the next.", Min = 3, Max = 30)]

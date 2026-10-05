@@ -1,3 +1,4 @@
+using LedMatrixOS.Core.Settings;
 using System.Text.Json;
 using LedMatrixOS;
 using LedMatrixOS.Apps;
@@ -25,6 +26,23 @@ bool useSimulator = builder.Configuration.GetValue("Matrix:UseSimulator", false)
 
 Fonts.Load();
 
+// Mutable state (settings, screens, schedule) lives in DataDir (default: next to the binary). Set it to a directory the
+// service user can write when the matrix library drops root privileges, e.g. DataDir=/var/lib/ledmatrixos.
+string dataDir = builder.Configuration["DataDir"] is { Length: > 0 } configuredDataDir
+    ? Path.GetFullPath(configuredDataDir)
+    : AppContext.BaseDirectory;
+Directory.CreateDirectory(dataDir);
+string DataFile(string name)
+{
+    var path = Path.Combine(dataDir, name);
+    var legacy = Path.Combine(AppContext.BaseDirectory, name);
+    if (!File.Exists(path) && File.Exists(legacy) && !string.Equals(path, legacy, StringComparison.Ordinal))
+    {
+        try { File.Copy(legacy, path); } catch { /* keep going: the app starts with defaults */ }
+    }
+    return path;
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -35,19 +53,32 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<AppSettingsStorage>(_ => 
-    new AppSettingsStorage(Path.Combine(AppContext.BaseDirectory, "app-settings.json")));
+    new AppSettingsStorage(DataFile("app-settings.json")));
 builder.Services.AddSingleton<AppManager>(sp => 
 {
     var settingsStorage = sp.GetRequiredService<AppSettingsStorage>();
     return new AppManager(sp, builder.Configuration, height, width, settingsStorage);
 });
+builder.Services.AddSingleton<SettingOptionsRegistry>(sp =>
+{
+    var registry = new SettingOptionsRegistry();
+    BuiltInSettingOptions.Register(registry, sp.GetRequiredService<IHttpClientFactory>().CreateClient(), builder.Configuration);
+    return registry;
+});
+builder.Services.AddSingleton<LedMatrixOS.Core.Screens.ScreenStore>();
+builder.Services.AddSingleton<LedMatrixOS.Core.Screens.IScreenStore>(sp => sp.GetRequiredService<LedMatrixOS.Core.Screens.ScreenStore>());
+builder.Services.AddSingleton(sp => new LedMatrixOS.Core.Screens.ScreenCatalog(
+    sp.GetRequiredService<LedMatrixOS.Core.Screens.ScreenStore>(),
+    sp.GetRequiredService<AppManager>(),
+    DataFile("screens.json")));
 builder.Services.AddSingleton<AudioDataService>();
 builder.Services.AddSingleton<InterruptService>();
-var schedulePath = Path.Combine(AppContext.BaseDirectory, "schedule.json");
+var schedulePath = DataFile("schedule.json");
 // Services that can answer rule conditions register an IAttentionSource. They are lazy: AttentionCoordinator only lets them
 // poll while a schedule rule references their condition.
 builder.Services.AddSingleton<IAttentionSource, SpotifyPlayingSource>();
 builder.Services.AddSingleton<IAttentionSource, LineDisruptionSource>();
+builder.Services.AddSingleton<IAttentionSource, RoadDisruptionSource>();
 builder.Services.AddSingleton<IAttentionSource, BusDueSource>();
 builder.Services.AddSingleton<IAttentionSource, HomeAssistantStateSource>();
 builder.Services.AddSingleton<IAttentionSource, BinDayDueSource>();
@@ -104,6 +135,9 @@ var attention = app.Services.GetRequiredService<AttentionCoordinator>();
 attention.Start();
 app.Lifetime.ApplicationStopping.Register(attention.Dispose);
 
+foreach (var error in app.Services.GetRequiredService<LedMatrixOS.Core.Screens.ScreenCatalog>().Load())
+    app.Logger.LogError("screens.json: {Path} {Message}", error.Path, error.Message);
+
 await appManager.ActivateAsync("home", CancellationToken.None);
 engine.Start();
 app.Lifetime.ApplicationStopping.Register(engine.Stop);
@@ -111,8 +145,9 @@ app.Lifetime.ApplicationStopping.Register(engine.Stop);
 // API endpoints
 app.MapGet("/api/apps", (AppManager appManager) => 
 {
-    var apps = appManager.AppInfos.Select(i => new { i.Id, i.Name, i.HasSettings }).ToList();
-    return Results.Ok(new { apps, activeApp = appManager.ActiveApp?.Id });
+    var apps = appManager.AppInfos.Select(i => new { i.Id, i.Name, i.HasSettings, isScreen = false })
+        .Concat(appManager.Screens.Select(s => new { s.Id, s.Name, s.HasSettings, isScreen = true })).ToList();
+    return Results.Ok(new { apps, activeApp = appManager.ActiveAppId });
 });
 
 app.MapPost("/api/apps/{id}", async (string id, AppManager appManager, CancellationToken ct) =>
@@ -121,14 +156,32 @@ app.MapPost("/api/apps/{id}", async (string id, AppManager appManager, Cancellat
     return ok ? Results.Ok(new { activeApp = id }) : Results.NotFound();
 });
 
-app.MapGet("/api/apps/{id}/settings", (string id, AppManager appManager) =>
+app.MapGet("/api/apps/{id}/settings", async (string id, AppManager appManager, SettingOptionsRegistry options, CancellationToken ct) =>
 {
     var lookup = appManager.GetSettings(id);
-    return lookup.Status switch
-    {
-        SettingsStatus.NotFound => Results.NotFound($"Unknown app '{id}'"),
-        _ => Results.Ok(new { appId = id, settings = lookup.Settings }),
-    };
+    if (lookup.Status == SettingsStatus.NotFound) return Results.NotFound($"Unknown app '{id}'");
+
+    // Search/MultiSearch settings also report the label(s) of what is picked; a lookup that fails just leaves the id as the label
+    var settings = await options.WithLabelsAsync(appManager.ResolveAppId(id) ?? id, lookup.Settings, ct);
+    return Results.Ok(new { appId = id, settings });
+});
+
+// Live options behind a Search/MultiSearch setting. Stateless: works for inactive apps and aliases, and never touches an app instance.
+// Options that depend on another setting (the routes of a station) read it from "ctx.<key>=<value>" query parameters, and fall back to the
+// persisted value of any setting the client did not send.
+app.MapGet("/api/apps/{id}/settings/{key}/options", async (string id, string key, string? q, HttpRequest request, AppManager appManager, SettingOptionsRegistry options, CancellationToken ct) =>
+{
+    var appId = appManager.ResolveAppId(id);
+    if (appId == null) return Results.NotFound($"Unknown app '{id}'");
+    if (!options.Has(appId, key)) return Results.NotFound($"App '{id}' has no searchable setting '{key}'");
+
+    var context = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var setting in appManager.GetSettings(id).Settings) context[setting.Key] = setting.CurrentValue?.ToString() ?? "";
+    foreach (var (name, value) in request.Query)
+        if (name.StartsWith("ctx.", StringComparison.OrdinalIgnoreCase) && name.Length > 4) context[name[4..]] = value.ToString();
+
+    var found = await options.SearchAsync(appId, key, q, context, ct);
+    return Results.Ok(found.Select(o => new { value = o.Value, label = o.Label, subtitle = o.Subtitle }));
 });
 
 app.MapPost("/api/apps/{id}/settings", (string id, Dictionary<string, object> settingsUpdate, AppManager appManager) =>
@@ -147,7 +200,7 @@ app.MapGet("/api/health", (RenderEngine eng, IMatrixDevice device, AppManager ap
     Results.Ok(new
     {
         status = eng.IsRunning ? "ok" : "stopped",
-        activeApp = apps.ActiveApp?.Id,
+        activeApp = apps.ActiveAppId,
         device.IsEnabled,
         device.Width,
         device.Height,
@@ -278,6 +331,7 @@ app.MapGet("/api/audio/status", (AudioDataService audioService) =>
 
 app.MapNotificationEndpoints();
 app.MapOverlayEndpoints(schedulePath);
+app.MapScreenEndpoints();
 
 app.Run();
 

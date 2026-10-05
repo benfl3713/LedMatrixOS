@@ -44,7 +44,7 @@ public sealed partial class HomePageApp : WidgetApp
     [Setting("Show Bus Chip", Description = "Show the next bus at the stop below")]
     public bool ShowBusChip { get; set; }
 
-    [Setting("Chip Stop ID", Description = "TfL bus stop ID for the bus chip")]
+    [Setting("Chip Stop", Description = "Search for the bus stop for the bus chip.", Search = true)]
     public string ChipStopId { get; set; } = "";
 
     [Setting("Chip Seconds", Description = "Seconds each chip stays up (3-30)", Min = 3, Max = 30)]

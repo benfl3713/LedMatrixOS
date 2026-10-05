@@ -214,7 +214,7 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
             Wrap(
               spacing: 6,
               children: [
-                for (final sample in ['spotify_playing', 'line_disrupted:', 'bus_due:', 'ha_state:', 'bin_day'])
+                for (final sample in ['spotify_playing', 'line_disrupted:', 'bus_due:', 'ha_state:', 'bin_day', 'road_disrupted:any'])
                   ActionChip(
                     label: Text(sample),
                     onPressed: () => setState(() {

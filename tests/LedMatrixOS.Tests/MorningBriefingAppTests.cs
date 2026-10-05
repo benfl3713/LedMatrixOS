@@ -84,7 +84,7 @@ public class MorningBriefingAppTests(ITestOutputHelper output)
         var app = new MorningBriefingApp();
         Assert.Equal("morning-briefing", app.Id);
         Assert.Equal("Morning Briefing", app.Name);
-        Assert.Equal(new[] { "stationSearch", "stationSelect", "stationId", "walkMinutes", "pageSeconds", "bins", "showWeather", "showCalendar", "showCommute", "showBins", "units" },
+        Assert.Equal(new[] { "stationId", "walkMinutes", "pageSeconds", "bins", "showWeather", "showCalendar", "showCommute", "showBins", "units" },
             app.GetSettings().Select(s => s.Key).ToArray());
         var seconds = app.GetSettings().Single(s => s.Key == "pageSeconds");
         Assert.Equal(6, seconds.CurrentValue);
@@ -99,7 +99,6 @@ public class MorningBriefingAppTests(ITestOutputHelper output)
     {
         Fonts.Load();
         var app = new MorningBriefingApp();
-        Assert.Equal(new[] { "Type at least 2 chars" }, app.GetSettings().Single(s => s.Key == "stationSelect").Options);
         app.UpdateSetting("stationSelect", "940GZZLUBST | Baker Street Underground Station");
         Assert.Equal("940GZZLUBST", app.StationId);
     }
