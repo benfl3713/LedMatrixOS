@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using LedMatrixOS.Core.Input;
 using LedMatrixOS.Core.Overlays;
 using LedMatrixOS.Core.Transitions;
 using Microsoft.Extensions.Logging;
@@ -27,6 +28,7 @@ public sealed class RenderEngine : IDisposable
 
     // Throttled error logging
     private readonly CrashGuard _crashGuard = new();
+    private IMatrixApp? _inputApp; // the app input was last delivered to; a change releases every held button
     private TimeSpan _lastErrorLog = TimeSpan.MinValue;
     private int _suppressedErrors;
 
@@ -38,6 +40,9 @@ public sealed class RenderEngine : IDisposable
     /// <summary>Draws the crash card shown in place of an app that threw (set by the host; Core has no fonts). Falls back to a plain red screen.</summary>
     public Action<FrameBuffer, CrashInfo>? CrashRenderer { get; set; }
 
+    /// <summary>Button input from the API, delivered to the active app at the start of each frame.</summary>
+    public InputHub Input { get; }
+
     /// <summary>Toasts, badges and alerts composited over whatever is running .</summary>
     public OverlayManager Overlays { get; }
 
@@ -45,8 +50,10 @@ public sealed class RenderEngine : IDisposable
     public string TransitionName { get; set; } = "slide-up";
 
     public RenderEngine(IMatrixDevice device, AppManager apps,
-        TransitionRegistry? transitions = null, ILogger<RenderEngine>? logger = null, OverlayManager? overlays = null)
+        TransitionRegistry? transitions = null, ILogger<RenderEngine>? logger = null, OverlayManager? overlays = null, InputHub? input = null)
     {
+        Input = input ?? new InputHub();
+        apps.Input ??= Input;
         _device = device;
         _apps = apps;
         _logger = logger;
@@ -118,6 +125,7 @@ public sealed class RenderEngine : IDisposable
                     try
                     {
                         BeginTransitionIfPending();
+                        DeliverInput(app);
                         var ctx = new FrameContext(now, delta, frameIndex++);
                         app.Update(ctx, cancellationToken);
 
@@ -175,6 +183,17 @@ public sealed class RenderEngine : IDisposable
                 catch (TaskCanceledException) { }
             }
         }
+    }
+
+    private void DeliverInput(IMatrixApp app)
+    {
+        if (!ReferenceEquals(app, _inputApp))
+        {
+            var previous = _inputApp;
+            _inputApp = app;
+            Input.ReleaseAll(previous as IInputConsumer);
+        }
+        Input.Dispatch(app as IInputConsumer);
     }
 
     private void PresentFrame()

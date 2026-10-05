@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using LedMatrixOS.Core.Data;
+using LedMatrixOS.Core.Input;
 using LedMatrixOS.Core.Overlays;
 using Microsoft.Extensions.Configuration;
 
@@ -17,6 +18,12 @@ public abstract class MatrixAppBase : IMatrixApp
     /// without an engine (tests, settings-only instances), in which case the overlay helpers do nothing.
     /// </summary>
     public IOverlayService? OverlayService { get; set; }
+
+    /// <summary>
+    /// Held-button state and (for apps implementing <see cref="IInputConsumer"/>) the source of input events. Set by
+    /// <see cref="AppManager"/> on activation; <see cref="InputHub.None"/> (nothing ever pressed) when running without an engine.
+    /// </summary>
+    public InputHub Input { get; set; } = InputHub.None;
 
     public abstract string Id { get; }
     public abstract string Name { get; }

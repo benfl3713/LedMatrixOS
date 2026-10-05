@@ -113,6 +113,7 @@ builder.Services.AddSingleton<RenderEngine>(sp =>
     foreach (var (alias, target, preset) in BuiltInApps.Aliases()) apps.RegisterAlias(alias, target, preset);
     var renderEngine = new RenderEngine(device, apps, logger: sp.GetService<ILogger<RenderEngine>>());
     apps.Overlays = renderEngine.Overlays;
+    apps.Input = renderEngine.Input;
     return renderEngine;
 });
 
@@ -244,6 +245,7 @@ app.MapPost("/api/settings/transition/{name}", (string name, RenderEngine eng) =
 app.MapPreviewEndpoints();
 app.MapAudioEndpoints();
 app.MapNotificationEndpoints();
+app.MapInputEndpoints();
 app.MapOverlayEndpoints(schedulePath);
 app.MapScreenEndpoints();
 

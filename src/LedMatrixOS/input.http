@@ -1,0 +1,22 @@
+### Hold a button (player 0). Buttons: up, down, left, right, a, b, start, select. Players: 0-3
+POST http://localhost:5005/api/input
+Content-Type: application/json
+
+{ "player": 0, "button": "up", "state": "down" }
+
+### Release it
+POST http://localhost:5005/api/input
+Content-Type: application/json
+
+{ "player": 0, "button": "up", "state": "up" }
+
+### Tap (down immediately followed by up)
+POST http://localhost:5005/api/input
+Content-Type: application/json
+
+{ "player": 1, "button": "a", "state": "press" }
+
+### Show the demo app, then use the requests above to see the buttons light up
+POST http://localhost:5005/api/apps/input-test
+
+### WebSocket: ws://localhost:5005/ws/input, one message per event, same JSON as above

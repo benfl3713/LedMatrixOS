@@ -1,4 +1,5 @@
 using LedMatrixOS.Core.Settings;
+using LedMatrixOS.Core.Input;
 using LedMatrixOS.Core.Overlays;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -49,6 +50,9 @@ public sealed class AppManager
 
     /// <summary>Handed to apps on activation so they can raise overlays (the engine's overlay manager).</summary>
     public IOverlayService? Overlays { get; set; }
+
+    /// <summary>Handed to apps on activation so they can query held buttons (the engine's input hub).</summary>
+    public InputHub? Input { get; set; }
 
     public event EventHandler<IMatrixApp>? AppActivated;
 
@@ -141,6 +145,7 @@ public sealed class AppManager
         // Create the new app instance first
         var nextApp = Create(next);
         if (nextApp is MatrixAppBase overlayAware) overlayAware.OverlayService = Overlays;
+        if (nextApp is MatrixAppBase inputAware && Input is not null) inputAware.Input = Input;
         ApplyPreset(nextApp, preset); // before activation so the first build already has the right shape
         
         // Raise the AppActivated event BEFORE switching, so RenderEngine can capture the old frame
