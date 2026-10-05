@@ -37,7 +37,7 @@ internal sealed class RoadRow : Stack
     public const int RowHeight = 13;
     public const int PillWidth = 47, RoadWidth = 74;
 
-    public RoadRow(RoadDisruption d, BoardStyles styles) : base(Orientation.Horizontal, gap: 4)
+    public RoadRow(RoadDisruption d, BoardStyles styles, bool showDescription = true) : base(Orientation.Horizontal, gap: 4)
     {
         CrossAlign = Align.Center;
         Padding = new Thickness(3, 1);
@@ -50,8 +50,12 @@ internal sealed class RoadRow : Stack
             Height = 11,
             Radius = 2,
         });
-        Add(new MarqueeLabel(d.Corridor) { Style = styles.Small, Width = RoadWidth });
-        Add(new MarqueeLabel(Detail(d)) { Style = styles.Strip, Grow = 1, Speed = 36 });
+        if (showDescription)
+        {
+            Add(new MarqueeLabel(d.Corridor) { Style = styles.Small, Width = RoadWidth });
+            Add(new MarqueeLabel(Detail(d)) { Style = styles.Strip, Grow = 1, Speed = 36 });
+        }
+        else Add(new MarqueeLabel(d.Corridor) { Style = styles.Small, Grow = 1 });
     }
 
     /// <summary>"Location: comment", whichever parts exist.</summary>
@@ -60,6 +64,46 @@ internal sealed class RoadRow : Stack
         if (d.Location.Length == 0) return d.Comment;
         if (d.Comment.Length == 0) return d.Location;
         return $"{d.Location}: {d.Comment}";
+    }
+}
+
+/// <summary>
+/// The single-disruption layout: a big severity pill and the road in the big font on top, the location beneath and the description scrolling
+/// below, so one disruption fills the panel instead of leaving three empty rows.
+/// </summary>
+internal sealed class RoadHero : Stack
+{
+    public RoadHero(RoadDisruption d, BoardStyles styles, bool showDescription = true) : base(Orientation.Vertical, gap: 4)
+    {
+        HAlign = Align.Stretch;
+        VAlign = Align.Stretch;
+        Padding = new Thickness(6, 4);
+        var color = RoadColors.Of(d.Severity);
+        var label = RoadColors.Label(d.Severity);
+        var probe = new TextRun();
+        probe.Set(Fonts.Big, label);
+
+        Add(new Stack(Orientation.Horizontal, gap: 6)
+        {
+            CrossAlign = Align.Center,
+            Height = 18,
+            HAlign = Align.Stretch,
+            Children =
+            {
+                new Pill(label, color, pulse: d.Severity == RoadSeverity.Severe)
+                {
+                    Style = new TextStyle(Fonts.Big, TubeColors.TextOn(color), Shadow: false),
+                    Width = probe.Width + 10,
+                    Height = 18,
+                    Radius = 3,
+                },
+                new MarqueeLabel(d.Corridor) { Style = new TextStyle(Fonts.Big, Pixel.White), Grow = 1 },
+            },
+        });
+
+        if (!showDescription) return;
+        if (d.Location.Length > 0) Add(new MarqueeLabel(d.Location) { Style = styles.SmallAmber, Height = 9, Speed = 36 });
+        if (d.Comment.Length > 0) Add(new MarqueeLabel(d.Comment) { Style = styles.Strip, Height = 8, Speed = 36 });
     }
 }
 
