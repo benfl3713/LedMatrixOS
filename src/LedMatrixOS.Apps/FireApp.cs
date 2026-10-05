@@ -16,7 +16,7 @@ public sealed class FireApp : WidgetApp
     [Setting("Intensity", Description = "How tall and hot the flames burn", Min = 1, Max = 10)]
     public int Intensity { get; set; } = 6;
 
-    [Setting("Palette", Description = "Flame colour", Options = ["Classic", "Blue", "Green", "Purple"])]
+    [Setting("Palette", Description = "Flame colour", Options = ["Classic", "Blue", "Green", "Purple", "Neon", "Sunset", "Ocean", "Candy", "Aurora", "Rainbow", "Mono"])]
     public string Palette { get; set; } = "Classic";
 
     [Setting("Embers", Description = "Sparks rising off the flames")]

@@ -19,20 +19,20 @@ public sealed class DvdLogoApp : WidgetApp
     public override string Id => "dvd-logo";
     public override string Name => "DVD Logo";
 
-    [Setting("Speed", Description = "Movement speed in percent", Min = 20, Max = 400)]
-    public int Speed { get; set; } = 100;
+    [Setting("Speed", Description = "Movement speed (1-10, 5 is normal)", Min = 1, Max = 10)]
+    public int Speed { get; set; } = 5;
 
     [Setting("Trail", Description = "Ghost trail behind the logo")]
     public bool Trail { get; set; } = true;
 
-    [Setting("CornerAssist", Description = "Gently steer so a corner hit happens now and then")]
+    [Setting("Corner Assist", Description = "Gently steer so a corner hit happens now and then")]
     public bool CornerAssist { get; set; } = true;
 
-    [Setting("ShowCounter", Description = "Show the corner-hit counter after the first corner")]
+    [Setting("Show Counter", Description = "Show the corner-hit counter after the first corner")]
     public bool ShowCounter { get; set; } = true;
 
-    [Setting("Palette", Description = "Colours the logo cycles through", Options = ["classic", "neon", "sunset", "ocean", "candy", "aurora"])]
-    public string Palette { get; set; } = "classic";
+    [Setting("Palette", Description = "Colours the logo cycles through", Options = ["Classic", "Neon", "Sunset", "Ocean", "Candy", "Aurora", "Rainbow", "Mono"])]
+    public string Palette { get; set; } = "Classic";
 
     public DvdLogoField? Field => _field;
     public Pill? CounterPill { get; private set; }
@@ -61,12 +61,16 @@ public sealed class DvdLogoApp : WidgetApp
         return new Panel { Children = { field, pill } };
     }
 
+    /// <summary>Old stored speeds were percentages (20-400); they are migrated onto the 1-10 levels.</summary>
+    public override void UpdateSetting(string key, object value) =>
+        base.UpdateSetting(key, string.Equals(key, "speed", StringComparison.OrdinalIgnoreCase) ? ToySpeed.Migrate(value) : value);
+
     protected override void OnSettingChanged(string key) => Apply();
 
     private void Apply()
     {
         if (_field is null) return;
-        _field.Speed = Speed;
+        _field.Speed = ToySpeed.Percent(Speed);
         _field.Trails = Trail;
         _field.Assist = CornerAssist;
         _field.PaletteName = Palette;

@@ -130,14 +130,18 @@ internal static class BriefingNodes
 
     private static void Greeting(Panel p, BriefingModel m, Pixel accent)
     {
+        var greeting = new Label(() => m.GreetingText) { Style = Big(accent) };
         p.Add(Left(new Stack(Orientation.Vertical, gap: 3)
         {
             Children =
             {
-                new Label(() => m.GreetingText) { Style = Big(accent) },
+                greeting,
                 new Label(() => m.DateText) { Style = Small(Text) },
             },
         }));
+        var bigStyle = Big(accent);
+        var smallStyle = Small(accent);
+        p.Add(new Updater { Tick = () => { var want = m.GreetingSmall ? smallStyle : bigStyle; if (!ReferenceEquals(greeting.Style, want)) greeting.Style = want; } });
 
         var right = new Stack(Orientation.Horizontal, gap: 6) { HAlign = Align.End, VAlign = Align.Center, CrossAlign = Align.Center };
         right.Add(new WeatherGlyph(() => (m.WeatherKind, m.WeatherDay), 28));

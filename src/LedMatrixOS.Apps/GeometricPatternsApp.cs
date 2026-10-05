@@ -16,19 +16,23 @@ public sealed class GeometricPatternsApp : WidgetApp
     public override string Name => "Geometric Patterns";
 
     [Setting("Pattern", Description = "Which geometry to show; auto cycles through all of them",
-        Options = ["auto", "spirograph", "polygons", "lissajous", "kaleidoscope", "tessellation"])]
-    public string Pattern { get; set; } = "auto";
+        Options = ["Auto", "Spirograph", "Polygons", "Lissajous", "Kaleidoscope", "Tessellation"])]
+    public string Pattern { get; set; } = "Auto";
 
-    [Setting("Palette", Description = "Colour palette", Options = ["neon", "sunset", "ocean", "candy", "aurora"])]
-    public string Palette { get; set; } = "neon";
+    [Setting("Palette", Description = "Colour palette", Options = ["Neon", "Sunset", "Ocean", "Candy", "Aurora", "Rainbow", "Mono"])]
+    public string Palette { get; set; } = "Neon";
 
-    [Setting("Speed", Description = "Animation speed in percent", Min = 10, Max = 400)]
-    public int Speed { get; set; } = 100;
+    [Setting("Speed", Description = "Animation speed (1-10, 5 is normal)", Min = 1, Max = 10)]
+    public int Speed { get; set; } = 5;
 
     [Setting("Interval", Description = "Seconds between patterns in auto mode", Min = 3, Max = 120)]
     public int Interval { get; set; } = 12;
 
     public GeometricField? Field => _field;
+
+    /// <summary>Old stored speeds were percentages (10-400); they are migrated onto the 1-10 levels.</summary>
+    public override void UpdateSetting(string key, object value) =>
+        base.UpdateSetting(key, string.Equals(key, "speed", StringComparison.OrdinalIgnoreCase) ? ToySpeed.Migrate(value) : value);
 
     protected override Node Build()
     {
@@ -44,7 +48,7 @@ public sealed class GeometricPatternsApp : WidgetApp
         if (_field is null) return;
         _field.Pattern = Pattern;
         _field.PaletteName = Palette;
-        _field.Speed = Speed;
+        _field.Speed = ToySpeed.Percent(Speed);
         _field.Interval = Interval;
     }
 }

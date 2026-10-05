@@ -52,17 +52,17 @@ public sealed class BouncingBallsField : Node
     private int _respawnCursor;
     private float _kickTimer, _time;
     private bool _built;
-    private Pixel[] _pal = ToyPalettes.Get("neon");
+    private Pixel[] _pal = ToyPalettes.Get("Neon");
     private FrameContext _ctx;
 
-    private string _style = "balls", _paletteName = "neon";
+    private string _style = "balls", _paletteName = "Neon";
     private int _count = 10, _gravity = 60;
     private bool _trails = true;
     private int _builtCount = -1;
     private string _builtStyle = "";
 
     /// <summary>"balls" or "lava".</summary>
-    public string Style { get => _style; set => _style = value; }
+    public string Style { get => _style; set => _style = value.ToLowerInvariant(); }
     public int Count { get => _count; set => _count = Math.Clamp(value, 1, MaxBalls); }
     /// <summary>0 (weightless) to 100.</summary>
     public int Gravity { get => _gravity; set => _gravity = Math.Clamp(value, 0, 100); }

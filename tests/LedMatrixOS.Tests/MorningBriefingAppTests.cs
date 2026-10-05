@@ -84,7 +84,7 @@ public class MorningBriefingAppTests(ITestOutputHelper output)
         var app = new MorningBriefingApp();
         Assert.Equal("morning-briefing", app.Id);
         Assert.Equal("Morning Briefing", app.Name);
-        Assert.Equal(new[] { "stationId", "walkMinutes", "pageSeconds", "bins", "showWeather", "showCalendar", "showCommute", "showBins", "units" },
+        Assert.Equal(new[] { "stationId", "walkMinutes", "pageSeconds", "bins", "showWeather", "showCalendar", "showCommute", "showBins", "greetingName", "activeFrom", "activeUntil", "cardOrder", "units" },
             app.GetSettings().Select(s => s.Key).ToArray());
         var seconds = app.GetSettings().Single(s => s.Key == "pageSeconds");
         Assert.Equal(6, seconds.CurrentValue);
@@ -362,6 +362,104 @@ public class MorningBriefingAppTests(ITestOutputHelper output)
         var rig = Make(weather: false, events: null, arrivals: false);
         GoTo(rig, 0);
         Golden(rig, "briefing_minimal_only_greeting");
+    }
+
+    // ---- greeting name, active hours, card order ----------------------------------------------------------------------------------
+
+    [Fact]
+    public void GreetingName_IsAppendedTrimmedAndCut()
+    {
+        Assert.Equal("Good morning, Ben", BriefingGreeting.Greeting(7, "  Ben "));
+        Assert.Equal("Good evening", BriefingGreeting.Greeting(20, "   "));
+        Assert.Equal("Good morning, Bartholome", BriefingGreeting.Greeting(7, "Bartholomew")); // cut at 10 characters
+        var rig = Full(a => a.GreetingName = "Ben");
+        Assert.Equal("Good morning, Ben", rig.App.Model.GreetingText);
+        Assert.False(rig.App.Model.GreetingSmall);
+        rig.App.GreetingName = "Alexander";
+        rig.Stage.Step(33, 3);
+        Assert.Equal("Good morning, Alexander", rig.App.Model.GreetingText);
+        Assert.True(rig.App.Model.GreetingSmall);
+        rig.App.GreetingName = "";
+        rig.Stage.Step(33, 3);
+        Assert.Equal("Good morning", rig.App.Model.GreetingText);
+    }
+
+    [Theory]
+    [InlineData(5, 12, 4, false)]
+    [InlineData(5, 12, 5, true)]
+    [InlineData(5, 12, 11, true)]
+    [InlineData(5, 12, 12, false)]
+    [InlineData(22, 4, 23, true)]
+    [InlineData(22, 4, 3, true)]
+    [InlineData(22, 4, 4, false)]
+    [InlineData(0, 24, 18, true)]
+    [InlineData(6, 6, 18, true)]
+    public void ActiveWindow_Hours(int from, int until, int hour, bool expected) =>
+        Assert.Equal(expected, BriefingGreeting.InWindow(hour, from, until));
+
+    [Fact]
+    public void ActiveWindow_OutsideDropsTheGreetingCardOnly()
+    {
+        var afternoon = new DateTimeOffset(2026, 1, 2, 15, 0, 0, TimeSpan.Zero);
+        var rig = Make(now: afternoon, events: TodayEvents(), bins: TwoBins);
+        Assert.Equal([BriefingPage.Weather, BriefingPage.Calendar, BriefingPage.Commute, BriefingPage.Bins, BriefingPage.SignOff], PagesOf(rig));
+        rig.App.ActiveUntil = 18;
+        rig.Stage.Step(33, 3);
+        Assert.Equal(BriefingPage.Greeting, PagesOf(rig)[0]);
+        Assert.Equal("Good afternoon", rig.App.Model.GreetingText);
+        rig.App.ActiveFrom = 16;
+        rig.App.ActiveUntil = 17;
+        rig.Stage.Step(33, 3);
+        Assert.DoesNotContain(BriefingPage.Greeting, PagesOf(rig));
+        // Still renders something when nothing else is configured: just the sign-off.
+        var bare = Make(now: afternoon, weather: false, events: null, arrivals: false);
+        Assert.Equal([BriefingPage.SignOff], PagesOf(bare));
+        Assert.False(SnapshotHelper.IsBlank(bare.Stage.Snapshot()));
+    }
+
+    [Fact]
+    public void CardOrder_ReordersDataCards_AndIgnoresJunk()
+    {
+        var rig = Full(a => a.CardOrder = "bins, Commute , nonsense, bins");
+        Assert.Equal([BriefingPage.Greeting, BriefingPage.Bins, BriefingPage.Commute, BriefingPage.Weather, BriefingPage.Calendar, BriefingPage.SignOff], PagesOf(rig));
+        rig.App.CardOrder = "Calendar";
+        rig.Stage.Step(33, 3);
+        Assert.Equal([BriefingPage.Greeting, BriefingPage.Calendar, BriefingPage.Weather, BriefingPage.Commute, BriefingPage.Bins, BriefingPage.SignOff], PagesOf(rig));
+        rig.App.ShowCalendar = false;
+        rig.Stage.Step(33, 3);
+        Assert.DoesNotContain(BriefingPage.Calendar, PagesOf(rig)); // the Show switch still hides a card
+        rig.App.CardOrder = "";
+        rig.Stage.Step(33, 3);
+        Assert.Equal([BriefingPage.Greeting, BriefingPage.Weather, BriefingPage.Commute, BriefingPage.Bins, BriefingPage.SignOff], PagesOf(rig));
+    }
+
+    [Fact]
+    public void NewSettings_Defaults_AndStableKeys()
+    {
+        var app = new MorningBriefingApp();
+        var s = app.GetSettings().ToDictionary(x => x.Key);
+        Assert.Equal("", s["greetingName"].CurrentValue);
+        Assert.Equal(5, s["activeFrom"].CurrentValue);
+        Assert.Equal(12, s["activeUntil"].CurrentValue);
+        Assert.Equal("Weather, Calendar, Commute, Bins", s["cardOrder"].CurrentValue);
+        app.UpdateSetting("activeUntil", 99);
+        Assert.Equal(24, app.ActiveUntil);
+    }
+
+    [Fact]
+    public void Golden_GreetingWithName()
+    {
+        var rig = Full(a => a.GreetingName = "Ben");
+        GoTo(rig, 0);
+        Golden(rig, "briefing_greeting_name");
+    }
+
+    [Fact]
+    public void Golden_GreetingWithLongName()
+    {
+        var rig = Make(now: new DateTimeOffset(2026, 1, 2, 16, 0, 0, TimeSpan.Zero), events: TodayEvents(), configure: a => { a.GreetingName = "Alexander"; a.ActiveUntil = 18; });
+        GoTo(rig, 0);
+        Golden(rig, "briefing_greeting_long_name");
     }
 
     // ---- allocation --------------------------------------------------------------------------------------------------------------------

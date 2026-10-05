@@ -15,8 +15,8 @@ public sealed class BouncingBallsApp : WidgetApp
     public override string Id => "bouncing-balls";
     public override string Name => "Bouncing Balls";
 
-    [Setting("Style", Description = "Glossy bouncing balls or a lava lamp of merging blobs", Options = ["balls", "lava"])]
-    public string Style { get; set; } = "balls";
+    [Setting("Style", Description = "Glossy bouncing balls or a lava lamp of merging blobs", Options = ["Balls", "Lava"])]
+    public string Style { get; set; } = "Balls";
 
     [Setting("Count", Description = "How many balls (lava: how many blobs, roughly half)", Min = 1, Max = BouncingBallsField.MaxBalls)]
     public int Count { get; set; } = 10;
@@ -27,8 +27,8 @@ public sealed class BouncingBallsApp : WidgetApp
     [Setting("Trails", Description = "Glowing motion trails")]
     public bool Trails { get; set; } = true;
 
-    [Setting("Palette", Description = "Colour palette", Options = ["neon", "sunset", "ocean", "candy", "aurora"])]
-    public string Palette { get; set; } = "neon";
+    [Setting("Palette", Description = "Colour palette", Options = ["Neon", "Sunset", "Ocean", "Candy", "Aurora", "Rainbow", "Mono"])]
+    public string Palette { get; set; } = "Neon";
 
     /// <summary>The scene node (after the first frame).</summary>
     public BouncingBallsField? Field => _field;

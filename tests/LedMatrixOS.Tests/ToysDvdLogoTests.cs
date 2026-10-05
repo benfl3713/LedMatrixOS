@@ -155,31 +155,63 @@ public class ToysDvdLogoTests
     {
         var app = new DvdLogoApp();
         static JsonElement J(string s) => JsonDocument.Parse(s).RootElement.Clone();
-        app.UpdateSetting("speed", J("180"));
+        app.UpdateSetting("speed", J("8"));
         app.UpdateSetting("trail", J("false"));
         app.UpdateSetting("cornerAssist", J("false"));
         app.UpdateSetting("showCounter", J("\"false\""));
         app.UpdateSetting("palette", J("\"candy\""));
-        Assert.Equal(180, app.Speed);
+        Assert.Equal(8, app.Speed);
         Assert.False(app.Trail);
         Assert.False(app.CornerAssist);
         Assert.False(app.ShowCounter);
-        Assert.Equal("candy", app.Palette);
+        Assert.Equal("Candy", app.Palette);
         var settings = app.GetSettings().ToDictionary(s => s.Key);
         Assert.Equal(5, settings.Count);
         Assert.Equal(AppSettingType.Select, settings["palette"].Type);
         app.UpdateSetting("speed", J("1"));
-        Assert.Equal(20, app.Speed);
+        Assert.Equal(1, app.Speed);
     }
+
+    [Theory]
+    [InlineData(100, 5)]
+    [InlineData(180, 8)]
+    [InlineData(300, 9)]
+    [InlineData(400, 10)]
+    [InlineData(20, 1)]
+    public void Migration_OldPercentSpeedsMapToLevels(int percent, int level)
+    {
+        var app = new DvdLogoApp();
+        app.UpdateSetting("speed", J(percent.ToString()));
+        Assert.Equal(level, app.Speed);
+        var run = new ToyRunner(app);
+        run.Advance(50);
+        Assert.Equal(ToySpeed.Percent(level), app.Field!.Speed);
+    }
+
+    [Fact]
+    public void Migration_OldLowercasePalettesAreAccepted_AndKeysAreStable()
+    {
+        var app = new DvdLogoApp();
+        foreach (var (old, canonical) in new[] { ("classic", "Classic"), ("neon", "Neon"), ("aurora", "Aurora"), ("MONO", "Mono") })
+        {
+            app.UpdateSetting("palette", old);
+            Assert.Equal(canonical, app.Palette);
+        }
+        var keys = app.GetSettings().ToDictionary(s => s.Key, s => s.Name);
+        Assert.Equal("Corner Assist", keys["cornerAssist"]); // label tidied, key unchanged
+        Assert.Equal("Show Counter", keys["showCounter"]);
+    }
+
+    private static JsonElement J(string s) => JsonDocument.Parse(s).RootElement.Clone();
 
     [Fact]
     public void Settings_ApplyLive()
     {
         var (app, run) = Start();
-        app.UpdateSetting("speed", 300);
+        app.UpdateSetting("speed", 9);
         app.UpdateSetting("palette", "ocean");
         app.UpdateSetting("cornerAssist", false);
-        Assert.Equal(300, app.Field!.Speed);
+        Assert.Equal(ToySpeed.Percent(9), app.Field!.Speed);
         Assert.False(app.Field.Assist);
     }
 

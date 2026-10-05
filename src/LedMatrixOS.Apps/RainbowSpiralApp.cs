@@ -22,7 +22,7 @@ public sealed class RainbowSpiralApp : WidgetApp
     [Setting("Style", Description = "Visual style", Options = ["Twin Vortex", "Vortex", "Plasma", "Tunnel"])]
     public string Style { get; set; } = "Twin Vortex";
 
-    [Setting("Palette", Description = "Colour palette", Options = ["Rainbow", "Neon", "Sunset", "Ocean", "Aurora"])]
+    [Setting("Palette", Description = "Colour palette", Options = ["Rainbow", "Neon", "Sunset", "Ocean", "Candy", "Aurora", "Mono"])]
     public string Palette { get; set; } = "Rainbow";
 
     [Setting("Comets", Description = "Glowing comets that trail along the spiral")]

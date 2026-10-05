@@ -115,6 +115,27 @@ public class ToysBouncingBallsTests
     }
 
     [Fact]
+    public void Migration_OldLowercaseOptionsAreAcceptedAndCanonicalised()
+    {
+        var app = App();
+        app.UpdateSetting("style", "balls");
+        app.UpdateSetting("palette", "sunset");
+        Assert.Equal("Balls", app.Style);
+        Assert.Equal("Sunset", app.Palette);
+        app.UpdateSetting("palette", "Mono"); // new shared palettes
+        app.UpdateSetting("style", "LAVA");
+        Assert.Equal("Mono", app.Palette);
+        Assert.Equal("Lava", app.Style);
+        var r = new ToyRunner(app);
+        r.Advance(500);
+        Assert.Equal("lava", app.Field!.Style);
+        Assert.Equal("Mono", app.Field.PaletteName);
+        var keys = app.GetSettings().Select(s => s.Key).ToHashSet();
+        Assert.Contains("style", keys);
+        Assert.Contains("palette", keys);
+    }
+
+    [Fact]
     public void Settings_RoundTrip_WithJsonElements()
     {
         var app = App();
@@ -124,11 +145,11 @@ public class ToysBouncingBallsTests
         app.UpdateSetting("gravity", J("\"25\""));
         app.UpdateSetting("trails", J("false"));
         app.UpdateSetting("palette", J("\"ocean\""));
-        Assert.Equal("lava", app.Style);
+        Assert.Equal("Lava", app.Style); // an old lowercase value selects the Title Case option
         Assert.Equal(18, app.Count);
         Assert.Equal(25, app.Gravity);
         Assert.False(app.Trails);
-        Assert.Equal("ocean", app.Palette);
+        Assert.Equal("Ocean", app.Palette);
 
         var settings = app.GetSettings().ToDictionary(s => s.Key);
         Assert.Equal(5, settings.Count);
@@ -136,7 +157,7 @@ public class ToysBouncingBallsTests
         Assert.Equal(AppSettingType.Boolean, settings["trails"].Type);
 
         app.UpdateSetting("style", J("\"nonsense\"")); // not an option: ignored
-        Assert.Equal("lava", app.Style);
+        Assert.Equal("Lava", app.Style);
         app.UpdateSetting("count", J("500"));
         Assert.Equal(BouncingBallsField.MaxBalls, app.Count);
     }

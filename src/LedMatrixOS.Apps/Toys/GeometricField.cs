@@ -41,8 +41,8 @@ public sealed class GeometricField : Node
     private int _cur, _next = -1, _transitionIndex;
     private float _t, _sinceSwitch;
     private FrameContext _ctx;
-    private Pixel[] _pal = ToyPalettes.Get("neon");
-    private string _pattern = "auto", _paletteName = "neon";
+    private Pixel[] _pal = ToyPalettes.Get("Neon");
+    private string _pattern = "auto", _paletteName = "Neon";
     private int _speed = 100, _interval = 12;
     private string _lastPattern = "";
 
@@ -56,7 +56,7 @@ public sealed class GeometricField : Node
         };
     }
 
-    public string Pattern { get => _pattern; set => _pattern = value; }
+    public string Pattern { get => _pattern; set => _pattern = value.ToLowerInvariant(); }
     public int Speed { get => _speed; set => _speed = Math.Clamp(value, 10, 400); }
     /// <summary>Seconds between automatic switches.</summary>
     public int Interval { get => _interval; set => _interval = Math.Clamp(value, 3, 120); }
