@@ -42,7 +42,7 @@ public sealed record TrainSimSnapshot
 
     public string ServiceName { get; init; } = "";
 
-    /// <summary>The game clock (<c>world.localTimeIso</c>); <see cref="GmtOffsetHours"/> is added for the local reading.</summary>
+    /// <summary>The game clock (<c>world.localTimeIso</c>), already in route-local time.</summary>
     public DateTimeOffset? WorldTime { get; init; }
     public double GmtOffsetHours { get; init; }
 

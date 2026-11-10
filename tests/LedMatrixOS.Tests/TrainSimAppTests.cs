@@ -98,7 +98,7 @@ public class TrainSimAppTests(ITestOutputHelper output)
         Assert.Equal(4, s.Stops.Count);   // capped
         Assert.Equal(("Ashby Road", "2", true), (s.Stops[0].Name, s.Stops[0].Platform, s.Stops[0].Calling));
         Assert.Equal(0, s.GmtOffsetHours);
-        Assert.Equal("20:44", TrainSimFormat.Clock(s.WorldTime, s.GmtOffsetHours));
+        Assert.Equal("20:44", TrainSimFormat.Clock(s.WorldTime));
         Assert.Null(s.WaitRemainingSeconds);
     }
 
@@ -242,10 +242,15 @@ public class TrainSimAppTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void Clock_AppliesTheGmtOffset()
+    public void Clock_ShowsTheRouteLocalWallClock()
     {
-        Assert.Equal("22:44", TrainSimFormat.Clock(Clock, 2));
-        Assert.Equal("", TrainSimFormat.Clock(null, 0));
+        // TSW's LocalTimeISO8601 is already route-local, e.g. "10:00:39.775+01:00" with GMTOffset 1.
+        var json = """{"type":"snapshot","data":{"world":{"localTimeIso":"2026-11-10T10:00:39.775+01:00","gmtOffset":1}}}""";
+        var state = new TswTelemetryState();
+        state.Apply(json);
+        var s = state.Build("x", true, null);
+        Assert.Equal("10:00", TrainSimFormat.Clock(s.WorldTime));
+        Assert.Equal("", TrainSimFormat.Clock(null));
     }
 
     [Fact]

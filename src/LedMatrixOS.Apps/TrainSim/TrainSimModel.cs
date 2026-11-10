@@ -143,7 +143,7 @@ internal sealed class TrainSimBoardModel
         var loco = TrainSimFormat.LocoName(snapshot.LocoClass);
         LocoText = snapshot.ServiceName.Length > 0 ? (loco.Length > 0 ? loco + "  " + snapshot.ServiceName : snapshot.ServiceName) : loco;
         GradeText = snapshot.Gradient is { } g && Math.Abs(g) >= 0.5 ? (g > 0 ? "Up " : "Down ") + Math.Abs(g).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "%" : "";
-        ClockText = TrainSimFormat.Clock(snapshot.WorldTime, snapshot.GmtOffsetHours);
+        ClockText = TrainSimFormat.Clock(snapshot.WorldTime);
     }
 
     private void ApplyCard(TrainSimSnapshot s)

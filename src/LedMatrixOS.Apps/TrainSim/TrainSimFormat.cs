@@ -49,8 +49,9 @@ public static partial class TrainSimFormat
     }
 
     /// <summary>The game clock as "HH:mm": the game's UTC time plus its GMT offset. Empty when the game gave no time.</summary>
-    public static string Clock(DateTimeOffset? worldTime, double gmtOffsetHours) =>
-        worldTime is { } t ? t.UtcDateTime.AddHours(gmtOffsetHours).ToString("HH:mm", CultureInfo.InvariantCulture) : "";
+    /// <summary>HH:mm of the game clock. <c>localTimeIso</c> is already route-local (its offset matches gmtOffset), so this is its wall-clock time.</summary>
+    public static string Clock(DateTimeOffset? worldTime) =>
+        worldTime is { } t ? t.DateTime.ToString("HH:mm", CultureInfo.InvariantCulture) : "";
 
     public static SpeedAspect Aspect(string? aspect)
     {
