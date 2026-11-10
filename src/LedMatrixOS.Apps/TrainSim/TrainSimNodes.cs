@@ -1,3 +1,4 @@
+using BdfFontParser;
 using LedMatrixOS.Core;
 using LedMatrixOS.Graphics;
 using LedMatrixOS.Graphics.Text;
@@ -13,7 +14,7 @@ internal sealed class TrainSimStyles
     public readonly TextStyle Distance = new(Fonts.Big, TrainSimBoardModel.Ink, Shadow: false);
     public readonly TextStyle Platform = new(Fonts.Small, TrainSimBoardModel.Amber, Shadow: false);
     public readonly TextStyle StopDistance = new(Fonts.Small, new Pixel(150, 190, 255), Shadow: false);
-    public readonly TextStyle StopDwell = new(Fonts.Small, TrainSimBoardModel.Amber, Shadow: false);
+    public readonly TextStyle StopDwell = new(Fonts.Small, TrainSimBoardModel.Green, Shadow: false);
     public readonly TextStyle Muted = new(Fonts.QuiteSmall, TrainSimBoardModel.Dim, Shadow: false);
     public readonly TextStyle Footer = new(Fonts.QuiteSmall, new Pixel(190, 190, 200), Shadow: false);
     public readonly TextStyle Clock = new(Fonts.QuiteSmall, Pixel.White, Shadow: false);
@@ -48,11 +49,23 @@ internal static class AspectColors
 internal sealed class SpeedHeroNode(TrainSimBoardModel model) : Node
 {
     public const int Scale = 2;
+    private static BdfFont? _bold;
     private readonly TextRun _run = new();
+
+    /// <summary>The bold 9x18 face, which holds up better when doubled; falls back to the regular one if the file is missing.</summary>
+    private static BdfFont Face
+    {
+        get
+        {
+            if (_bold is not null) return _bold;
+            try { return _bold = new BdfFont(Path.Combine(Path.GetDirectoryName(typeof(Fonts).Assembly.Location)!, "Text", "Fonts", "9x18B.bdf")); }
+            catch (Exception) { return _bold = Fonts.Big; }
+        }
+    }
 
     protected override void OnRender(FrameBuffer frame, Rectangle bounds)
     {
-        _run.Set(Fonts.Big, model.SpeedText);
+        _run.Set(Face, model.SpeedText);
         int x = bounds.Right - _run.Width * Scale;
         int y = bounds.Y + (bounds.Height - _run.Height * Scale) / 2;
         var color = model.SpeedColor;

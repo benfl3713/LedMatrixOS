@@ -40,7 +40,8 @@ public sealed class TrainSimApp : WidgetApp
     private bool _active;
 
     private Node? _live, _card, _stopRow, _arrow, _limitText;
-    private Label? _aspectWord;
+    private Label? _aspectWord, _stopRight;
+    private bool _appliedDwell;
     private SpeedAspect _appliedAspect = (SpeedAspect)(-1);
     private TrainSimStyles? _styles;
 
@@ -97,6 +98,7 @@ public sealed class TrainSimApp : WidgetApp
             Children = { new Panel { Width = 8, Height = 12, Children = { _arrow } }, _limitText },
         };
 
+        var stopRight = _stopRight = new Label(() => m.StopRight) { Style = styles.StopDistance };
         _stopRow = new Stack(Orientation.Horizontal, gap: 4)
         {
             Height = 12,
@@ -106,7 +108,7 @@ public sealed class TrainSimApp : WidgetApp
             {
                 new MarqueeLabel(() => m.StopName) { Style = styles.Detail, Grow = 1 },
                 new Label(() => m.StopPlatform) { Style = styles.Platform },
-                new Label(() => m.StopRight) { Style = styles.StopDistance },
+                stopRight,
             },
         };
 
@@ -189,6 +191,12 @@ public sealed class TrainSimApp : WidgetApp
         _card!.Visible = !live;
         _stopRow!.Visible = _model.HasStop;
         _arrow!.Visible = _limitText!.Visible = _model.HasNextLimit;
+
+        if (_model.StopDwell != _appliedDwell)
+        {
+            _appliedDwell = _model.StopDwell;
+            _stopRight!.Style = _appliedDwell ? _styles!.StopDwell : _styles!.StopDistance;
+        }
 
         var aspect = _model.HasSignal ? _model.Aspect : SpeedAspect.Unknown;
         if (aspect != _appliedAspect)
