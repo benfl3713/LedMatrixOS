@@ -26,17 +26,26 @@ A flexible and extensible LED matrix display system built with .NET 10, designed
 | Everyday | Weather (`weather`, Open-Meteo, no key), Commute (`commute`), Calendar (`calendar`), Home Assistant tiles (`ha-tiles`), Spotify (`spotify`, needs API config) |
 | Tube | Tube Departures (`tube-departures`), Tube Status (`tube-status`), Tube Line (`tube-line`) |
 | Transport | Bus Arrivals (`bus-arrivals`), Rail Departures (`rail-departures`), Cycle Hub (`cycle-hub`), Road Disruptions (`road-disruptions`), Journey (`journey`) |
-| Tracking & info | Plane Spotter (`plane-spotter`), ISS Tracker (`iss-tracker`), Air Quality (`air-quality`), Bin Day (`bin-day`), Morning Briefing (`morning-briefing`) |
+| Tracking & info | Plane Spotter (`plane-spotter`), ISS Tracker (`iss-tracker`), Air Quality (`air-quality`), Bin Day (`bin-day`), Morning Briefing (`morning-briefing`), Train Sim Live (`train-sim`) |
 | Custom | JSON screens (`screen`, see `/api/screens`) |
 | Dev | Widget Demo (`widget-demo`) |
 
 Apps with settings expose them through `GET /api/apps/{id}/settings`.
+
+### Train Sim Live
+
+`train-sim` shows live Train Sim World telemetry (speed against the limit, next signal, next limit change, next stop with dwell countdown, power/brake, loco and the game clock) from the tsw-companion bridge, which runs on the gaming PC:
+
+1. On the gaming PC run `npm start` in `tsw-companion` and allow Node.js through Windows Firewall (private networks) so the Pi can reach port 31280.
+2. In the app's settings set **Bridge Address** to the PC's `IP:31280` (for example `192.168.1.20:31280`), or put it in config as `TrainSim:BridgeAddress`. Empty falls back to `localhost:31280`.
+3. Pick **Units** (mph with yards/miles, or km/h with metres/kilometres). The app connects over a WebSocket (`ws://<address>/ws`) while it is on screen, reconnects with backoff if the bridge goes away, and shows calm status cards for bridge offline, waiting for the game, no train and no API key.
 
 ### Config keys used by the everyday apps
 
 | Key | Used by |
 |---|---|
 | `Weather:Location` | Weather, Commute (place name or `lat,lon`) |
+| `TrainSim:BridgeAddress` | Train Sim Live (`host:port` of the tsw-companion bridge, default `localhost:31280`) |
 | `TFL:AppKey`, `Commute:StationId`, `Commute:WalkMinutes`, `TubeDeparturesApp:StationId` | Tube apps, Commute |
 | `Calendar:IcsUrl` | Calendar (an `.ics` feed; `webcal://` works) |
 | `HomeAssistant:BaseUrl`, `HomeAssistant:Token`, `HomeAssistant:Entities` | Home Assistant tiles (long-lived access token) |
