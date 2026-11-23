@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../api/screen_models.dart';
 import '../../core/widgets.dart';
-import '../now/preview_card.dart';
+import 'draft_preview.dart';
 import 'node_form.dart';
 import 'screens_provider.dart';
 
@@ -107,20 +107,8 @@ class _ScreenEditorPageState extends ConsumerState<ScreenEditorPage> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        const PreviewCard(),
-        const SizedBox(height: 4),
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text(
-            s.dirty
-                ? 'Preview shows what is on the device: Save, then Activate, to see your edits.'
-                : 'Preview shows the active app.',
-            style: Theme.of(context)
-                .textTheme
-                .labelSmall
-                ?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-        ),
+        DraftPreview(draft: s.draft),
+        const SizedBox(height: 12),
         TextField(
           key: const Key('screen-name'),
           controller: _name,

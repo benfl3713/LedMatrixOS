@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -62,6 +63,9 @@ abstract class LedApi {
   Future<Result<void>> deleteScreen(String id);
   Future<Result<ScreenSchema>> getScreenSchema();
 
+  /// Renders one frame of an unsaved screen on the device (PNG bytes) without saving or activating it. A 400 is an [ApiError] with `fieldErrors`.
+  Future<Result<Uint8List>> previewScreen(ScreenDefinition screen);
+
   Future<Result<List<MediaItem>>> listMedia();
   Future<Result<MediaCapabilities>> getMediaCapabilities();
 
@@ -115,6 +119,24 @@ class HttpLedApi implements LedApi {
     } catch (e) {
       return Err(ApiError(ApiErrorKind.parse, 'Unexpected response from the device: $e'));
     }
+  }
+
+  Future<Result<Uint8List>> _sendBytes(Future<http.Response> Function() request) async {
+    final http.Response response;
+    try {
+      response = await request().timeout(timeout);
+    } on TimeoutException {
+      return Err(ApiError(ApiErrorKind.timeout, 'Request timed out after ${timeout.inSeconds}s'));
+    } catch (e) {
+      return Err(ApiError(ApiErrorKind.network, 'Cannot reach the device: $e'));
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      return Err(ApiError(ApiErrorKind.http, _httpMessage(response),
+          statusCode: response.statusCode,
+          errors: _validationErrors(response),
+          fieldErrors: _fieldErrors(response)));
+    }
+    return Ok(response.bodyBytes);
   }
 
   static List<String> _validationErrors(http.Response r) {
@@ -335,6 +357,11 @@ class HttpLedApi implements LedApi {
   @override
   Future<Result<void>> deleteScreen(String id) =>
       _send(() => _client.delete(_uri('/api/screens/${Uri.encodeComponent(id)}')), (_) {});
+
+  @override
+  Future<Result<Uint8List>> previewScreen(ScreenDefinition screen) => _sendBytes(
+        () => _client.post(_uri('/api/screens/preview'), headers: _json, body: jsonEncode(screen.toJson())),
+      );
 
   @override
   Future<Result<ScreenSchema>> getScreenSchema() =>

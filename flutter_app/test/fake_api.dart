@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:led_matrix_controller/api/led_api.dart';
@@ -323,6 +326,29 @@ class FakeApi implements LedApi {
     calls.add('deleteScreen:$id');
     screens.remove(id);
     return const Ok(null);
+  }
+
+  /// Drafts the editor asked to preview.
+  final List<ScreenDefinition> previews = [];
+
+  /// Validation errors the next previewScreen returns (cleared after use).
+  List<FieldError> previewErrors = [];
+
+  /// A valid 1x1 PNG.
+  static final Uint8List tinyPng = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+
+  @override
+  Future<Result<Uint8List>> previewScreen(ScreenDefinition screen) async {
+    calls.add('previewScreen:${screen.id}');
+    previews.add(screen.clone());
+    if (previewErrors.isNotEmpty) {
+      final errors = previewErrors;
+      previewErrors = [];
+      return Err(ApiError(ApiErrorKind.http, 'HTTP 400: ${errors.join('; ')}',
+          statusCode: 400, errors: [for (final e in errors) e.toString()], fieldErrors: errors));
+    }
+    return Ok(tinyPng);
   }
 
   @override

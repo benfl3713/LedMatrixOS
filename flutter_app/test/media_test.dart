@@ -72,7 +72,8 @@ void main() {
   testWidgets('empty state', (tester) async {
     await _open(tester, FakeApi()..media = []);
     expect(find.text('No media yet'), findsOneWidget);
-    expect(find.byKey(const Key('media-play-all')), findsOneWidget);
+    expect(find.byKey(const Key('media-play-all')), findsNothing);
+    expect(find.byKey(const Key('media-upload')), findsNothing);
   });
 
   testWidgets('video hint shows when the device has no ffmpeg', (tester) async {

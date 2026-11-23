@@ -69,6 +69,7 @@ void main() {
       api.screens.clear();
       await _openAppsSub(tester, api, 'screens-entry');
       expect(find.text('Design your own screen'), findsOneWidget);
+      expect(find.byKey(const Key('new-screen')), findsNothing);
       await tester.tap(find.byKey(const Key('empty-new-screen')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('new-screen-name')), findsOneWidget);
@@ -76,13 +77,14 @@ void main() {
       expect(find.byType(NavigationBar).hitTestable(), findsNothing);
     });
 
-    testWidgets('media: invites the first upload and Play is disabled', (tester) async {
+    testWidgets('media: invites the first upload, with no Play bar or FAB', (tester) async {
       final api = FakeApi();
       api.media = [];
       await _openAppsSub(tester, api, 'media-entry');
       expect(find.text('No media yet'), findsOneWidget);
       expect(find.byKey(const Key('media-empty-upload')), findsOneWidget);
-      expect(tester.widget<FilledButton>(find.byKey(const Key('media-play-all'))).onPressed, isNull);
+      expect(find.byKey(const Key('media-play-all')), findsNothing);
+      expect(find.byKey(const Key('media-upload')), findsNothing);
     });
   });
 }
