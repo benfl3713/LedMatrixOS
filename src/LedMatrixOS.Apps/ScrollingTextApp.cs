@@ -11,7 +11,7 @@ namespace LedMatrixOS.Apps;
 /// Changing the message drops the old text away while the new one bounces up from below.
 /// The old font size setting (8-48) maps onto four crisp sizes.
 /// </summary>
-[AppMeta(AppCategory.Info, "Scroll a custom message across the display")]
+[AppMeta(AppCategory.Info, "Scroll a custom message across the display", "message", "marquee", "banner", "ticker", "note")]
 public sealed class ScrollingTextApp : WidgetApp
 {
     public override string Id => "scrolling-text";

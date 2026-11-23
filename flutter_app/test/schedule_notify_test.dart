@@ -114,6 +114,10 @@ void main() {
       await tester.ensureVisible(find.byKey(const Key('add-entry')));
       await tester.tap(find.byKey(const Key('add-entry')));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pick-clock')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('picker-add')));
+      await tester.pumpAndSettle();
       expect(find.byKey(const Key('entry-app-2')), findsOneWidget);
 
       // Drag the last entry's handle to the top.
@@ -121,7 +125,7 @@ void main() {
       expect(handles, findsNWidgets(3));
       final gesture = await tester.startGesture(tester.getCenter(handles.at(2)));
       await tester.pump(const Duration(milliseconds: 100));
-      await gesture.moveBy(const Offset(0, -400));
+      await gesture.moveBy(const Offset(0, -700));
       await tester.pump(const Duration(milliseconds: 100));
       await gesture.up();
       await tester.pumpAndSettle();

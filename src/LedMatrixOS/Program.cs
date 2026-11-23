@@ -156,8 +156,8 @@ app.Lifetime.ApplicationStopping.Register(engine.Stop);
 // API endpoints
 app.MapGet("/api/apps", (AppManager appManager) => 
 {
-    var apps = appManager.AppInfos.Select(i => new { i.Id, i.Name, i.HasSettings, isScreen = false, category = i.Category.ToString().ToLowerInvariant(), description = i.Description })
-        .Concat(appManager.Screens.Select(s => new { s.Id, s.Name, s.HasSettings, isScreen = true, category = "screens", description = s.Description })).ToList();
+    var apps = appManager.AppInfos.Select(i => new { i.Id, i.Name, i.HasSettings, isScreen = false, category = i.Category.ToString().ToLowerInvariant(), description = i.Description, keywords = i.Keywords ?? [] })
+        .Concat(appManager.Screens.Select(s => new { s.Id, s.Name, s.HasSettings, isScreen = true, category = "screens", description = s.Description, keywords = Array.Empty<string>() })).ToList();
     return Results.Ok(new { apps, activeApp = appManager.ActiveAppId });
 });
 

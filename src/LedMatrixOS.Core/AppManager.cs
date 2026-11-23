@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace LedMatrixOS.Core;
 
 /// <summary>Static description of a registered app, available without activating it.</summary>
-public sealed record AppInfo(string Id, string Name, bool HasSettings, AppCategory Category = AppCategory.Other, string Description = "");
+public sealed record AppInfo(string Id, string Name, bool HasSettings, AppCategory Category = AppCategory.Other, string Description = "", string[]? Keywords = null);
 
 /// <summary>A user-created screen: an alias of a registered app with a preset, listed alongside the built-in apps.</summary>
 public sealed record ScreenInfo(string Id, string Name, string TargetId, bool HasSettings, string Description = "");
@@ -75,7 +75,7 @@ public sealed class AppManager
 
         _appsById[id] = app;
         var meta = app.GetCustomAttributes(typeof(AppMetaAttribute), false).OfType<AppMetaAttribute>().FirstOrDefault();
-        _infoById[id] = new AppInfo(id, instance.Name, instance is IConfigurableApp, meta?.Category ?? AppCategory.Other, meta?.Description ?? "");
+        _infoById[id] = new AppInfo(id, instance.Name, instance is IConfigurableApp, meta?.Category ?? AppCategory.Other, meta?.Description ?? "", meta?.Keywords ?? []);
     }
 
     /// <summary>

@@ -14,6 +14,7 @@ class MatrixApp {
     this.category = 'other',
     this.description = '',
     this.isScreen = false,
+    this.keywords = const [],
   });
 
   final String id;
@@ -24,6 +25,9 @@ class MatrixApp {
   final String category;
   final String description;
   final bool isScreen;
+
+  /// Search synonyms from the server ("train" for a rail app). Missing means none.
+  final List<String> keywords;
 
   factory MatrixApp.fromJson(Map<String, dynamic> json) {
     final isScreen = (json['isScreen'] ?? false) == true;
@@ -37,10 +41,15 @@ class MatrixApp {
       category: category,
       description: desc is String ? desc : '',
       isScreen: isScreen,
+      keywords: [
+        if (json['keywords'] is List)
+          for (final k in json['keywords'] as List)
+            if (k is String && k.trim().isNotEmpty) k.trim(),
+      ],
     );
   }
 
-  MatrixApp copyWith({String? id, String? name, bool? hasSettings, String? category, String? description, bool? isScreen}) =>
+  MatrixApp copyWith({String? id, String? name, bool? hasSettings, String? category, String? description, bool? isScreen, List<String>? keywords}) =>
       MatrixApp(
         id: id ?? this.id,
         name: name ?? this.name,
@@ -48,6 +57,7 @@ class MatrixApp {
         category: category ?? this.category,
         description: description ?? this.description,
         isScreen: isScreen ?? this.isScreen,
+        keywords: keywords ?? this.keywords,
       );
 }
 

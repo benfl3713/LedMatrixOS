@@ -18,6 +18,7 @@ class EditorScaffold extends StatelessWidget {
     required this.applyKey,
     this.applyLabel = 'Apply',
     this.problem,
+    this.problemIsError = true,
     this.onDelete,
     this.deleteKey,
     this.deleteLabel = 'Delete',
@@ -34,6 +35,9 @@ class EditorScaffold extends StatelessWidget {
   final Key applyKey;
   final String applyLabel;
   final String? problem;
+
+  /// False shows [problem] as a quiet hint (the user has not touched that part of the form yet).
+  final bool problemIsError;
   final VoidCallback? onDelete;
   final Key? deleteKey;
   final String deleteLabel;
@@ -95,10 +99,13 @@ class EditorScaffold extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: Space.sm),
                       child: Row(
                         children: [
-                          Icon(Icons.info_outline_rounded, size: 16, color: scheme.error),
+                          Icon(Icons.info_outline_rounded,
+                              size: 16, color: problemIsError ? scheme.error : scheme.onSurfaceVariant),
                           const SizedBox(width: 6),
                           Expanded(
-                            child: Text(problem!, key: const Key('editor-problem'), style: TextStyle(color: scheme.error)),
+                            child: Text(problem!,
+                                key: const Key('editor-problem'),
+                                style: TextStyle(color: problemIsError ? scheme.error : scheme.onSurfaceVariant)),
                           ),
                         ],
                       ),

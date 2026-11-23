@@ -14,7 +14,7 @@ namespace LedMatrixOS.Apps;
 /// Stock, index, FX and crypto tiles (Yahoo Finance's public chart data, no key). Each tile shows the symbol, the change since the previous
 /// close, the price and an intraday sparkline, in green when up and red when down. Eight tiles fit on screen; more symbols page.
 /// </summary>
-[AppMeta(AppCategory.Info, "Share prices and daily change")]
+[AppMeta(AppCategory.Info, "Share prices and daily change", "shares", "market", "finance", "stock market", "prices", "ticker")]
 public sealed class StocksApp : WidgetApp
 {
     private enum State { Loading, Ready, Offline }

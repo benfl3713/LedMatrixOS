@@ -10,7 +10,7 @@ namespace LedMatrixOS.Apps;
 /// scripted scenes, and a small Lenia-style continuous cellular automaton. Each one reseeds itself when it empties out or
 /// freezes, so the panel is never dead; "Auto-cycle" rotates through them.
 /// </summary>
-[AppMeta(AppCategory.Ambient, "Flocking, falling sand and living patterns")]
+[AppMeta(AppCategory.Ambient, "Flocking, falling sand and living patterns", "boids", "flocking", "sand", "pattern")]
 public sealed class AliveApp : WidgetApp
 {
     public const string BoidsName = "Boids";

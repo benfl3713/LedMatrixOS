@@ -3,16 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/models.dart';
 import '../../api/schedule_models.dart';
-import '../../core/providers.dart';
 import '../../core/tokens.dart';
 import '../../core/widgets.dart';
+import '../apps/app_picker.dart';
 import 'editor_scaffold.dart';
+import 'playlist_editor.dart';
 
 class RuleEditResult {
-  const RuleEditResult.apply(this.rule, {this.singleAppId}) : delete = false;
+  const RuleEditResult.apply(this.rule, {this.singleAppId, this.createdPlaylist}) : delete = false;
   const RuleEditResult.delete()
       : rule = null,
         singleAppId = null,
+        createdPlaylist = null,
         delete = true;
 
   final RuleDoc? rule;
@@ -20,7 +22,15 @@ class RuleEditResult {
 
   /// Set when the rule runs a single app: a one-entry playlist named after the app should exist.
   final String? singleAppId;
+
+  /// A playlist made from inside the editor ("Create a playlist"); the schedule should add it before the rule.
+  final PlaylistDoc? createdPlaylist;
 }
+
+enum _Mode { app, playlist }
+
+/// Priority levels offered; a rule saved with another value keeps it as a "Custom" choice.
+const _priorityLevels = <(String, int)>[('Low', 25), ('Normal', 50), ('High', 75), ('Top', 100)];
 
 Future<RuleEditResult?> showRuleEditor(
   BuildContext context, {
@@ -61,6 +71,30 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
   late RuleDoc _rule = widget.initial;
   String? _singleApp;
   bool _touched = false;
+  bool _whatTouched = false;
+  PlaylistDoc? _created;
+  late _Mode _mode = widget.initial.playlistId.isNotEmpty || widget.playlists.isNotEmpty ? _Mode.playlist : _Mode.app;
+
+  /// An existing priority that is not one of the four levels, kept until the user picks another.
+  late final int? _customPriority = _priorityLevels.any((l) => l.$2 == widget.initial.priority) ? null : widget.initial.priority;
+
+  List<PlaylistDoc> get _playlists => [...widget.playlists, if (_created != null) _created!];
+
+  Future<void> _createPlaylist() async {
+    final result = await showPlaylistEditor(
+      context,
+      playlist: const PlaylistDoc(name: ''),
+      isNew: true,
+      otherNames: [for (final p in _playlists) p.name],
+    );
+    final created = result?.playlist;
+    if (created == null || !mounted) return;
+    _change(() {
+      _whatTouched = true;
+      _created = created;
+      _rule = _rule.copyWith(playlistId: created.name);
+    });
+  }
   late final TextEditingController _condition = TextEditingController(
     text: widget.initial.condition ?? '',
   );
@@ -96,8 +130,10 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
   void _apply() {
     final condition = _condition.text.trim();
     var rule = condition.isEmpty ? _rule.copyWith(clearCondition: true) : _rule.copyWith(condition: condition);
-    if (_singleApp != null) rule = rule.copyWith(playlistId: _singleApp);
-    Navigator.pop(context, RuleEditResult.apply(rule, singleAppId: _singleApp));
+    final single = _mode == _Mode.app ? _singleApp : null;
+    if (single != null) rule = rule.copyWith(playlistId: single);
+    final created = _mode == _Mode.playlist && _created != null && _created!.name == rule.playlistId ? _created : null;
+    Navigator.pop(context, RuleEditResult.apply(rule, singleAppId: single, createdPlaylist: created));
   }
 
   Future<void> _delete() async {
@@ -112,7 +148,11 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
 
   /// Why the rule cannot be applied yet, or null when it is valid.
   String? get _problem {
-    if (_rule.playlistId.isEmpty && _singleApp == null) return 'Choose a playlist or a single app to show.';
+    if (_mode == _Mode.app) {
+      if (_singleApp == null) return 'Choose an app to show.';
+    } else if (_rule.playlistId.isEmpty) {
+      return _playlists.isEmpty ? 'Create a playlist to show.' : 'Choose a playlist to show.';
+    }
     if (_rule.daysMask == 0) return 'Pick at least one day.';
     return null;
   }
@@ -140,13 +180,8 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
-    final apps = ref.watch(appListProvider).value?.apps ?? const <MatrixApp>[];
-    final names = [for (final p in widget.playlists) p.name];
-    final playlistValue = _singleApp != null ? null : (_rule.playlistId.isEmpty ? null : _rule.playlistId);
-    final playlistItems = {
-      ...names,
-      if (playlistValue != null) playlistValue,
-    }.toList();
+    final names = [for (final p in _playlists) p.name];
+    final playlistValue = _rule.playlistId.isEmpty ? null : _rule.playlistId;
     final brightness = _rule.brightnessOverride;
     final problem = _problem;
 
@@ -156,6 +191,7 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
       applyKey: const Key('rule-apply'),
       onApply: problem == null ? _apply : null,
       problem: problem,
+      problemIsError: _rule.daysMask == 0 || _whatTouched,
       onDelete: widget.isNew ? null : _delete,
       deleteKey: const Key('rule-delete'),
       children: [
@@ -165,33 +201,63 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              DropdownButtonFormField<String>(
-                key: const Key('rule-playlist'),
-                initialValue: playlistValue,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Playlist'),
-                items: [
-                  for (final n in playlistItems) DropdownMenuItem(value: n, child: Text(n)),
+              SegmentedButton<_Mode>(
+                key: const Key('rule-mode'),
+                showSelectedIcon: false,
+                style: const ButtonStyle(minimumSize: WidgetStatePropertyAll(Size(0, 48))),
+                segments: const [
+                  ButtonSegment(value: _Mode.app, label: Text('One app'), icon: Icon(Icons.apps_rounded)),
+                  ButtonSegment(value: _Mode.playlist, label: Text('Playlist'), icon: Icon(Icons.queue_music_rounded)),
                 ],
-                onChanged: (v) => _change(() {
-                  _singleApp = null;
-                  if (v != null) _rule = _rule.copyWith(playlistId: v);
+                selected: {_mode},
+                onSelectionChanged: (v) => _change(() {
+                  _whatTouched = true;
+                  _mode = v.first;
                 }),
               ),
               const SizedBox(height: Space.md),
-              DropdownButtonFormField<String>(
-                key: const Key('rule-single-app'),
-                initialValue: _singleApp,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Or run a single app',
-                  helperText: 'Creates a one-entry playlist named after the app.',
+              if (_mode == _Mode.app) ...[
+                AppPickerField(
+                  key: const Key('rule-single-app'),
+                  appId: _singleApp,
+                  label: 'App',
+                  title: 'Choose an app to show',
+                  onChanged: (id) => _change(() {
+                    _whatTouched = true;
+                    _singleApp = id;
+                  }),
                 ),
-                items: [
-                  for (final a in apps) DropdownMenuItem(value: a.id, child: Text(a.name)),
-                ],
-                onChanged: (v) => _change(() => _singleApp = v),
-              ),
+                Padding(
+                  padding: const EdgeInsets.only(top: Space.sm),
+                  child: Text('Creates a one-entry playlist named after the app.',
+                      style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                ),
+              ] else if (names.isEmpty) ...[
+                Text('You have no playlists yet. A playlist cycles through several apps.',
+                    style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                const SizedBox(height: Space.sm),
+                OutlinedButton.icon(
+                  key: const Key('rule-create-playlist'),
+                  style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+                  onPressed: _createPlaylist,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Create a playlist'),
+                ),
+              ] else
+                DropdownButtonFormField<String>(
+                  key: const Key('rule-playlist'),
+                  initialValue: playlistValue,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Playlist'),
+                  items: [
+                    for (final n in {...names, if (playlistValue != null) playlistValue})
+                      DropdownMenuItem(value: n, child: Text(n)),
+                  ],
+                  onChanged: (v) => _change(() {
+                    _whatTouched = true;
+                    if (v != null) _rule = _rule.copyWith(playlistId: v);
+                  }),
+                ),
             ],
           ),
         ),
@@ -289,25 +355,29 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(child: Text('Priority', style: text.labelLarge)),
-                  Text(
-                    '${_rule.priority}',
-                    style: numericStyle(text.titleSmall),
-                  ),
-                ],
-              ),
-              Slider(
+              Text('Priority', style: text.labelLarge),
+              const SizedBox(height: Space.sm),
+              SegmentedButton<int>(
                 key: const Key('rule-priority'),
-                value: _rule.priority.clamp(0, 100).toDouble(),
-                min: 0,
-                max: 100,
-                divisions: 100,
-                label: '${_rule.priority}',
-                semanticFormatterCallback: (v) => 'Priority ${v.round()}',
-                onChanged: (v) => _change(() => _rule = _rule.copyWith(priority: v.round())),
+                showSelectedIcon: false,
+                emptySelectionAllowed: true,
+                style: const ButtonStyle(minimumSize: WidgetStatePropertyAll(Size(0, 48))),
+                segments: [for (final (label, value) in _priorityLevels) ButtonSegment(value: value, label: Text(label))],
+                selected: {if (_priorityLevels.any((l) => l.$2 == _rule.priority)) _rule.priority},
+                onSelectionChanged: (v) {
+                  if (v.isNotEmpty) _change(() => _rule = _rule.copyWith(priority: v.first));
+                },
               ),
+              if (_customPriority != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: Space.sm),
+                  child: ChoiceChip(
+                    key: const Key('rule-priority-custom'),
+                    label: Text('Custom ($_customPriority)'),
+                    selected: _rule.priority == _customPriority,
+                    onSelected: (_) => _change(() => _rule = _rule.copyWith(priority: _customPriority)),
+                  ),
+                ),
               SwitchListTile(
                 key: const Key('rule-brightness-switch'),
                 contentPadding: EdgeInsets.zero,

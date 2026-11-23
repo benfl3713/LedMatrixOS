@@ -17,7 +17,7 @@ namespace LedMatrixOS.Apps;
 /// Weather as a living scene: sky, sun or moon, clouds, rain, snow and lightning behind a big rolling temperature, with a side panel
 /// that pages through today's details, the next hours and the next days. Data is real (Open-Meteo) behind <see cref="IWeatherSource"/>.
 /// </summary>
-[AppMeta(AppCategory.Info, "Current conditions and forecast")]
+[AppMeta(AppCategory.Info, "Current conditions and forecast", "forecast", "temperature", "rain", "sun", "wind")]
 public sealed class WeatherApp : WidgetApp
 {
     private enum State { Loading, Ready, Offline }

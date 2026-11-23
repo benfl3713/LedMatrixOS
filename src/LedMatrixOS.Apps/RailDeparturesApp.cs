@@ -21,7 +21,7 @@ namespace LedMatrixOS.Apps;
 /// When the flagged last train comes within <see cref="LastTrainAlertMinutes"/> minutes a toast overlay is raised once (through
 /// <c>OverlayService</c>); it fires again only if the flagged service changes.
 /// </remarks>
-[AppMeta(AppCategory.Travel, "National Rail departures from a station")]
+[AppMeta(AppCategory.Travel, "National Rail departures from a station", "train", "station", "national rail", "platform", "railway")]
 public class RailDeparturesApp : WidgetApp
 {
     public override string Id => "rail-departures";

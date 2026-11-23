@@ -22,7 +22,7 @@ namespace LedMatrixOS.Apps;
 /// The home location is the Location setting (searched by place name) when set; otherwise <c>PlaneSpotter:Latitude</c>/<c>PlaneSpotter:Longitude</c>
 /// from configuration, falling back to <c>Weather:Location</c> (a place name, geocoded, or "lat,lon").
 /// </remarks>
-[AppMeta(AppCategory.Travel, "Aircraft flying overhead right now")]
+[AppMeta(AppCategory.Travel, "Aircraft flying overhead right now", "flight", "aircraft", "airplane", "airport", "flights")]
 public sealed class PlaneSpotterApp : WidgetApp
 {
     private enum State { NoLocation, Loading, Busy, Offline, Clear, Ready }

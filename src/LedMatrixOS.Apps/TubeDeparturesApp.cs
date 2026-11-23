@@ -19,7 +19,7 @@ namespace LedMatrixOS.Apps;
 /// </summary>
 [LegacySettingKey("stationSearch")]
 [LegacySettingKey("stationSelect", "stationId")]
-[AppMeta(AppCategory.Travel, "Next Tube trains at a station")]
+[AppMeta(AppCategory.Travel, "Next Tube trains at a station", "underground", "metro", "train", "station", "london")]
 public class TubeDeparturesApp : WidgetApp
 {
     public override string Id => "tube-departures";
