@@ -385,7 +385,7 @@ class FakeApi implements LedApi {
   String previewUrl({int? cacheBust}) => 'http://fake/preview';
 }
 
-/// A device config that is already loaded (a saved address, or null for a first run) and never touches storage.
+/// A device config that is already loaded (a saved address, or null for a first run) and persists through (mock) shared preferences like the real one.
 class FakeDeviceConfig extends DeviceConfigNotifier {
   FakeDeviceConfig(this.initial);
 
@@ -393,9 +393,6 @@ class FakeDeviceConfig extends DeviceConfigNotifier {
 
   @override
   DeviceConfig build() => DeviceConfig(loaded: true, url: initial);
-
-  @override
-  Future<void> save(String url) async => state = DeviceConfig(loaded: true, url: url);
 }
 
 Duration? _noRetry(int retryCount, Object error) => null;

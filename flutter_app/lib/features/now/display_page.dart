@@ -83,12 +83,14 @@ class _DisplayPageState extends ConsumerState<DisplayPage> {
     final cols = settings != null && settings.width > 0 ? settings.width : 256;
     final rows = settings != null && settings.height > 0 ? settings.height : 64;
     final dpr = MediaQuery.devicePixelRatioOf(context);
+    final appName = ref.watch(appListProvider.select((l) => l.value?.active?.name ?? l.value?.activeApp));
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _toggleControls,
+        // Semantics: the whole surface toggles the overlay.
         onLongPress: () => ref.invalidate(previewFeedProvider),
         child: Stack(
           children: [
@@ -102,13 +104,17 @@ class _DisplayPageState extends ConsumerState<DisplayPage> {
                     key: const Key('display-matrix'),
                     width: cell * cols / dpr,
                     height: cell * rows / dpr,
-                    child: LiveMatrix(ledDots: _ledDots),
+                    child: Semantics(
+                      label: 'Live display. Tap to show or hide controls.',
+                      child: LiveMatrix(ledDots: _ledDots),
+                    ),
                   ),
                 );
               }),
             ),
             Positioned(
               top: 0,
+              left: 0,
               right: 0,
               child: SafeArea(
                 child: AnimatedOpacity(
@@ -119,8 +125,27 @@ class _DisplayPageState extends ConsumerState<DisplayPage> {
                     child: Padding(
                       padding: const EdgeInsets.all(8),
                       child: Row(
-                        mainAxisSize: MainAxisSize.min,
                         children: [
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Semantics(
+                                header: true,
+                                child: Container(
+                                  key: const Key('display-app-name'),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(999)),
+                                  child: Text(
+                                    appName ?? 'Display',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
                           _ControlButton(
                             key: const Key('display-led-dots'),
                             tooltip: _ledDots ? 'Show square pixels' : 'Show LED dots',

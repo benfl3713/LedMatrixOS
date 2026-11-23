@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/models.dart';
 import '../../core/app_icons.dart';
+import '../../core/connection.dart';
 import '../../core/providers.dart';
 import '../../core/tokens.dart';
 import '../../core/widgets.dart';
@@ -137,15 +138,64 @@ class _DeviceControls extends ConsumerWidget {
           : SectionCard(child: ErrorView(error: e, onRetry: () => ref.invalidate(deviceSettingsProvider))),
       data: (s) {
         final notifier = ref.read(deviceSettingsProvider.notifier);
+        final stale = ref.watch(connectionStaleProvider);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _PowerTile(on: s.isEnabled, onChanged: notifier.setPower),
-            const SizedBox(height: Space.md),
-            _BrightnessCard(percent: s.brightnessPercent, onChanged: notifier.setBrightnessPercent, enabled: s.isEnabled),
+            if (stale) const _StaleNote(),
+            _Dimmed(
+              dimmed: stale,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _PowerTile(on: s.isEnabled, onChanged: stale ? null : notifier.setPower),
+                  const SizedBox(height: Space.md),
+                  _BrightnessCard(
+                      percent: s.brightnessPercent, onChanged: stale ? null : notifier.setBrightnessPercent, enabled: s.isEnabled && !stale),
+                ],
+              ),
+            ),
           ],
         );
       },
+    );
+  }
+}
+
+/// Fades [child] and blocks input while the display is unreachable, keeping the last-known values readable.
+class _Dimmed extends StatelessWidget {
+  const _Dimmed({required this.dimmed, required this.child});
+
+  final bool dimmed;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedOpacity(
+        duration: const Duration(milliseconds: 200),
+        opacity: dimmed ? 0.45 : 1,
+        child: IgnorePointer(ignoring: dimmed, child: child),
+      );
+}
+
+class _StaleNote extends StatelessWidget {
+  const _StaleNote();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      key: const Key('stale-note'),
+      padding: const EdgeInsets.only(bottom: Space.sm, left: 4),
+      child: Row(
+        children: [
+          Icon(Icons.history_rounded, size: 16, color: scheme.onSurfaceVariant),
+          const SizedBox(width: Space.sm),
+          Expanded(
+            child: Text('Last known state. Controls return when the display is back.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -168,17 +218,19 @@ class _PowerTile extends StatelessWidget {
   const _PowerTile({required this.on, required this.onChanged});
 
   final bool on;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+    final change = onChanged;
     return Semantics(
       container: true,
       toggled: on,
       label: 'Display power',
-      onTap: () => onChanged(!on),
+      enabled: change != null,
+      onTap: change == null ? null : () => change(!on),
       child: ExcludeSemantics(
         child: Material(
           color: on ? scheme.primaryContainer : scheme.surfaceContainerLow,
@@ -189,7 +241,7 @@ class _PowerTile extends StatelessWidget {
           child: InkWell(
             key: const Key('power-tile'),
             borderRadius: BorderRadius.circular(Radii.lg),
-            onTap: () => onChanged(!on),
+            onTap: change == null ? null : () => change(!on),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.md),
               child: Row(
@@ -208,7 +260,7 @@ class _PowerTile extends StatelessWidget {
                     ),
                   ),
                   IgnorePointer(
-                    child: Transform.scale(scale: 1.2, child: Switch(value: on, onChanged: onChanged)),
+                    child: Transform.scale(scale: 1.2, child: Switch(value: on, onChanged: change)),
                   ),
                 ],
               ),
@@ -224,7 +276,7 @@ class _BrightnessCard extends StatelessWidget {
   const _BrightnessCard({required this.percent, required this.onChanged, required this.enabled});
 
   final int percent;
-  final ValueChanged<int> onChanged;
+  final ValueChanged<int>? onChanged;
   final bool enabled;
 
   @override
@@ -254,7 +306,7 @@ class _BrightnessCard extends StatelessWidget {
                   max: 100,
                   divisions: 100,
                   label: '$percent%',
-                  onChanged: (v) => onChanged(v.round()),
+                  onChanged: onChanged == null ? null : (v) => onChanged!(v.round()),
                 ),
               ),
               Icon(Icons.light_mode_rounded, size: 26, color: scheme.onSurfaceVariant),
@@ -282,11 +334,12 @@ class _TransitionRow extends ConsumerWidget {
       error: (e, _) => const SizedBox.shrink(),
       data: (t) {
         final current = t.transitions.contains(t.current) ? t.current : null;
+        final stale = ref.watch(connectionStaleProvider);
         return Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
             key: const Key('transition-picker'),
-            onPressed: () => _showSheet(context, ref, t),
+            onPressed: stale ? null : () => _showSheet(context, ref, t),
             icon: Icon(Icons.animation_rounded, color: scheme.onSurfaceVariant),
             label: Text.rich(TextSpan(children: [
               TextSpan(text: 'Transition  ', style: TextStyle(color: scheme.onSurfaceVariant)),
@@ -347,11 +400,14 @@ class _QuickSwitch extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rows = list.apps.length > 4 ? 2 : 1;
+    final stale = ref.watch(connectionStaleProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SectionHeader('Quick switch'),
-        SizedBox(
+        _Dimmed(
+          dimmed: stale,
+          child: SizedBox(
           height: rows * _tileHeight + (rows - 1) * Space.sm,
           child: GridView.builder(
             key: const Key('quick-switch'),
@@ -373,6 +429,7 @@ class _QuickSwitch extends ConsumerWidget {
                 onTap: () => ref.read(appListProvider.notifier).activate(app.id),
               );
             },
+          ),
           ),
         ),
       ],

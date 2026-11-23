@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/models.dart';
+import '../../core/connection.dart';
 import '../../core/providers.dart';
 import '../../core/tokens.dart';
 import '../../core/widgets.dart';
@@ -95,7 +96,7 @@ class ShowOnDisplayCard extends ConsumerWidget {
           FilledButton.icon(
             key: const Key('sheet-activate'),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-            onPressed: () => ref.read(appListProvider.notifier).activate(app.id),
+            onPressed: ref.watch(connectionStaleProvider) ? null : () => ref.read(appListProvider.notifier).activate(app.id),
             icon: const Icon(Icons.play_arrow_rounded),
             label: const Text('Show on display'),
           ),

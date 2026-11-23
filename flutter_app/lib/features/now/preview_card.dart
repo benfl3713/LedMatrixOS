@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/connection.dart';
 import '../../core/providers.dart';
 import '../../core/tokens.dart';
 import '../../core/widgets.dart';
@@ -28,7 +29,12 @@ class _PreviewCardState extends ConsumerState<PreviewCard> {
     final aspect = settings != null && settings.width > 0 && settings.height > 0 ? settings.width / settings.height : 4.0;
     final poweredOn = settings?.isEnabled ?? true;
 
-    final status = _live ? 'Live' : (connected ? 'Waiting for frames' : 'Reconnecting (polling preview)');
+    final stale = ref.watch(connectionStaleProvider);
+    final retrying = ref.watch(connectionProvider.select((c) => c.status == ConnectionStatus.connecting));
+    final live = _live && !stale;
+    final status = stale
+        ? (retrying ? 'Reconnecting' : 'Offline')
+        : (live ? 'Live' : (connected ? 'Waiting for frames' : 'Connecting'));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -41,7 +47,7 @@ class _PreviewCardState extends ConsumerState<PreviewCard> {
             onTap: () => context.push('/display'),
             onLongPress: () => ref.invalidate(previewFeedProvider),
             child: GlowPreview(
-              glow: _live && poweredOn,
+              glow: live && poweredOn,
               child: AspectRatio(
                 aspectRatio: aspect,
                 child: LiveMatrix(onLiveChanged: (live) => setState(() => _live = live)),
@@ -53,23 +59,26 @@ class _PreviewCardState extends ConsumerState<PreviewCard> {
           padding: const EdgeInsets.only(left: 6, top: Space.xs),
           child: Row(
             children: [
-              _LiveDot(active: _live),
+              _LiveDot(active: live),
               const SizedBox(width: Space.sm),
               Flexible(
                 child: Text(
                   status,
-                  overflow: TextOverflow.ellipsis,
-                  style: text.labelMedium?.copyWith(color: _live ? scheme.onSurface : scheme.onSurfaceVariant),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.fade,
+                  style: text.labelMedium?.copyWith(color: live ? scheme.onSurface : scheme.onSurfaceVariant),
                 ),
               ),
-              if (!_live && !connected)
+              if (stale)
                 TextButton(
-                  onPressed: () => ref.invalidate(previewFeedProvider),
-                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                  child: const Text('Retry now'),
+                  key: const Key('preview-retry'),
+                  onPressed: retrying ? null : () => ref.read(connectionProvider.notifier).check(),
+                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                  child: const Text('Retry'),
                 ),
               const Spacer(),
-              if (settings != null)
+              if (settings != null && !stale)
                 Text(
                   '${settings.width}x${settings.height}${settings.fps > 0 ? '  ${settings.fps} fps' : ''}',
                   style: numericStyle(text.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),

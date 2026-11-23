@@ -34,6 +34,7 @@ Future<void> _open(WidgetTester tester, FakeApi api, {FakePicker? picker, bool p
   await tester.pumpWidget(ProviderScope(
     retry: (_, __) => null,
     overrides: [
+      deviceConfigProvider.overrideWith(() => FakeDeviceConfig('http://fake')),
       apiProvider.overrideWithValue(api),
       pollIntervalProvider.overrideWithValue(null),
       previewFeedProvider.overrideWith((ref) => Stream.value(const PreviewUpdate(connected: true))),

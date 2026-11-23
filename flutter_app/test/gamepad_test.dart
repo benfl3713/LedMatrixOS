@@ -31,6 +31,7 @@ Future<RecordingInput> _openPad(WidgetTester tester) async {
   await tester.pumpWidget(ProviderScope(
     retry: (_, __) => null,
     overrides: [
+      deviceConfigProvider.overrideWith(() => FakeDeviceConfig('http://fake')),
       apiProvider.overrideWithValue(FakeApi()),
       pollIntervalProvider.overrideWithValue(null),
       previewFeedProvider.overrideWith((ref) => Stream.value(const PreviewUpdate(connected: true))),

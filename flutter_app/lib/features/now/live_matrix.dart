@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/preview_frame.dart';
+import '../../core/connection.dart';
 import '../../core/providers.dart';
 
 /// The live matrix from `/ws/preview`, falling back to polling the PNG while the socket is down.
@@ -84,8 +85,11 @@ class _LiveMatrixState extends ConsumerState<LiveMatrix> with WidgetsBindingObse
     final feed = ref.watch(previewFeedProvider);
     final connected = feed.value?.connected ?? false;
 
+    final stale = ref.watch(connectionStaleProvider);
     Widget content;
-    if (_image != null) {
+    if (stale) {
+      content = const OfflinePanel();
+    } else if (_image != null) {
       content = widget.ledDots
           ? CustomPaint(painter: _LedDotsPainter(_image!), size: Size.infinite)
           : RawImage(image: _image, fit: BoxFit.fill, filterQuality: FilterQuality.none);
@@ -171,15 +175,38 @@ class _PngFallbackState extends ConsumerState<_PngFallback> {
       gaplessPlayback: true,
       fit: BoxFit.fill,
       filterQuality: FilterQuality.none,
-      errorBuilder: (context, error, stack) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.tv_off_rounded, color: Colors.white38),
-            const SizedBox(height: 6),
-            Text('Preview unavailable: $error',
-                maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white54, fontSize: 11)),
-          ],
+      errorBuilder: (context, error, stack) => const OfflinePanel(label: 'Preview unavailable'),
+    );
+  }
+}
+
+/// Calm stand-in for the picture while the display cannot be reached. Never shows technical details.
+class OfflinePanel extends StatelessWidget {
+  const OfflinePanel({super.key, this.label = 'Display offline'});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: label,
+      child: ExcludeSemantics(
+        child: Center(
+          key: const Key('offline-panel'),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.tv_off_rounded, color: Colors.white38, size: 28),
+                  const SizedBox(width: 10),
+                  Text(label, style: const TextStyle(color: Colors.white54, fontSize: 15, fontWeight: FontWeight.w500)),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

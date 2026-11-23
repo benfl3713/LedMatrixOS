@@ -16,6 +16,7 @@ Future<void> _open(WidgetTester tester, FakeApi api, List<AppSetting> settings) 
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final container = ProviderContainer(overrides: [
+    deviceConfigProvider.overrideWith(() => FakeDeviceConfig('http://fake')),
     apiProvider.overrideWithValue(api),
     pollIntervalProvider.overrideWithValue(null),
   ]);

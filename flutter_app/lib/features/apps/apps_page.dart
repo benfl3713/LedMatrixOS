@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../api/models.dart';
 import '../../core/app_icons.dart';
+import '../../core/connection.dart';
 import '../../core/providers.dart';
 import '../../core/tokens.dart';
 import '../../core/widgets.dart';
@@ -164,6 +165,7 @@ class _AppTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+    final stale = ref.watch(connectionStaleProvider);
     return Semantics(
       button: true,
       selected: isActive,
@@ -186,7 +188,7 @@ class _AppTile extends ConsumerWidget {
             child: InkWell(
               key: Key('app-tile-${app.id}'),
               onTap: () => showAppSettingsSheet(context, app),
-              onLongPress: isActive
+              onLongPress: isActive || stale
                   ? null
                   : () {
                       HapticFeedback.mediumImpact();
@@ -214,11 +216,10 @@ class _AppTile extends ConsumerWidget {
                         alignment: Alignment.centerLeft,
                         child: TextButton.icon(
                           key: Key('activate-${app.id}'),
-                          onPressed: () => _activate(ref),
+                          onPressed: stale ? null : () => _activate(ref),
                           style: TextButton.styleFrom(
                             minimumSize: const Size(0, 32),
                             padding: const EdgeInsets.symmetric(horizontal: Space.sm),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                           icon: const Icon(Icons.play_arrow_rounded, size: 18),
                           label: const Text('Show'),

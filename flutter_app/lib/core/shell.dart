@@ -98,16 +98,20 @@ class OfflineBanner extends ConsumerWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        retrying ? 'Reconnecting to the display...' : "Can't reach the display",
+                        retrying ? 'Reconnecting...' : 'Display offline',
+                        maxLines: 2,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onErrorContainer),
                       ),
                     ),
                     TextButton(
+                      key: const Key('banner-retry'),
                       onPressed: retrying ? null : () => ref.read(connectionProvider.notifier).check(),
+                      style: TextButton.styleFrom(minimumSize: const Size(48, 48), padding: const EdgeInsets.symmetric(horizontal: 12)),
                       child: const Text('Retry'),
                     ),
                     TextButton(
                       onPressed: () => context.go('/settings'),
+                      style: TextButton.styleFrom(minimumSize: const Size(48, 48), padding: const EdgeInsets.symmetric(horizontal: 12)),
                       child: const Text('Settings'),
                     ),
                   ],

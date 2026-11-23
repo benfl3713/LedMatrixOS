@@ -19,6 +19,10 @@ class DeviceConnection {
   final String? lastError;
 
   bool get isOffline => status == ConnectionStatus.offline;
+
+  /// True while what the UI shows may be out of date: the display is unreachable, or we are retrying after losing it.
+  /// Controls dim and refuse input meanwhile; they come back by themselves when this turns false.
+  bool get isStale => isOffline || (status == ConnectionStatus.connecting && failures > 0);
 }
 
 /// Global reachability of the device, driven by a light `/api/health` poll. Polls every [pollIntervalProvider] while
@@ -109,6 +113,9 @@ class ConnectionNotifier extends Notifier<DeviceConnection> {
 }
 
 final connectionProvider = NotifierProvider<ConnectionNotifier, DeviceConnection>(ConnectionNotifier.new);
+
+/// Whether the displayed device state is stale (see [DeviceConnection.isStale]).
+final connectionStaleProvider = Provider<bool>((ref) => ref.watch(connectionProvider.select((c) => c.isStale)));
 
 /// The outcome of "Test connection" for a candidate address.
 class ConnectionTestResult {

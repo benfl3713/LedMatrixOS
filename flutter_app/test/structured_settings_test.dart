@@ -98,6 +98,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final container = ProviderContainer(overrides: [
+        deviceConfigProvider.overrideWith(() => FakeDeviceConfig('http://fake')),
         apiProvider.overrideWithValue(api),
         pollIntervalProvider.overrideWithValue(null),
       ]);
