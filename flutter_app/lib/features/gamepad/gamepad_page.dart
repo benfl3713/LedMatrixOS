@@ -4,10 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../core/providers.dart';
 import '../../core/tokens.dart';
+import '../../core/widgets.dart';
+import '../now/live_matrix.dart';
 import 'gamepad_provider.dart';
 import 'input_service.dart';
+
+/// Games on the display that the pad can launch.
+const gameApps = [('snake', 'Snake'), ('breakout', 'Breakout'), ('tetris', 'Tetris'), ('pong', 'Pong')];
 
 class GamepadPage extends ConsumerStatefulWidget {
   const GamepadPage({super.key});
@@ -25,12 +32,15 @@ class _GamepadPageState extends ConsumerState<GamepadPage> {
   void initState() {
     super.initState();
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    // Plugins are missing in widget tests; the pad still works without them.
+    WakelockPlus.enable().catchError((Object _) {});
   }
 
   @override
   void dispose() {
     _sub?.cancel();
     SystemChrome.setPreferredOrientations(const []);
+    WakelockPlus.disable().catchError((Object _) {});
     super.dispose();
   }
 
@@ -48,72 +58,137 @@ class _GamepadPageState extends ConsumerState<GamepadPage> {
   Widget build(BuildContext context) {
     final service = ref.watch(inputServiceProvider);
     _bind(service);
-    final player = ref.watch(playerProvider);
     final scheme = Theme.of(context).colorScheme;
+    final color = _connected ? scheme.primary : scheme.error;
 
-    final selector = SegmentedButton<int>(
-      key: const Key('player-selector'),
-      showSelectedIcon: false,
-      segments: [for (var i = 0; i < 4; i++) ButtonSegment(value: i, label: Text('P${i + 1}'))],
-      selected: {player},
-      onSelectionChanged: (s) => ref.read(playerProvider.notifier).select(s.first),
-    );
-
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => context.canPop() ? context.pop() : context.go('/apps')),
-        titleSpacing: 0,
-        title: const Text('Gamepad'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Tooltip(
-              message: _connected ? 'Connected' : 'Reconnecting (using HTTP fallback)',
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _connected ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-                    key: Key(_connected ? 'pad-connected' : 'pad-disconnected'),
-                    color: _connected ? scheme.primary : scheme.error,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    _connected ? 'Live' : 'Reconnecting',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(color: _connected ? scheme.primary : scheme.error),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: SafeArea(
+    final status = Semantics(
+      label: _connected ? 'Connected' : 'Reconnecting, using HTTP fallback',
+      child: Tooltip(
+        message: _connected ? 'Connected' : 'Reconnecting (using HTTP fallback)',
         child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
+          padding: const EdgeInsets.only(right: Space.lg),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              selector,
-              const SizedBox(height: 8),
-              Expanded(
-                child: Row(
-                  children: [
-                    Expanded(child: Center(child: _DPad(onEvent: _emit))),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        PadKey(button: PadButton.select, label: 'SELECT', width: 96, height: 44, onEvent: _emit),
-                        const SizedBox(height: 16),
-                        PadKey(button: PadButton.start, label: 'START', width: 96, height: 44, onEvent: _emit),
-                      ],
-                    ),
-                    Expanded(child: Center(child: _ActionButtons(onEvent: _emit))),
-                  ],
-                ),
+              Icon(
+                _connected ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+                key: Key(_connected ? 'pad-connected' : 'pad-disconnected'),
+                size: 18,
+                color: color,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _connected ? 'Live' : 'Reconnecting',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color),
               ),
             ],
           ),
         ),
+      ),
+    );
+
+    return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: 48,
+        leading: BackButton(onPressed: () => context.canPop() ? context.pop() : context.go('/apps')),
+        titleSpacing: 0,
+        title: const Text('Gamepad'),
+        actions: [status],
+      ),
+      body: SafeArea(
+        child: LayoutBuilder(builder: (context, c) => c.maxWidth > c.maxHeight ? _landscape() : _portrait()),
+      ),
+    );
+  }
+
+  Widget _preview() {
+    final settings = ref.watch(deviceSettingsProvider).value;
+    final aspect = settings != null && settings.width > 0 && settings.height > 0
+        ? settings.width / settings.height
+        : 4.0;
+    return Semantics(
+      label: 'Live preview of the LED matrix',
+      child: GlowPreview(
+        glow: false,
+        child: AspectRatio(aspectRatio: aspect, child: const LiveMatrix()),
+      ),
+    );
+  }
+
+  Widget _selectStart() => Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      PadKey(button: PadButton.select, label: 'SELECT', width: 84, height: 40, onEvent: _emit),
+      const SizedBox(width: Space.lg),
+      PadKey(button: PadButton.start, label: 'START', width: 84, height: 40, onEvent: _emit),
+    ],
+  );
+
+  Widget _portrait() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Space.lg, Space.xs, Space.lg, Space.sm),
+      child: Column(
+        children: [
+          _preview(),
+          const SizedBox(height: Space.sm),
+          _PlayerChips(player: ref.watch(playerProvider)),
+          const SizedBox(height: Space.xs),
+          const _GameChips(),
+          const Spacer(),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _DPad(onEvent: _emit),
+                const SizedBox(width: Space.md),
+                _ActionButtons(onEvent: _emit),
+              ],
+            ),
+          ),
+          const SizedBox(height: Space.md),
+          _selectStart(),
+          const Spacer(),
+        ],
+      ),
+    );
+  }
+
+  Widget _landscape() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
+      child: Row(
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: _DPad(onEvent: _emit),
+          ),
+          const SizedBox(width: Space.lg),
+          Expanded(
+            child: Center(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _preview(),
+                    const SizedBox(height: Space.sm),
+                    _PlayerChips(player: ref.watch(playerProvider)),
+                    const SizedBox(height: Space.xs),
+                    const _GameChips(),
+                    const SizedBox(height: Space.sm),
+                    _selectStart(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: Space.lg),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: _ActionButtons(onEvent: _emit),
+          ),
+        ],
       ),
     );
   }
@@ -124,15 +199,15 @@ class _GamepadPageState extends ConsumerState<GamepadPage> {
 }
 
 String _spoken(PadButton b) => switch (b) {
-      PadButton.up => 'Up',
-      PadButton.down => 'Down',
-      PadButton.left => 'Left',
-      PadButton.right => 'Right',
-      PadButton.a => 'A button',
-      PadButton.b => 'B button',
-      PadButton.start => 'Start',
-      PadButton.select => 'Select',
-    };
+  PadButton.up => 'Up',
+  PadButton.down => 'Down',
+  PadButton.left => 'Left',
+  PadButton.right => 'Right',
+  PadButton.a => 'A button',
+  PadButton.b => 'B button',
+  PadButton.start => 'Start',
+  PadButton.select => 'Select',
+};
 
 typedef PadEvent = void Function(PadButton button, PadState state);
 
@@ -175,7 +250,7 @@ class _PadKeyState extends State<PadKey> {
   void _down(PointerDownEvent e) {
     if (_pointer != null) return;
     setState(() => _pointer = e.pointer);
-    HapticFeedback.selectionClick();
+    HapticFeedback.lightImpact();
     widget.onEvent(widget.button, PadState.down);
   }
 
@@ -197,8 +272,9 @@ class _PadKeyState extends State<PadKey> {
       child: Semantics(
         button: true,
         label: _spoken(widget.button),
-        child: Container(
+        child: AnimatedContainer(
           key: Key('pad-${widget.button.name}'),
+          duration: const Duration(milliseconds: 40),
           width: widget.width,
           height: widget.height,
           alignment: Alignment.center,
@@ -210,13 +286,71 @@ class _PadKeyState extends State<PadKey> {
             boxShadow: [if (pressed) BoxShadow(color: scheme.primary.withValues(alpha: 0.45), blurRadius: 18)],
           ),
           child: widget.icon != null
-              ? Icon(widget.icon, size: 36, color: fg)
+              ? Icon(widget.icon, size: 40, color: fg)
               : Text(
                   widget.label ?? '',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: widget.round ? 24 : 13, color: fg),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: widget.round ? 28 : 13, color: fg),
                 ),
         ),
       ),
+    );
+  }
+}
+
+class _PlayerChips extends ConsumerWidget {
+  const _PlayerChips({required this.player});
+  final int player;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Row(
+      key: const Key('player-selector'),
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 0; i < 4; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: Semantics(
+              label: 'Player ${i + 1}',
+              selected: player == i,
+              child: ChoiceChip(
+                label: Text('P${i + 1}'),
+                selected: player == i,
+                showCheckmark: false,
+                visualDensity: VisualDensity.compact,
+                onSelected: (_) => ref.read(playerProvider.notifier).select(i),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _GameChips extends ConsumerWidget {
+  const _GameChips();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final active = ref.watch(appListProvider.select((a) => a.value?.activeApp));
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 6,
+      children: [
+        for (final (id, name) in gameApps)
+          Semantics(
+            label: 'Play $name',
+            selected: active == id,
+            child: ChoiceChip(
+              key: Key('game-$id'),
+              label: Text(name),
+              selected: active == id,
+              showCheckmark: false,
+              visualDensity: VisualDensity.compact,
+              onSelected: (_) => ref.read(appListProvider.notifier).activate(id),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -227,20 +361,18 @@ class _DPad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const k = 84.0;
+    const k = 60.0;
     Widget key(PadButton b, IconData i) => PadKey(button: b, icon: i, width: k, height: k, onEvent: onEvent);
-    return FittedBox(
-      child: SizedBox(
-        width: k * 3,
-        height: k * 3,
-        child: Stack(
-          children: [
-            Positioned(left: k, top: 0, child: key(PadButton.up, Icons.keyboard_arrow_up_rounded)),
-            Positioned(left: 0, top: k, child: key(PadButton.left, Icons.keyboard_arrow_left_rounded)),
-            Positioned(left: k * 2, top: k, child: key(PadButton.right, Icons.keyboard_arrow_right_rounded)),
-            Positioned(left: k, top: k * 2, child: key(PadButton.down, Icons.keyboard_arrow_down_rounded)),
-          ],
-        ),
+    return SizedBox(
+      width: k * 3,
+      height: k * 3,
+      child: Stack(
+        children: [
+          Positioned(left: k, top: 0, child: key(PadButton.up, Icons.keyboard_arrow_up_rounded)),
+          Positioned(left: 0, top: k, child: key(PadButton.left, Icons.keyboard_arrow_left_rounded)),
+          Positioned(left: k * 2, top: k, child: key(PadButton.right, Icons.keyboard_arrow_right_rounded)),
+          Positioned(left: k, top: k * 2, child: key(PadButton.down, Icons.keyboard_arrow_down_rounded)),
+        ],
       ),
     );
   }
@@ -252,25 +384,23 @@ class _ActionButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const k = 96.0;
-    return FittedBox(
-      child: SizedBox(
-        width: k * 2.2,
-        height: k * 2,
-        child: Stack(
-          children: [
-            Positioned(
-              left: 0,
-              bottom: 0,
-              child: PadKey(button: PadButton.b, label: 'B', width: k, height: k, round: true, onEvent: onEvent),
-            ),
-            Positioned(
-              right: 0,
-              top: 0,
-              child: PadKey(button: PadButton.a, label: 'A', width: k, height: k, round: true, onEvent: onEvent),
-            ),
-          ],
-        ),
+    const k = 76.0;
+    return SizedBox(
+      width: k * 1.7,
+      height: k * 2,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            bottom: 0,
+            child: PadKey(button: PadButton.b, label: 'B', width: k, height: k, round: true, onEvent: onEvent),
+          ),
+          Positioned(
+            right: 0,
+            top: 0,
+            child: PadKey(button: PadButton.a, label: 'A', width: k, height: k, round: true, onEvent: onEvent),
+          ),
+        ],
       ),
     );
   }

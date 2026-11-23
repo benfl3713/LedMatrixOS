@@ -23,8 +23,8 @@ class RecordingInput extends InputService {
   }
 }
 
-Future<RecordingInput> _openPad(WidgetTester tester) async {
-  tester.view.physicalSize = const Size(800, 2400);
+Future<RecordingInput> _openPad(WidgetTester tester, {Size size = const Size(800, 2400), FakeApi? api}) async {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final input = RecordingInput();
@@ -32,7 +32,7 @@ Future<RecordingInput> _openPad(WidgetTester tester) async {
     retry: (_, __) => null,
     overrides: [
       deviceConfigProvider.overrideWith(() => FakeDeviceConfig('http://fake')),
-      apiProvider.overrideWithValue(FakeApi()),
+      apiProvider.overrideWithValue(api ?? FakeApi()),
       pollIntervalProvider.overrideWithValue(null),
       previewFeedProvider.overrideWith((ref) => Stream.value(const PreviewUpdate(connected: true))),
       inputServiceProvider.overrideWithValue(input),
@@ -81,4 +81,39 @@ void main() {
     await tester.pump();
     expect(input.events, ['2:left:down', '2:a:down', '2:left:up', '2:a:up']);
   });
+
+  testWidgets('controls are thumb sized', (tester) async {
+    await _openPad(tester, size: const Size(390, 844));
+    expect(tester.getSize(find.byKey(const Key('pad-up'))).width, greaterThanOrEqualTo(56));
+    expect(tester.getSize(find.byKey(const Key('pad-a'))).width, greaterThanOrEqualTo(72));
+    final dpadWidth = tester.getTopRight(find.byKey(const Key('pad-right'))).dx - tester.getTopLeft(find.byKey(const Key('pad-left'))).dx;
+    expect(dpadWidth, greaterThanOrEqualTo(160));
+  });
+
+  testWidgets('game chips activate the app and highlight the active one', (tester) async {
+    final api = FakeApi();
+    await _openPad(tester, size: const Size(390, 844), api: api);
+    await tester.tap(find.byKey(const Key('game-snake')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('activate:snake'));
+    expect(tester.widget<ChoiceChip>(find.byKey(const Key('game-snake'))).selected, isTrue);
+    expect(tester.widget<ChoiceChip>(find.byKey(const Key('game-pong'))).selected, isFalse);
+  });
+
+  for (final size in const [Size(360, 740), Size(740, 360)]) {
+    testWidgets('no overflow at ${size.width.toInt()}x${size.height.toInt()}', (tester) async {
+      final input = await _openPad(tester, size: size);
+      expect(tester.takeException(), isNull);
+      for (final k in ['pad-up', 'pad-a', 'pad-start', 'game-tetris']) {
+        final r = tester.getRect(find.byKey(Key(k)));
+        expect(r.left, greaterThanOrEqualTo(0), reason: k);
+        expect(r.right, lessThanOrEqualTo(size.width), reason: k);
+        expect(r.bottom, lessThanOrEqualTo(size.height), reason: k);
+      }
+      final g = await tester.startGesture(tester.getCenter(find.byKey(const Key('pad-up'))));
+      await g.up();
+      await tester.pump();
+      expect(input.events, ['0:up:down', '0:up:up']);
+    });
+  }
 }
