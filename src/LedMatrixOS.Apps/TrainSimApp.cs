@@ -17,7 +17,7 @@ namespace LedMatrixOS.Apps;
 /// The bridge address is the Bridge Address setting when set, otherwise <c>TrainSim:BridgeAddress</c> from configuration, otherwise
 /// <c>localhost:31280</c>. The socket is opened when the app activates and closed when it deactivates.
 /// </remarks>
-[AppMeta(AppCategory.Travel, "Animated train rolling through the station")]
+[AppMeta(AppCategory.Games, "Live cab display for Train Sim World")]
 public sealed class TrainSimApp : WidgetApp
 {
     public override string Id => "train-sim";
