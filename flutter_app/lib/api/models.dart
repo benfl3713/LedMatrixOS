@@ -1,7 +1,8 @@
-/// Brightness is 0-255 on the wire and a percentage in the UI.
-int brightnessToPercent(int value) => (value.clamp(0, 255) * 100 / 255).round();
+/// Brightness is a percentage (0-100) both on the wire and in the UI: the
+/// rpi-rgb-led-matrix library, the simulator and Home Assistant all use 0-100.
+int brightnessToPercent(int value) => value.clamp(0, 100);
 
-int percentToBrightness(int percent) => (percent.clamp(0, 100) * 255 / 100).round();
+int percentToBrightness(int percent) => percent.clamp(0, 100);
 
 int _int(Object? v, [int fallback = 0]) => v is num ? v.round() : fallback;
 

@@ -21,7 +21,7 @@ class FakeApi implements LedApi {
   /// When set, settings updates fail with this error (nothing is applied).
   ApiError? failUpdate;
   String active = 'clock';
-  int brightness = 128;
+  int brightness = 50;
   bool power = true;
   String transition = 'fade';
 
@@ -146,7 +146,7 @@ class FakeApi implements LedApi {
     ],
     rules: [
       RuleDoc(playlistId: 'day', priority: 10, startTime: '07:00', endTime: '22:00'),
-      RuleDoc(playlistId: 'night', priority: 60, startTime: '22:00', endTime: '07:00', daysMask: 62, brightnessOverride: 51),
+      RuleDoc(playlistId: 'night', priority: 60, startTime: '22:00', endTime: '07:00', daysMask: 62, brightnessOverride: 20),
     ],
   );
 

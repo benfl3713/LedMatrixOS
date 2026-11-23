@@ -230,7 +230,8 @@ app.MapGet("/api/settings", (IMatrixDevice device, RenderEngine eng) =>
 
 app.MapPost("/api/settings/brightness/{value}", (byte value, IMatrixDevice device) =>
 {
-    device.Brightness = value;
+    // Brightness is a percentage (0-100); the Pi library ignores anything above 100.
+    device.Brightness = Math.Min(value, (byte)100);
     return Results.Ok(new { brightness = device.Brightness });
 });
 

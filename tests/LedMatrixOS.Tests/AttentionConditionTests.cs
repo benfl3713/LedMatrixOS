@@ -76,7 +76,7 @@ public sealed class AttentionConditionTests
         { "playlists": [ { "name": "base", "entries": [ { "appId": "clock", "durationMs": 60000 } ] },
                          { "name": "music", "entries": [ { "appId": "spotify", "durationMs": 60000 } ] } ],
           "rules": [ { "playlistId": "base", "priority": 10 },
-                     { "playlistId": "music", "priority": 80, "condition": "spotify_playing", "brightnessOverride": 200 } ] }
+                     { "playlistId": "music", "priority": 80, "condition": "spotify_playing", "brightnessOverride": 80 } ] }
         """, out _)!);
         return sched;
     }
@@ -94,7 +94,7 @@ public sealed class AttentionConditionTests
         playing = true;
         clock.Advance(TimeSpan.FromSeconds(1));
         Assert.Equal("spotify", sched.GetActiveAppId());
-        Assert.Equal((byte)200, sched.GetActiveBrightnessOverride());
+        Assert.Equal((byte)80, sched.GetActiveBrightnessOverride());
         Assert.Equal("spotify_playing", sched.GetStatus().ActiveRule!.Condition);
 
         playing = false;

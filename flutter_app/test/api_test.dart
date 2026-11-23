@@ -14,28 +14,17 @@ import 'package:led_matrix_controller/features/apps/color_picker.dart';
 
 void main() {
   group('brightness conversion', () {
-    test('percent to wire value spans 0-255', () {
+    test('the wire value is a percentage (the Pi library uses 0-100)', () {
       expect(percentToBrightness(0), 0);
-      expect(percentToBrightness(50), 128);
-      expect(percentToBrightness(100), 255);
-    });
-
-    test('wire value to percent', () {
-      expect(brightnessToPercent(0), 0);
-      expect(brightnessToPercent(255), 100);
-      expect(brightnessToPercent(128), 50);
+      expect(percentToBrightness(40), 40);
+      expect(percentToBrightness(100), 100);
+      expect(brightnessToPercent(40), 40);
     });
 
     test('values are clamped', () {
-      expect(percentToBrightness(150), 255);
-      expect(brightnessToPercent(999), 100);
+      expect(percentToBrightness(150), 100);
+      expect(brightnessToPercent(255), 100);
       expect(brightnessToPercent(-5), 0);
-    });
-
-    test('round trip is stable for every percent', () {
-      for (var p = 0; p <= 100; p++) {
-        expect(brightnessToPercent(percentToBrightness(p)), p);
-      }
     });
   });
 
@@ -44,7 +33,7 @@ void main() {
       final s = DeviceSettings.fromJson({
         'width': 256,
         'height': 64,
-        'brightness': 255,
+        'brightness': 100,
         'fps': 30,
         'isRunning': true,
         'isEnabled': false,
@@ -129,7 +118,7 @@ void main() {
       expect(r.isOk, isTrue);
     });
 
-    test('setBrightness sends 0-255', () async {
+    test('setBrightness sends a 0-100 percentage', () async {
       Uri? seen;
       final api = HttpLedApi(
         baseUrl: 'http://x',
@@ -138,8 +127,8 @@ void main() {
           return http.Response('{}', 200);
         }),
       );
-      await api.setBrightness(128);
-      expect(seen!.path, '/api/settings/brightness/128');
+      await api.setBrightness(250);
+      expect(seen!.path, '/api/settings/brightness/100');
     });
 
     test('HTTP errors become typed errors with the server message', () async {

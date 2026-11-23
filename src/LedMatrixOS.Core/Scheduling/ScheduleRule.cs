@@ -24,7 +24,7 @@ public sealed class ScheduleRule
     /// </summary>
     public string? Condition { get; set; }
 
-    /// <summary>Brightness to set when this rule is active (0-255). Null = no change.</summary>
+    /// <summary>Brightness to set when this rule is active (0-100 percent). Null = no change.</summary>
     public byte? BrightnessOverride { get; set; }
 
     /// <summary>Priority for conflict resolution (higher = more urgent). Default 50.</summary>

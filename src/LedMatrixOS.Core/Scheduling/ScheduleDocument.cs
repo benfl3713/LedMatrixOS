@@ -79,7 +79,7 @@ public sealed class ScheduleDocument
             if (r.StartTime != null && !TryParseTime(r.StartTime, out _)) errors.Add($"{where}.startTime must be HH:mm");
             if (r.EndTime != null && !TryParseTime(r.EndTime, out _)) errors.Add($"{where}.endTime must be HH:mm");
             if (r.DaysMask is < 1 or > 127) errors.Add($"{where}.daysMask must be between 1 and 127");
-            if (r.BrightnessOverride is < 0 or > 255) errors.Add($"{where}.brightnessOverride must be between 0 and 255");
+            if (r.BrightnessOverride is < 0 or > 100) errors.Add($"{where}.brightnessOverride must be between 0 and 100");
             if (r.Condition != null && !AttentionCondition.TryParse(r.Condition, out _, out var condError))
                 errors.Add($"{where}.condition: {condError}");
         }

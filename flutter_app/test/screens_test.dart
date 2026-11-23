@@ -18,7 +18,7 @@ void main() {
 
     expect(find.text('Now showing'), findsOneWidget);
     expect(find.text('Clock'), findsWidgets);
-    expect(find.text('50%'), findsOneWidget); // 128 / 255
+    expect(find.text('50%'), findsOneWidget);
     expect(find.text('Quick switch'), findsOneWidget);
     expect(find.text('Weather'), findsOneWidget);
     // All five tabs are in the navigation bar.
@@ -46,7 +46,7 @@ void main() {
     expect(find.textContaining('HTTP 404'), findsOneWidget);
   });
 
-  testWidgets('brightness slider sends 0-255 after the debounce', (tester) async {
+  testWidgets('brightness slider sends a percentage after the debounce', (tester) async {
     final api = FakeApi();
     await _open(tester, api);
 
@@ -55,7 +55,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
 
-    expect(api.calls.where((c) => c.startsWith('brightness:')).last, 'brightness:255');
+    expect(api.calls.where((c) => c.startsWith('brightness:')).last, 'brightness:100');
     expect(find.text('100%'), findsOneWidget);
   });
 

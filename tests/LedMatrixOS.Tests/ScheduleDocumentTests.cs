@@ -10,7 +10,7 @@ public sealed class ScheduleDocumentTests
       "playlists": [ { "name": "day", "entries": [
           { "appId": "clock", "durationMs": 10000, "settings": { "Format": "24h", "Seconds": true }, "transition": "fade" },
           { "appId": "weather", "durationMs": 5000 } ] } ],
-      "rules": [ { "playlistId": "day", "priority": 60, "startTime": "07:00", "endTime": "23:00", "daysMask": 62, "brightnessOverride": 120 } ]
+      "rules": [ { "playlistId": "day", "priority": 60, "startTime": "07:00", "endTime": "23:00", "daysMask": 62, "brightnessOverride": 60 } ]
     }
     """;
 
@@ -60,7 +60,7 @@ public sealed class ScheduleDocumentTests
         Assert.Single(exported.Rules);
         Assert.Equal("07:00", exported.Rules[0].StartTime);
         Assert.Equal(62, exported.Rules[0].DaysMask);
-        Assert.Equal(120, exported.Rules[0].BrightnessOverride);
+        Assert.Equal(60, exported.Rules[0].BrightnessOverride);
         Assert.Equal(2, exported.Playlists[0].Entries.Count);
         Assert.Equal("24h", exported.Playlists[0].Entries[0].Settings!["Format"].GetString());
     }

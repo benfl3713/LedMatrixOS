@@ -187,7 +187,7 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
               contentPadding: EdgeInsets.zero,
               title: Text(brightness == null ? 'Brightness override' : 'Brightness override: ${brightnessToPercent(brightness)}%'),
               value: brightness != null,
-              onChanged: (on) => setState(() => _rule = on ? _rule.copyWith(brightnessOverride: 128) : _rule.copyWith(clearBrightness: true)),
+              onChanged: (on) => setState(() => _rule = on ? _rule.copyWith(brightnessOverride: 50) : _rule.copyWith(clearBrightness: true)),
             ),
             if (brightness != null)
               Slider(

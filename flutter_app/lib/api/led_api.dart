@@ -206,7 +206,7 @@ class HttpLedApi implements LedApi {
 
   @override
   Future<Result<void>> setBrightness(int value) =>
-      _send(() => _client.post(_uri('/api/settings/brightness/${value.clamp(0, 255)}')), (_) {});
+      _send(() => _client.post(_uri('/api/settings/brightness/${value.clamp(0, 100)}')), (_) {});
 
   @override
   Future<Result<void>> setPower(bool enabled) =>
