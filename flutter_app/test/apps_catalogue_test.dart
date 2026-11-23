@@ -266,4 +266,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('search and filter chips stay pinned while the list scrolls', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(testApp(FakeApi()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apps'));
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byKey(const Key('apps-scroll')), const Offset(0, -2000));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('apps-search')).hitTestable(), findsOneWidget);
+    expect(find.byKey(const Key('filter-all')).hitTestable(), findsOneWidget);
+  });
 }

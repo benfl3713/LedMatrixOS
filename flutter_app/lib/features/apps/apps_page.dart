@@ -88,7 +88,6 @@ class _AppsPageState extends ConsumerState<AppsPage> {
         ? _filter
         : _filterAll;
     final searching = _query.trim().isNotEmpty;
-    final active = list.apps.where((a) => a.id == list.activeApp).firstOrNull;
 
     final pool = switch (filter) {
       _filterAll => list.apps,
@@ -96,15 +95,25 @@ class _AppsPageState extends ConsumerState<AppsPage> {
       _ => list.apps.where((a) => categoryOf(a).key == filter).toList(),
     };
 
+    // Search and filters stay pinned while the list scrolls, so jumping to another category is always one tap away.
     final slivers = <Widget>[
-      SliverToBoxAdapter(child: _SearchField(controller: _search, onChanged: (v) => setState(() => _query = v))),
-      SliverToBoxAdapter(
-        child: _FilterChips(
-          selected: filter,
-          total: list.apps.length,
-          favourites: favApps.length,
-          groups: groups,
-          onSelected: (v) => setState(() => _filter = v),
+      SliverPersistentHeader(
+        pinned: true,
+        delegate: _PinnedHeader(
+          background: Theme.of(context).scaffoldBackgroundColor,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _SearchField(controller: _search, onChanged: (v) => setState(() => _query = v)),
+              _FilterChips(
+                selected: filter,
+                total: list.apps.length,
+                favourites: favApps.length,
+                groups: groups,
+                onSelected: (v) => setState(() => _filter = v),
+              ),
+            ],
+          ),
         ),
       ),
     ];
@@ -132,7 +141,6 @@ class _AppsPageState extends ConsumerState<AppsPage> {
             )
           : _rows(favApps, list));
     } else if (filter == _filterAll) {
-      if (active != null) slivers.add(SliverToBoxAdapter(child: _OnDisplayStrip(app: active)));
       if (favApps.isNotEmpty) {
         slivers.add(SliverToBoxAdapter(child: _padded(const SectionHeader('Favourites'))));
         slivers.add(SliverToBoxAdapter(child: _FavouritesRow(apps: favApps, activeId: list.activeApp)));
@@ -189,6 +197,32 @@ class _AppsPageState extends ConsumerState<AppsPage> {
         itemBuilder: (context, i) =>
             AppRow(app: apps[i], isActive: apps[i].id == list.activeApp, showCategory: showCategory),
       );
+}
+
+class _PinnedHeader extends SliverPersistentHeaderDelegate {
+  _PinnedHeader({required this.child, required this.background});
+
+  final Widget child;
+  final Color background;
+
+  // Search bar (56) with its vertical padding (2 x 8) plus the 48px chip row.
+  static const double height = 56 + 16 + 48;
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => Material(
+        color: background,
+        elevation: overlapsContent || shrinkOffset > 0 ? 2 : 0,
+        child: child,
+      );
+
+  @override
+  bool shouldRebuild(_PinnedHeader old) => true;
 }
 
 class _SearchField extends StatelessWidget {
@@ -263,7 +297,7 @@ class _FilterChips extends StatelessWidget {
             Row(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.star_rounded, size: 16, color: Brand.amber),
               const SizedBox(width: 4),
-              Text('Favourites $favourites'),
+              Text(favourites == 0 ? 'Favourites' : 'Favourites $favourites'),
             ]),
           ),
           for (final (cat, items) in groups) chip(cat.key, Text('${cat.label} ${items.length}')),
@@ -274,55 +308,6 @@ class _FilterChips extends StatelessWidget {
 }
 
 /// The app on the display right now, with a shortcut to its settings.
-class _OnDisplayStrip extends StatelessWidget {
-  const _OnDisplayStrip({required this.app});
-
-  final MatrixApp app;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, 0),
-      child: Semantics(
-        container: true,
-        label: 'On display: ${app.name}',
-        child: Container(
-          key: const Key('on-display-strip'),
-          padding: const EdgeInsets.fromLTRB(Space.md, Space.sm, Space.sm, Space.sm),
-          decoration: BoxDecoration(
-            color: scheme.primaryContainer.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(Radii.md),
-            border: Border.all(color: scheme.primary.withValues(alpha: 0.6)),
-          ),
-          child: Row(
-            children: [
-              AppIconTile(app: app, size: 40),
-              const SizedBox(width: Space.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Showing now', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: scheme.primary)),
-                    Text(app.name,
-                        maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall),
-                  ],
-                ),
-              ),
-              TextButton.icon(
-                key: const Key('on-display-settings'),
-                onPressed: () => showAppSettingsSheet(context, app),
-                icon: const Icon(Icons.tune_rounded, size: 18),
-                label: const Text('Settings'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _FavouritesRow extends ConsumerWidget {
   const _FavouritesRow({required this.apps, required this.activeId});
 

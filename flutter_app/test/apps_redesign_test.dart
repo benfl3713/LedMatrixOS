@@ -20,7 +20,6 @@ void main() {
     await _openApps(tester, api);
 
     expect(find.text('On display'), findsOneWidget); // the active app (clock)
-    expect(find.byKey(const Key('on-display-strip')), findsOneWidget);
     expect(find.byKey(const Key('screens-entry')), findsOneWidget);
 
     // Long press opens the quick menu; Show on display activates.
