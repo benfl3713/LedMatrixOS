@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../api/models.dart';
+import '../../core/connection.dart';
+import '../../core/device_url.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import 'audio_stream_provider.dart';
+
+/// Shown in the About section. Keep in step with `version:` in pubspec.yaml.
+const appVersion = '1.0.0 (2)';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -16,31 +20,57 @@ class SettingsPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: const [
-          _DeviceUrlCard(),
-          SizedBox(height: 12),
-          _HealthCard(),
-          SizedBox(height: 12),
+          _SectionLabel('Connection'),
+          _ConnectionCard(),
+          SizedBox(height: 20),
+          _SectionLabel('Device'),
+          _DeviceCard(),
+          SizedBox(height: 20),
+          _SectionLabel('Audio'),
           _AudioCard(),
+          SizedBox(height: 20),
+          _SectionLabel('About'),
+          _AboutCard(),
+          SizedBox(height: 16),
         ],
       ),
     );
   }
 }
 
-class _DeviceUrlCard extends ConsumerStatefulWidget {
-  const _DeviceUrlCard();
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+  final String text;
 
   @override
-  ConsumerState<_DeviceUrlCard> createState() => _DeviceUrlCardState();
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+        child: Text(
+          text.toUpperCase(),
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                letterSpacing: 1,
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+      );
 }
 
-class _DeviceUrlCardState extends ConsumerState<_DeviceUrlCard> {
-  late final TextEditingController _controller = TextEditingController(text: ref.read(apiUrlProvider));
+class _ConnectionCard extends ConsumerStatefulWidget {
+  const _ConnectionCard();
 
-  bool get _valid {
-    final uri = Uri.tryParse(_controller.text.trim());
-    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https') && uri.host.isNotEmpty;
-  }
+  @override
+  ConsumerState<_ConnectionCard> createState() => _ConnectionCardState();
+}
+
+class _ConnectionCardState extends ConsumerState<_ConnectionCard> {
+  late final TextEditingController _controller = TextEditingController(text: ref.read(apiUrlProvider));
+  bool _testing = false;
+  ConnectionTestResult? _result;
+  String? _resultFor;
+
+  ({String? url, String? error}) get _parsed => normalizeDeviceUrl(_controller.text);
+  bool get _dirty => _parsed.url != ref.read(apiUrlProvider);
 
   @override
   void dispose() {
@@ -48,52 +78,148 @@ class _DeviceUrlCardState extends ConsumerState<_DeviceUrlCard> {
     super.dispose();
   }
 
-  Future<void> _save() async {
-    await ref.read(apiUrlProvider.notifier).save(_controller.text);
+  Future<void> _test() async {
+    final url = _parsed.url;
+    if (url == null) return;
+    setState(() {
+      _testing = true;
+      _result = null;
+    });
+    final result = await testDeviceConnection(ref.read(apiFactoryProvider)(url));
     if (!mounted) return;
+    setState(() {
+      _testing = false;
+      _result = result;
+      _resultFor = url;
+    });
+  }
+
+  Future<void> _save() async {
+    final url = _parsed.url;
+    if (url == null) return;
+    await ref.read(apiUrlProvider.notifier).save(url);
+    if (!mounted) return;
+    _controller.text = ref.read(apiUrlProvider);
     ref.invalidate(healthProvider);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Device URL saved')));
+    ref.read(connectionProvider.notifier).check();
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Device address saved')));
+  }
+
+  Future<void> _reset() async {
+    await ref.read(apiUrlProvider.notifier).reset();
+    if (!mounted) return;
+    _controller.text = ref.read(apiUrlProvider);
+    ref.invalidate(healthProvider);
+    setState(() => _result = null);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Pick up the persisted URL once it has loaded from storage.
+    // Pick up the persisted URL once it has loaded from storage (unless the user is already typing).
     ref.listen(apiUrlProvider, (previous, next) {
-      if (_controller.text != next) _controller.text = next;
+      if (_controller.text == previous || _controller.text.isEmpty) _controller.text = next;
     });
+    final parsed = _parsed;
+    final theme = Theme.of(context);
+    final stale = _result != null && _resultFor != parsed.url;
     return SectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Device', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
           TextField(
             key: const Key('device-url'),
             controller: _controller,
             keyboardType: TextInputType.url,
             autocorrect: false,
+            enableSuggestions: false,
+            textInputAction: TextInputAction.done,
             decoration: InputDecoration(
-              labelText: 'Device URL',
-              hintText: 'http://192.168.1.50:5005',
+              labelText: 'Device address',
+              hintText: '192.168.1.50 or ledmatrix.local',
               border: const OutlineInputBorder(),
-              errorText: _valid ? null : 'Enter a full http:// or https:// address',
+              errorText: parsed.error,
+              helperText: parsed.url == null ? null : 'Will connect to ${parsed.url}',
+              helperMaxLines: 2,
             ),
             onChanged: (_) => setState(() {}),
+            onSubmitted: (_) => _test(),
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              FilledButton(onPressed: _valid ? _save : null, child: const Text('Save')),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () async {
-                  await ref.read(apiUrlProvider.notifier).reset();
-                  _controller.text = ref.read(apiUrlProvider);
-                  ref.invalidate(healthProvider);
-                },
-                child: const Text('Reset'),
+              OutlinedButton.icon(
+                key: const Key('test-connection'),
+                onPressed: parsed.url == null || _testing ? null : _test,
+                icon: _testing
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.wifi_find_rounded),
+                label: const Text('Test connection'),
               ),
+              const SizedBox(width: 8),
+              FilledButton(
+                key: const Key('save-url'),
+                onPressed: parsed.url != null && _dirty ? _save : null,
+                child: const Text('Save'),
+              ),
+              const Spacer(),
+              TextButton(onPressed: _reset, child: const Text('Reset')),
             ],
+          ),
+          if (_result != null && !stale) ...[
+            const SizedBox(height: 12),
+            _TestOutcome(result: _result!),
+          ],
+          if (!_dirty && parsed.url != null) ...[
+            const SizedBox(height: 12),
+            Consumer(builder: (context, ref, _) {
+              final c = ref.watch(connectionProvider);
+              final (icon, color, text) = switch (c.status) {
+                ConnectionStatus.online => (Icons.check_circle_rounded, Colors.green, 'Connected'),
+                ConnectionStatus.connecting => (Icons.sync_rounded, theme.colorScheme.onSurfaceVariant, 'Connecting...'),
+                ConnectionStatus.offline => (Icons.error_outline_rounded, theme.colorScheme.error, 'Not reachable'),
+              };
+              return Row(children: [
+                Icon(icon, size: 18, color: color),
+                const SizedBox(width: 8),
+                Text(text, style: theme.textTheme.bodyMedium?.copyWith(color: color)),
+              ]);
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TestOutcome extends StatelessWidget {
+  const _TestOutcome({required this.result});
+  final ConnectionTestResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final ok = result.success;
+    final h = result.health;
+    final text = ok
+        ? 'Connected: ${h!.width}x${h.height} display, ${h.activeApp == null ? 'no app running' : 'running ${h.activeApp}'}.'
+        : result.error!;
+    return Container(
+      key: Key(ok ? 'test-ok' : 'test-failed'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: ok ? scheme.secondaryContainer : scheme.errorContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(ok ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+              size: 20, color: ok ? scheme.onSecondaryContainer : scheme.onErrorContainer),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(text,
+                style: TextStyle(color: ok ? scheme.onSecondaryContainer : scheme.onErrorContainer)),
           ),
         ],
       ),
@@ -101,67 +227,102 @@ class _DeviceUrlCardState extends ConsumerState<_DeviceUrlCard> {
   }
 }
 
+/// "2 days, 3 hours", "1 hour, 5 minutes", "4 minutes", "20 seconds".
 String formatUptime(int seconds) {
-  final d = Duration(seconds: seconds);
-  if (d.inDays > 0) return '${d.inDays}d ${d.inHours % 24}h';
-  if (d.inHours > 0) return '${d.inHours}h ${d.inMinutes % 60}m';
-  if (d.inMinutes > 0) return '${d.inMinutes}m ${d.inSeconds % 60}s';
-  return '${d.inSeconds}s';
+  final d = Duration(seconds: seconds < 0 ? 0 : seconds);
+  String unit(int n, String name) => '$n $name${n == 1 ? '' : 's'}';
+  if (d.inDays > 0) return d.inHours % 24 == 0 ? unit(d.inDays, 'day') : '${unit(d.inDays, 'day')}, ${unit(d.inHours % 24, 'hour')}';
+  if (d.inHours > 0) return d.inMinutes % 60 == 0 ? unit(d.inHours, 'hour') : '${unit(d.inHours, 'hour')}, ${unit(d.inMinutes % 60, 'minute')}';
+  if (d.inMinutes > 0) return unit(d.inMinutes, 'minute');
+  return unit(d.inSeconds, 'second');
 }
 
-class _HealthCard extends ConsumerWidget {
-  const _HealthCard();
+class _DeviceCard extends ConsumerWidget {
+  const _DeviceCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final health = ref.watch(healthProvider);
+    final connection = ref.watch(connectionProvider);
+    final settings = ref.watch(deviceSettingsProvider).value;
+    final health = connection.health ?? ref.watch(healthProvider).value;
     final scheme = Theme.of(context).colorScheme;
+
+    Widget body;
+    if (health == null && settings == null) {
+      body = connection.isOffline
+          ? Row(children: [
+              Icon(Icons.cloud_off_rounded, color: scheme.error),
+              const SizedBox(width: 12),
+              Expanded(child: Text('No device information yet. Check the address above.', style: TextStyle(color: scheme.onSurfaceVariant))),
+            ])
+          : const Padding(padding: EdgeInsets.all(8), child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+    } else {
+      final width = settings?.width ?? health!.width;
+      final height = settings?.height ?? health!.height;
+      body = Column(
+        children: [
+          _InfoRow('Status', connection.isOffline ? 'Offline (last known)' : (health?.isOk ?? true) ? 'Running' : (health?.status ?? 'Unknown'),
+              color: connection.isOffline || !(health?.isOk ?? true) ? scheme.error : Colors.green),
+          _InfoRow('Display', '$width x $height px, ${(settings?.isEnabled ?? health?.isEnabled ?? true) ? 'on' : 'off'}'),
+          if (settings != null) _InfoRow('Frame rate', '${settings.fps} fps'),
+          _InfoRow('Active app', health?.activeApp ?? 'none'),
+          if (health != null) _InfoRow('Uptime', formatUptime(health.uptimeSeconds)),
+        ],
+      );
+    }
+
     return SectionCard(
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(child: Text('Status', style: Theme.of(context).textTheme.titleMedium)),
+              const Spacer(),
               IconButton(
                 tooltip: 'Refresh',
-                onPressed: () => ref.invalidate(healthProvider),
+                onPressed: () {
+                  ref.read(connectionProvider.notifier).check();
+                  ref.read(deviceSettingsProvider.notifier).syncSilently();
+                },
                 icon: const Icon(Icons.refresh),
               ),
             ],
           ),
-          health.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.all(8),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-            ),
-            error: (e, _) => Row(
-              children: [
-                Icon(Icons.error_outline, color: scheme.error),
-                const SizedBox(width: 8),
-                Expanded(child: Text(e.toString(), style: TextStyle(color: scheme.error))),
-              ],
-            ),
-            data: (Health h) => Column(
-              children: [
-                _row(context, 'Health', h.isOk ? 'OK' : h.status, color: h.isOk ? Colors.green : scheme.error),
-                _row(context, 'Active app', h.activeApp ?? 'none'),
-                _row(context, 'Display', '${h.width}x${h.height}, ${h.isEnabled ? 'on' : 'off'}'),
-                _row(context, 'Uptime', formatUptime(h.uptimeSeconds)),
-              ],
-            ),
-          ),
+          Padding(padding: const EdgeInsets.only(right: 8), child: body),
         ],
       ),
     );
   }
+}
 
-  Widget _row(BuildContext context, String label, String value, {Color? color}) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+class _InfoRow extends StatelessWidget {
+  const _InfoRow(this.label, this.value, {this.color});
+  final String label;
+  final String value;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
         child: Row(
           children: [
-            Expanded(child: Text(label)),
+            Expanded(child: Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
             Text(value, style: TextStyle(fontWeight: FontWeight.w600, color: color)),
+          ],
+        ),
+      );
+}
+
+class _AboutCard extends StatelessWidget {
+  const _AboutCard();
+
+  @override
+  Widget build(BuildContext context) => const SectionCard(
+        child: Column(
+          children: [
+            _InfoRow('App', 'LED Matrix Controller'),
+            _InfoRow('Version', appVersion),
           ],
         ),
       );

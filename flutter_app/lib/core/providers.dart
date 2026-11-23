@@ -9,6 +9,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../api/led_api.dart';
 import '../api/models.dart';
 import '../api/preview_frame.dart';
+import 'device_url.dart';
 
 // ---------------------------------------------------------------------------
 // Errors: every failure is reported here and shown as a snackbar by the shell.
@@ -55,7 +56,7 @@ class ApiUrlNotifier extends Notifier<String> {
   }
 
   Future<void> save(String url) async {
-    final trimmed = url.trim();
+    final trimmed = normalizeDeviceUrl(url).url ?? url.trim();
     if (trimmed == state) return;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -71,7 +72,10 @@ class ApiUrlNotifier extends Notifier<String> {
 
 final apiUrlProvider = NotifierProvider<ApiUrlNotifier, String>(ApiUrlNotifier.new);
 
-final apiProvider = Provider<LedApi>((ref) => HttpLedApi(baseUrl: ref.watch(apiUrlProvider)));
+/// Builds an API client for an arbitrary URL (used to test a candidate address before saving). Tests override this.
+final apiFactoryProvider = Provider<LedApi Function(String baseUrl)>((ref) => (url) => HttpLedApi(baseUrl: url));
+
+final apiProvider = Provider<LedApi>((ref) => ref.watch(apiFactoryProvider)(ref.watch(apiUrlProvider)));
 
 /// How often the lists refresh themselves in the background. Tests override this with null.
 final pollIntervalProvider = Provider<Duration?>((ref) => const Duration(seconds: 10));
@@ -86,13 +90,14 @@ class AppListNotifier extends AsyncNotifier<AppList> {
     final api = ref.watch(apiProvider);
     final interval = ref.watch(pollIntervalProvider);
     if (interval != null) {
-      final timer = Timer.periodic(interval, (_) => _silentRefresh());
+      final timer = Timer.periodic(interval, (_) => syncSilently());
       ref.onDispose(timer.cancel);
     }
     return (await api.getApps()).getOrThrow();
   }
 
-  Future<void> _silentRefresh() async {
+  /// Refreshes without surfacing errors (background polling and connection recovery).
+  Future<void> syncSilently() async {
     final result = await ref.read(apiProvider).getApps();
     if (!ref.mounted) return;
     // Background refresh failures are not worth a snackbar every 10s; the first load and
@@ -136,11 +141,30 @@ final appListProvider = AsyncNotifierProvider<AppListNotifier, AppList>(AppListN
 
 class DeviceSettingsNotifier extends AsyncNotifier<DeviceSettings> {
   Timer? _brightnessDebounce;
+  int? _pendingBrightness;
+  bool _sending = false;
+
+  /// True while a slider change has not reached the device yet; background syncs must not overwrite it.
+  bool get _brightnessBusy => _pendingBrightness != null || _sending;
 
   @override
   Future<DeviceSettings> build() async {
     ref.onDispose(() => _brightnessDebounce?.cancel());
+    final interval = ref.watch(pollIntervalProvider);
+    if (interval != null) {
+      final timer = Timer.periodic(interval, (_) => syncSilently());
+      ref.onDispose(timer.cancel);
+    }
     return (await ref.watch(apiProvider).getSettings()).getOrThrow();
+  }
+
+  /// Picks up changes made elsewhere (another phone, Home Assistant, the schedule) without surfacing errors.
+  Future<void> syncSilently() async {
+    if (_brightnessBusy) return;
+    final result = await ref.read(apiProvider).getSettings();
+    if (!ref.mounted || _brightnessBusy) return;
+    final value = result.valueOrNull;
+    if (value != null) state = AsyncData(value);
   }
 
   Future<void> reload() async {
@@ -160,28 +184,45 @@ class DeviceSettingsNotifier extends AsyncNotifier<DeviceSettings> {
     if (!ref.mounted) return;
     final error = result.errorOrNull;
     if (error != null) {
-      state = AsyncData(previous);
+      // Roll back only the power flag so a brightness change made meanwhile is kept.
+      final current = state.value;
+      state = AsyncData((current ?? previous).copyWith(isEnabled: previous.isEnabled));
       ref.read(errorBusProvider.notifier).report(error);
     }
   }
 
-  /// Slider position in percent (0-100). Sent to the device as 0-255 after a short pause.
+  /// Slider position in percent (0-100), sent to the device after a short pause.
   void setBrightnessPercent(int percent) {
     final previous = state.value;
     if (previous == null) return;
-    final raw = percentToBrightness(percent);
-    state = AsyncData(previous.copyWith(brightness: raw));
+    final value = percentToBrightness(percent);
+    state = AsyncData(previous.copyWith(brightness: value));
+    _pendingBrightness = value;
     _brightnessDebounce?.cancel();
-    _brightnessDebounce = Timer(const Duration(milliseconds: 250), () => _sendBrightness(raw));
+    _brightnessDebounce = Timer(const Duration(milliseconds: 250), _flushBrightness);
   }
 
-  Future<void> _sendBrightness(int raw) async {
-    final result = await ref.read(apiProvider).setBrightness(raw);
-    if (!ref.mounted) return;
-    final error = result.errorOrNull;
-    if (error != null) {
-      ref.read(errorBusProvider.notifier).report(error);
-      await reload();
+  /// Sends the newest value, one request at a time, so responses can never arrive out of order and the last value wins.
+  Future<void> _flushBrightness() async {
+    if (_sending) return; // The running loop picks up the newer value when it finishes.
+    _sending = true;
+    try {
+      while (_pendingBrightness != null) {
+        final value = _pendingBrightness!;
+        _pendingBrightness = null;
+        final result = await ref.read(apiProvider).setBrightness(value);
+        if (!ref.mounted) return;
+        final error = result.errorOrNull;
+        if (error != null) {
+          _pendingBrightness = null;
+          ref.read(errorBusProvider.notifier).report(error);
+          _sending = false;
+          await reload();
+          return;
+        }
+      }
+    } finally {
+      _sending = false;
     }
   }
 }

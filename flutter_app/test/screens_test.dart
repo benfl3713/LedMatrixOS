@@ -151,7 +151,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('device-url')), findsOneWidget);
-    expect(find.text('OK'), findsOneWidget);
-    expect(find.text('1h 1m'), findsOneWidget);
+    expect(find.text('Running'), findsOneWidget);
+    expect(find.text('1 hour, 1 minute'), findsOneWidget);
   });
 }
