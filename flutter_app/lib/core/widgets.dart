@@ -1,35 +1,191 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'connection.dart';
 import 'tokens.dart';
 
-/// Inline error with a retry button, used when a screen's data cannot be loaded.
-class ErrorView extends StatelessWidget {
+/// Shown when a screen's data cannot be loaded. While the connection layer says the display is unreachable it is a
+/// calm "offline" state (the global banner explains the rest); otherwise a short message with the technical detail
+/// kept small underneath. Always offers a retry.
+class ErrorView extends ConsumerWidget {
   const ErrorView({super.key, required this.error, this.onRetry});
 
   final Object error;
   final VoidCallback? onRetry;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final connection = ref.watch(connectionProvider);
+    final offline = connection.isOffline;
+    final retrying = connection.status == ConnectionStatus.connecting && connection.health != null;
     final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(Space.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off_rounded, size: 48, color: scheme.error),
-            const SizedBox(height: 12),
-            Text(error.toString(), textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
-            if (onRetry != null) ...[
-              const SizedBox(height: 16),
-              FilledButton.tonalIcon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Retry')),
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: offline ? scheme.surfaceContainerHigh : scheme.errorContainer,
+              ),
+              child: Icon(
+                offline ? Icons.cloud_off_rounded : Icons.error_outline_rounded,
+                size: 30,
+                color: offline ? scheme.onSurfaceVariant : scheme.onErrorContainer,
+              ),
+            ),
+            const SizedBox(height: Space.lg),
+            Text(
+              offline ? 'Display offline' : "Couldn't load this",
+              key: const Key('error-title'),
+              style: text.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: Space.xs),
+            Text(
+              offline
+                  ? "We can't reach the display right now. This page fills in as soon as it is back."
+                  : 'Something went wrong talking to the display.',
+              textAlign: TextAlign.center,
+              style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            if (!offline) ...[
+              const SizedBox(height: Space.sm),
+              Text(
+                error.toString(),
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: text.bodySmall?.copyWith(color: scheme.outline),
+              ),
+            ],
+            if (onRetry != null || offline) ...[
+              const SizedBox(height: Space.lg),
+              FilledButton.tonalIcon(
+                key: const Key('error-retry'),
+                onPressed: retrying
+                    ? null
+                    : () {
+                        if (offline) ref.read(connectionProvider.notifier).check();
+                        onRetry?.call();
+                      },
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(retrying ? 'Reconnecting...' : 'Try again'),
+              ),
             ],
           ],
         ),
       ),
     );
   }
+}
+
+/// A friendly "nothing here yet" panel: icon, title, an explanation and an optional primary action.
+class EmptyState extends StatelessWidget {
+  const EmptyState({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.actionIcon = Icons.add_rounded,
+    this.onAction,
+    this.actionKey,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final IconData actionIcon;
+  final VoidCallback? onAction;
+  final Key? actionKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.all(Space.xl),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: scheme.primaryContainer),
+            child: Icon(icon, size: 32, color: scheme.onPrimaryContainer),
+          ),
+          const SizedBox(height: Space.lg),
+          Semantics(header: true, child: Text(title, style: text.titleMedium, textAlign: TextAlign.center)),
+          const SizedBox(height: Space.xs),
+          Text(message, textAlign: TextAlign.center, style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: Space.lg),
+            FilledButton.icon(key: actionKey, onPressed: onAction, icon: Icon(actionIcon), label: Text(actionLabel!)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Placeholder rows shown while a list loads.
+class ListSkeleton extends StatelessWidget {
+  const ListSkeleton({super.key, this.rows = 4, this.rowHeight = 72});
+
+  final int rows;
+  final double rowHeight;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        label: 'Loading',
+        child: ListView(
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(Space.lg),
+          children: [
+            for (var i = 0; i < rows; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Space.md),
+                child: Skeleton(height: rowHeight, radius: Radii.md),
+              ),
+          ],
+        ),
+      );
+}
+
+/// Asks before a destructive action. Resolves true only when the user confirms.
+Future<bool> confirmDestructive(
+  BuildContext context, {
+  required String title,
+  required String message,
+  String confirmLabel = 'Delete',
+  Key? confirmKey,
+}) async {
+  final scheme = Theme.of(context).colorScheme;
+  final ok = await showDialog<bool>(
+    context: context,
+    useRootNavigator: true,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+        FilledButton(
+          key: confirmKey,
+          style: FilledButton.styleFrom(backgroundColor: scheme.error, foregroundColor: scheme.onError),
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: Text(confirmLabel),
+        ),
+      ],
+    ),
+  );
+  return ok == true;
 }
 
 class SectionCard extends StatelessWidget {

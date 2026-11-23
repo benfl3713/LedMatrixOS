@@ -112,7 +112,12 @@ ThemeData buildTheme(Brightness brightness) {
       backgroundColor: scheme.surface,
       surfaceTintColor: Colors.transparent,
       scrolledUnderElevation: 0,
-      titleTextStyle: text.titleLarge,
+      toolbarHeight: 64,
+      titleSpacing: 20,
+      // A real large title: the page name is the strongest element on screen.
+      titleTextStyle: text.headlineMedium
+          ?.copyWith(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.6, color: scheme.onSurface),
+      iconTheme: IconThemeData(color: scheme.onSurface),
     ),
     cardTheme: CardThemeData(
       elevation: 0,
