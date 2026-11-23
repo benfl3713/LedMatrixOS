@@ -81,7 +81,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       _result = null;
     });
     final url = parsed.url!;
-    final result = await testDeviceConnection(ref.read(apiFactoryProvider)(url));
+    final result = await testDeviceConnection(
+      ref.read(apiFactoryProvider)(url),
+    );
     if (!mounted) return;
     setState(() {
       _testing = false;
@@ -95,6 +97,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final result = _result;
+    final previousUrl = ref.watch(
+      deviceConfigProvider.select((c) => c.previousUrl),
+    );
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -102,27 +107,58 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             constraints: const BoxConstraints(maxWidth: 520),
             child: ListView(
               key: const Key('onboarding'),
-              padding: const EdgeInsets.fromLTRB(Space.lg, Space.xl, Space.lg, Space.xl),
+              padding: const EdgeInsets.fromLTRB(
+                Space.lg,
+                Space.xl,
+                Space.lg,
+                Space.xl,
+              ),
               children: [
                 const _Hero(),
                 const SizedBox(height: Space.xl),
                 Semantics(
                   header: true,
-                  child: Text('Meet your display', style: text.headlineMedium, textAlign: TextAlign.center),
+                  child: Text(
+                    'Meet your display',
+                    style: text.headlineMedium,
+                    textAlign: TextAlign.center,
+                  ),
                 ),
                 const SizedBox(height: Space.sm),
                 Text(
                   'Control your LED matrix from your phone. Connect to the display on your Wi-Fi to get started.',
-                  style: text.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+                  style: text.bodyLarge?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: Space.xl),
+                if (previousUrl != null) ...[
+                  OutlinedButton(
+                    key: const Key('keep-previous'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                    ),
+                    onPressed: () => ref.read(deviceConfigProvider.notifier).restorePrevious(),
+                    child: Text(
+                      'Keep using $previousUrl',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: Space.md),
+                ],
                 FilledButton.icon(
                   key: const Key('find-display'),
-                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                  ),
                   onPressed: _scanState == _ScanState.scanning ? null : _startScan,
                   icon: const Icon(Icons.radar_rounded),
-                  label: Text(_scanState == _ScanState.idle ? 'Find my display' : 'Scan again'),
+                  label: Text(
+                    _scanState == _ScanState.idle ? 'Find my display' : 'Scan again',
+                  ),
                 ),
                 const SizedBox(height: Space.md),
                 _ScanResults(
@@ -163,12 +199,22 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                       const SizedBox(height: Space.md),
                       OutlinedButton.icon(
                         key: const Key('test-connection'),
-                        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(48),
+                        ),
                         onPressed: _testing ? null : _test,
                         icon: _testing
-                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
                             : const Icon(Icons.wifi_tethering_rounded),
-                        label: Text(_testing ? 'Testing...' : 'Test connection'),
+                        label: Text(
+                          _testing ? 'Testing...' : 'Test connection',
+                        ),
                       ),
                       if (result != null) ...[
                         const SizedBox(height: Space.md),
@@ -177,7 +223,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                           const SizedBox(height: Space.md),
                           FilledButton(
                             key: const Key('use-display'),
-                            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(52),
+                            ),
                             onPressed: _saving ? null : () => _save(_testedUrl!),
                             child: const Text('Use this display'),
                           ),
@@ -222,7 +270,12 @@ class _Hero extends StatelessWidget {
                           fontWeight: FontWeight.w800,
                           letterSpacing: 6,
                           fontSize: 28,
-                          shadows: [Shadow(color: scheme.primary.withValues(alpha: 0.8), blurRadius: 14)],
+                          shadows: [
+                            Shadow(
+                              color: scheme.primary.withValues(alpha: 0.8),
+                              blurRadius: 14,
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -238,7 +291,12 @@ class _Hero extends StatelessWidget {
 }
 
 class _ScanResults extends StatelessWidget {
-  const _ScanResults({required this.state, required this.found, required this.saving, required this.onSelect});
+  const _ScanResults({
+    required this.state,
+    required this.found,
+    required this.saving,
+    required this.onSelect,
+  });
 
   final _ScanState state;
   final List<FoundDevice> found;
@@ -258,13 +316,16 @@ class _ScanResults extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: Space.sm),
             child: Semantics(
               button: true,
-              label: 'Display at ${d.host}, ${d.resolution}${d.health.activeApp == null ? '' : ', showing ${d.health.activeApp}'}. Connect.',
+              label:
+                  'Display at ${d.host}, ${d.resolution}${d.health.activeApp == null ? '' : ', showing ${d.health.activeApp}'}. Connect.',
               child: ExcludeSemantics(
                 child: Material(
                   color: scheme.surfaceContainerLow,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(Radii.md),
-                    side: BorderSide(color: scheme.primary.withValues(alpha: 0.5)),
+                    side: BorderSide(
+                      color: scheme.primary.withValues(alpha: 0.5),
+                    ),
                   ),
                   child: InkWell(
                     key: Key('found-${d.host}'),
@@ -273,7 +334,10 @@ class _ScanResults extends StatelessWidget {
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(minHeight: 64),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.md),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: Space.lg,
+                          vertical: Space.md,
+                        ),
                         child: Row(
                           children: [
                             Icon(Icons.grid_on_rounded, color: scheme.primary),
@@ -282,17 +346,30 @@ class _ScanResults extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(d.host, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.titleMedium),
                                   Text(
-                                    [d.resolution, if (d.health.activeApp != null) 'showing ${d.health.activeApp}'].join(' - '),
+                                    d.host,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                                    style: text.titleMedium,
+                                  ),
+                                  Text(
+                                    [
+                                      d.resolution,
+                                      if (d.health.activeApp != null) 'showing ${d.health.activeApp}',
+                                    ].join(' - '),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: text.bodySmall?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
-                            Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: scheme.onSurfaceVariant,
+                            ),
                           ],
                         ),
                       ),
@@ -309,9 +386,20 @@ class _ScanResults extends StatelessWidget {
               key: const Key('scanning'),
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
                 const SizedBox(width: Space.md),
-                Flexible(child: Text('Scanning your network...', style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant))),
+                Flexible(
+                  child: Text(
+                    'Scanning your network...',
+                    style: text.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -354,15 +442,28 @@ class _TestOutcome extends StatelessWidget {
         key: Key(ok ? 'test-ok' : 'test-failed'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(ok ? Icons.check_circle_rounded : Icons.error_outline_rounded, color: ok ? scheme.primary : scheme.error),
+          Icon(
+            ok ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+            color: ok ? scheme.primary : scheme.error,
+          ),
           const SizedBox(width: Space.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(ok ? 'Connected to $url' : "Couldn't connect", style: text.titleSmall),
+                Text(
+                  ok ? 'Connected to $url' : "Couldn't connect",
+                  style: text.titleSmall,
+                ),
                 if (detail.isNotEmpty)
-                  Text(detail, style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant), maxLines: 3, overflow: TextOverflow.ellipsis),
+                  Text(
+                    detail,
+                    style: text.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
               ],
             ),
           ),
@@ -377,5 +478,13 @@ class LoadingSplash extends StatelessWidget {
   const LoadingSplash({super.key});
 
   @override
-  Widget build(BuildContext context) => const Scaffold(body: Center(child: SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2))));
+  Widget build(BuildContext context) => const Scaffold(
+        body: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
 }

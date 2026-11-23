@@ -41,10 +41,13 @@ const _apiUrlPrefsKey = 'api_url';
 /// What is known about the saved device address. Nothing talks to the device until [loaded] is true; when it is true
 /// and [url] is null this is a first run and the app shows onboarding.
 class DeviceConfig {
-  const DeviceConfig({this.loaded = false, this.url});
+  const DeviceConfig({this.loaded = false, this.url, this.previousUrl});
 
   final bool loaded;
   final String? url;
+
+  /// The address that was in use when the user chose "Find another display"; onboarding offers to go back to it.
+  final String? previousUrl;
 
   bool get isFirstRun => loaded && url == null;
 }
@@ -68,33 +71,40 @@ class DeviceConfigNotifier extends Notifier<DeviceConfig> {
     if (ref.mounted) state = DeviceConfig(loaded: true, url: saved);
   }
 
-  /// Saves [url] (already normalised or not) as the device address.
-  Future<void> save(String url) async {
+  /// Saves [url] (already normalised or not) as the device address. Returns whether it was stored.
+  Future<bool> save(String url) async {
     final trimmed = normalizeDeviceUrl(url).url ?? url.trim();
-    if (trimmed == state.url) return;
+    if (trimmed == state.url) return true;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_apiUrlPrefsKey, trimmed);
     } catch (e) {
       if (ref.mounted) ref.read(errorBusProvider.notifier).report('Could not save the device URL: $e');
-      return;
+      return false;
     }
     if (ref.mounted) state = DeviceConfig(loaded: true, url: trimmed);
+    return true;
   }
 
-  /// Forgets the saved address, which sends the user back through onboarding to find a display.
-  Future<void> forget() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_apiUrlPrefsKey);
-    } catch (_) {
-      // Nothing saved to remove; onboarding still runs.
-    }
-    if (ref.mounted) state = const DeviceConfig(loaded: true);
+  /// Sends the user back through onboarding to find another display. The saved address stays in storage until a new
+  /// one is chosen, and is remembered as [DeviceConfig.previousUrl] so setup can offer to keep using it.
+  void forget() {
+    final current = state.url;
+    if (current == null) return;
+    state = DeviceConfig(loaded: true, previousUrl: current);
+  }
+
+  /// Goes back to the address that was in use before [forget].
+  void restorePrevious() {
+    final previous = state.previousUrl;
+    if (previous == null) return;
+    state = DeviceConfig(loaded: true, url: previous);
   }
 }
 
-final deviceConfigProvider = NotifierProvider<DeviceConfigNotifier, DeviceConfig>(DeviceConfigNotifier.new);
+final deviceConfigProvider = NotifierProvider<DeviceConfigNotifier, DeviceConfig>(
+  DeviceConfigNotifier.new,
+);
 
 /// The device address in use (the default until one is saved). Requests are only made once [deviceConfigProvider]
 /// has loaded, because the router shows a splash/onboarding until then.
@@ -102,21 +112,29 @@ class ApiUrlNotifier extends Notifier<String> {
   @override
   String build() => ref.watch(deviceConfigProvider).url ?? defaultApiUrl;
 
-  Future<void> save(String url) => ref.read(deviceConfigProvider.notifier).save(url);
+  Future<bool> save(String url) => ref.read(deviceConfigProvider.notifier).save(url);
 
-  /// Forgets the saved address so onboarding can find a display again.
-  Future<void> forget() => ref.read(deviceConfigProvider.notifier).forget();
+  /// Reopens onboarding to find a display again (the saved address is kept until another is chosen).
+  void forget() => ref.read(deviceConfigProvider.notifier).forget();
 }
 
-final apiUrlProvider = NotifierProvider<ApiUrlNotifier, String>(ApiUrlNotifier.new);
+final apiUrlProvider = NotifierProvider<ApiUrlNotifier, String>(
+  ApiUrlNotifier.new,
+);
 
 /// Builds an API client for an arbitrary URL (used to test a candidate address before saving). Tests override this.
-final apiFactoryProvider = Provider<LedApi Function(String baseUrl)>((ref) => (url) => HttpLedApi(baseUrl: url));
+final apiFactoryProvider = Provider<LedApi Function(String baseUrl)>(
+  (ref) => (url) => HttpLedApi(baseUrl: url),
+);
 
-final apiProvider = Provider<LedApi>((ref) => ref.watch(apiFactoryProvider)(ref.watch(apiUrlProvider)));
+final apiProvider = Provider<LedApi>(
+  (ref) => ref.watch(apiFactoryProvider)(ref.watch(apiUrlProvider)),
+);
 
 /// How often the lists refresh themselves in the background. Tests override this with null.
-final pollIntervalProvider = Provider<Duration?>((ref) => const Duration(seconds: 10));
+final pollIntervalProvider = Provider<Duration?>(
+  (ref) => const Duration(seconds: 10),
+);
 
 // ---------------------------------------------------------------------------
 // Apps
@@ -171,7 +189,9 @@ class AppListNotifier extends AsyncNotifier<AppList> {
   }
 }
 
-final appListProvider = AsyncNotifierProvider<AppListNotifier, AppList>(AppListNotifier.new);
+final appListProvider = AsyncNotifierProvider<AppListNotifier, AppList>(
+  AppListNotifier.new,
+);
 
 // ---------------------------------------------------------------------------
 // Device settings (power, brightness)
@@ -182,50 +202,100 @@ class DeviceSettingsNotifier extends AsyncNotifier<DeviceSettings> {
   int? _pendingBrightness;
   bool _sending = false;
 
+  bool? _pendingPower;
+  bool _powerSending = false;
+  bool _confirmedPower = false;
+
   /// True while a slider change has not reached the device yet; background syncs must not overwrite it.
   bool get _brightnessBusy => _pendingBrightness != null || _sending;
 
+  /// True while a power toggle has not been confirmed by the device yet.
+  bool get _powerBusy => _pendingPower != null || _powerSending;
+
   @override
   Future<DeviceSettings> build() async {
-    ref.onDispose(() => _brightnessDebounce?.cancel());
+    final api = ref.watch(apiProvider);
+    ref.onDispose(() {
+      _brightnessDebounce?.cancel();
+      // A pending slider change must not be lost when this provider goes away (e.g. pull to refresh).
+      final pending = _pendingBrightness;
+      if (pending != null) {
+        _pendingBrightness = null;
+        unawaited(
+          api.setBrightness(pending).then<void>((_) {}, onError: (_) {}),
+        );
+      }
+    });
     final interval = ref.watch(pollIntervalProvider);
     if (interval != null) {
       final timer = Timer.periodic(interval, (_) => syncSilently());
       ref.onDispose(timer.cancel);
     }
-    return (await ref.watch(apiProvider).getSettings()).getOrThrow();
+    return (await api.getSettings()).getOrThrow();
+  }
+
+  /// Applies a server reading, keeping the parts the user has changed but the device has not confirmed yet.
+  void _applyServer(DeviceSettings value) {
+    var v = value;
+    final current = state.value;
+    if (current != null) {
+      if (_brightnessBusy) v = v.copyWith(brightness: current.brightness);
+      if (_powerBusy) v = v.copyWith(isEnabled: current.isEnabled);
+    }
+    state = AsyncData(v);
   }
 
   /// Picks up changes made elsewhere (another phone, Home Assistant, the schedule) without surfacing errors.
   Future<void> syncSilently() async {
-    if (_brightnessBusy) return;
     final result = await ref.read(apiProvider).getSettings();
-    if (!ref.mounted || _brightnessBusy) return;
+    if (!ref.mounted) return;
     final value = result.valueOrNull;
-    if (value != null) state = AsyncData(value);
+    if (value != null) _applyServer(value);
   }
 
+  /// Reloads from the device after sending any slider change that is still waiting for its pause.
   Future<void> reload() async {
+    if (_pendingBrightness != null) {
+      _brightnessDebounce?.cancel();
+      await _flushBrightness();
+      if (!ref.mounted) return;
+    }
     final result = await ref.read(apiProvider).getSettings();
     if (!ref.mounted) return;
     result.when(
-      ok: (v) => state = AsyncData(v),
+      ok: _applyServer,
       err: (e) => ref.read(errorBusProvider.notifier).report(e),
     );
   }
 
+  /// Power toggles are sent one at a time, the latest wins, and a failure rolls back to the last confirmed value.
   Future<void> setPower(bool enabled) async {
     final previous = state.value;
     if (previous == null) return;
+    if (!_powerBusy) _confirmedPower = previous.isEnabled;
     state = AsyncData(previous.copyWith(isEnabled: enabled));
-    final result = await ref.read(apiProvider).setPower(enabled);
-    if (!ref.mounted) return;
-    final error = result.errorOrNull;
-    if (error != null) {
-      // Roll back only the power flag so a brightness change made meanwhile is kept.
-      final current = state.value;
-      state = AsyncData((current ?? previous).copyWith(isEnabled: previous.isEnabled));
-      ref.read(errorBusProvider.notifier).report(error);
+    _pendingPower = enabled;
+    if (_powerSending) return; // The running loop picks up the newer value when it finishes.
+    _powerSending = true;
+    try {
+      while (_pendingPower != null) {
+        final value = _pendingPower!;
+        _pendingPower = null;
+        final result = await ref.read(apiProvider).setPower(value);
+        if (!ref.mounted) return;
+        final error = result.errorOrNull;
+        if (error == null) {
+          _confirmedPower = value;
+        } else if (_pendingPower == null) {
+          // Roll back only the power flag so a brightness change made meanwhile is kept.
+          final current = state.value;
+          if (current != null) state = AsyncData(current.copyWith(isEnabled: _confirmedPower));
+          ref.read(errorBusProvider.notifier).report(error);
+        }
+        // With a newer toggle queued a failure is ignored: that request decides the outcome.
+      }
+    } finally {
+      _powerSending = false;
     }
   }
 
@@ -237,7 +307,10 @@ class DeviceSettingsNotifier extends AsyncNotifier<DeviceSettings> {
     state = AsyncData(previous.copyWith(brightness: value));
     _pendingBrightness = value;
     _brightnessDebounce?.cancel();
-    _brightnessDebounce = Timer(const Duration(milliseconds: 250), _flushBrightness);
+    _brightnessDebounce = Timer(
+      const Duration(milliseconds: 250),
+      _flushBrightness,
+    );
   }
 
   /// Sends the newest value, one request at a time, so responses can never arrive out of order and the last value wins.
@@ -291,13 +364,17 @@ class TransitionsNotifier extends AsyncNotifier<TransitionList> {
   }
 }
 
-final transitionsProvider = AsyncNotifierProvider<TransitionsNotifier, TransitionList>(TransitionsNotifier.new);
+final transitionsProvider = AsyncNotifierProvider<TransitionsNotifier, TransitionList>(
+  TransitionsNotifier.new,
+);
 
 // ---------------------------------------------------------------------------
 // Health
 // ---------------------------------------------------------------------------
 
-final healthProvider = FutureProvider<Health>((ref) async => (await ref.watch(apiProvider).getHealth()).getOrThrow());
+final healthProvider = FutureProvider<Health>(
+  (ref) async => (await ref.watch(apiProvider).getHealth()).getOrThrow(),
+);
 
 // ---------------------------------------------------------------------------
 // Live preview feed
@@ -336,10 +413,15 @@ Stream<PreviewUpdate> _previewStream(LedApi api) async* {
       channel = WebSocketChannel.connect(api.previewSocketUri);
       await channel.ready.timeout(_previewConnectTimeout);
       yield const PreviewUpdate(connected: true);
-      final messages = channel.stream.timeout(_previewIdleTimeout, onTimeout: (sink) => sink.close());
+      final messages = channel.stream.timeout(
+        _previewIdleTimeout,
+        onTimeout: (sink) => sink.close(),
+      );
       await for (final message in messages) {
         if (message is List<int>) {
-          final frame = parsePreviewFrame(message is Uint8List ? message : Uint8List.fromList(message));
+          final frame = parsePreviewFrame(
+            message is Uint8List ? message : Uint8List.fromList(message),
+          );
           if (frame != null) {
             gotFrame = true;
             yield PreviewUpdate(frame: frame, connected: true);
@@ -351,7 +433,10 @@ Stream<PreviewUpdate> _previewStream(LedApi api) async* {
     } finally {
       // Never await the close: on a half-open socket the handshake can hang and would stall every later retry.
       final dead = channel;
-      if (dead != null) unawaited(dead.sink.close().timeout(const Duration(seconds: 1), onTimeout: () {}).catchError((_) {}));
+      if (dead != null)
+        unawaited(
+          dead.sink.close().timeout(const Duration(seconds: 1), onTimeout: () {}).catchError((_) {}),
+        );
     }
     yield const PreviewUpdate(connected: false);
     // A connection that streamed for a while earns a fast retry; one that failed straight away backs off.
@@ -366,6 +451,12 @@ Stream<PreviewUpdate> _previewStream(LedApi api) async* {
 /// Decodes RGBA pixels to a [ui.Image].
 Future<ui.Image> decodeFrame(PreviewFrame frame) {
   final completer = Completer<ui.Image>();
-  ui.decodeImageFromPixels(frame.rgba, frame.width, frame.height, ui.PixelFormat.rgba8888, completer.complete);
+  ui.decodeImageFromPixels(
+    frame.rgba,
+    frame.width,
+    frame.height,
+    ui.PixelFormat.rgba8888,
+    completer.complete,
+  );
   return completer.future;
 }

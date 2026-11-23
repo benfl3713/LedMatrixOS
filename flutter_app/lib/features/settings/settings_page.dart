@@ -68,7 +68,9 @@ class _ConnectionCard extends ConsumerStatefulWidget {
 }
 
 class _ConnectionCardState extends ConsumerState<_ConnectionCard> {
-  late final TextEditingController _controller = TextEditingController(text: ref.read(apiUrlProvider));
+  late final TextEditingController _controller = TextEditingController(
+    text: ref.read(apiUrlProvider),
+  );
   bool _testing = false;
   ConnectionTestResult? _result;
   String? _resultFor;
@@ -89,7 +91,9 @@ class _ConnectionCardState extends ConsumerState<_ConnectionCard> {
       _testing = true;
       _result = null;
     });
-    final result = await testDeviceConnection(ref.read(apiFactoryProvider)(url));
+    final result = await testDeviceConnection(
+      ref.read(apiFactoryProvider)(url),
+    );
     if (!mounted) return;
     setState(() {
       _testing = false;
@@ -101,8 +105,8 @@ class _ConnectionCardState extends ConsumerState<_ConnectionCard> {
   Future<void> _save() async {
     final url = _parsed.url;
     if (url == null) return;
-    await ref.read(apiUrlProvider.notifier).save(url);
-    if (!mounted) return;
+    final saved = await ref.read(apiUrlProvider.notifier).save(url);
+    if (!mounted || !saved) return;
     _controller.text = ref.read(apiUrlProvider);
     ref.invalidate(healthProvider);
     ref.read(connectionProvider.notifier).check();
@@ -111,7 +115,27 @@ class _ConnectionCardState extends ConsumerState<_ConnectionCard> {
   }
 
   /// Forgets this display and reopens setup, where the user can scan for displays or enter another address.
-  Future<void> _findDisplay() => ref.read(apiUrlProvider.notifier).forget();
+  Future<void> _findDisplay() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Find another display?'),
+        content: const Text("You'll go back to setup."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('confirm-find-display'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && mounted) ref.read(apiUrlProvider.notifier).forget();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -154,7 +178,11 @@ class _ConnectionCardState extends ConsumerState<_ConnectionCard> {
                 key: const Key('test-connection'),
                 onPressed: parsed.url == null || _testing ? null : _test,
                 icon: _testing
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Icon(Icons.wifi_find_rounded),
                 label: const Text('Test connection'),
               ),
@@ -163,7 +191,11 @@ class _ConnectionCardState extends ConsumerState<_ConnectionCard> {
                 onPressed: parsed.url != null && _dirty ? _save : null,
                 child: const Text('Save'),
               ),
-              TextButton(key: const Key('find-display'), onPressed: _findDisplay, child: const Text('Find display')),
+              TextButton(
+                key: const Key('find-display'),
+                onPressed: _findDisplay,
+                child: const Text('Find display'),
+              ),
             ],
           ),
           if (_result != null && !stale) ...[
@@ -172,19 +204,38 @@ class _ConnectionCardState extends ConsumerState<_ConnectionCard> {
           ],
           if (!_dirty && parsed.url != null) ...[
             const SizedBox(height: 12),
-            Consumer(builder: (context, ref, _) {
-              final c = ref.watch(connectionProvider);
-              final (icon, color, text) = switch (c.status) {
-                ConnectionStatus.online => (Icons.check_circle_rounded, Colors.green, 'Connected'),
-                ConnectionStatus.connecting => (Icons.sync_rounded, theme.colorScheme.onSurfaceVariant, 'Connecting...'),
-                ConnectionStatus.offline => (Icons.error_outline_rounded, theme.colorScheme.error, 'Not reachable'),
-              };
-              return Row(children: [
-                Icon(icon, size: 18, color: color),
-                const SizedBox(width: 8),
-                Text(text, style: theme.textTheme.bodyMedium?.copyWith(color: color)),
-              ]);
-            }),
+            Consumer(
+              builder: (context, ref, _) {
+                final c = ref.watch(connectionProvider);
+                final (icon, color, text) = switch (c.status) {
+                  ConnectionStatus.online => (
+                      Icons.check_circle_rounded,
+                      Colors.green,
+                      'Connected',
+                    ),
+                  ConnectionStatus.connecting => (
+                      Icons.sync_rounded,
+                      theme.colorScheme.onSurfaceVariant,
+                      'Connecting...',
+                    ),
+                  ConnectionStatus.offline => (
+                      Icons.error_outline_rounded,
+                      theme.colorScheme.error,
+                      'Not reachable',
+                    ),
+                };
+                return Row(
+                  children: [
+                    Icon(icon, size: 18, color: color),
+                    const SizedBox(width: 8),
+                    Text(
+                      text,
+                      style: theme.textTheme.bodyMedium?.copyWith(color: color),
+                    ),
+                  ],
+                );
+              },
+            ),
           ],
         ],
       ),
@@ -214,12 +265,19 @@ class _TestOutcome extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(ok ? Icons.check_circle_rounded : Icons.error_outline_rounded,
-              size: 20, color: ok ? scheme.onSecondaryContainer : scheme.onErrorContainer),
+          Icon(
+            ok ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+            size: 20,
+            color: ok ? scheme.onSecondaryContainer : scheme.onErrorContainer,
+          ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(text,
-                style: TextStyle(color: ok ? scheme.onSecondaryContainer : scheme.onErrorContainer)),
+            child: Text(
+              text,
+              style: TextStyle(
+                color: ok ? scheme.onSecondaryContainer : scheme.onErrorContainer,
+              ),
+            ),
           ),
         ],
       ),
@@ -231,8 +289,12 @@ class _TestOutcome extends StatelessWidget {
 String formatUptime(int seconds) {
   final d = Duration(seconds: seconds < 0 ? 0 : seconds);
   String unit(int n, String name) => '$n $name${n == 1 ? '' : 's'}';
-  if (d.inDays > 0) return d.inHours % 24 == 0 ? unit(d.inDays, 'day') : '${unit(d.inDays, 'day')}, ${unit(d.inHours % 24, 'hour')}';
-  if (d.inHours > 0) return d.inMinutes % 60 == 0 ? unit(d.inHours, 'hour') : '${unit(d.inHours, 'hour')}, ${unit(d.inMinutes % 60, 'minute')}';
+  if (d.inDays > 0)
+    return d.inHours % 24 == 0 ? unit(d.inDays, 'day') : '${unit(d.inDays, 'day')}, ${unit(d.inHours % 24, 'hour')}';
+  if (d.inHours > 0)
+    return d.inMinutes % 60 == 0
+        ? unit(d.inHours, 'hour')
+        : '${unit(d.inHours, 'hour')}, ${unit(d.inMinutes % 60, 'minute')}';
   if (d.inMinutes > 0) return unit(d.inMinutes, 'minute');
   return unit(d.inSeconds, 'second');
 }
@@ -250,20 +312,40 @@ class _DeviceCard extends ConsumerWidget {
     Widget body;
     if (health == null && settings == null) {
       body = connection.isOffline
-          ? Row(children: [
-              Icon(Icons.cloud_off_rounded, color: scheme.error),
-              const SizedBox(width: 12),
-              Expanded(child: Text('No device information yet. Check the address above.', style: TextStyle(color: scheme.onSurfaceVariant))),
-            ])
-          : const Padding(padding: EdgeInsets.all(8), child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+          ? Row(
+              children: [
+                Icon(Icons.cloud_off_rounded, color: scheme.error),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'No device information yet. Check the address above.',
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                ),
+              ],
+            )
+          : const Padding(
+              padding: EdgeInsets.all(8),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            );
     } else {
       final width = settings?.width ?? health!.width;
       final height = settings?.height ?? health!.height;
       body = Column(
         children: [
-          _InfoRow('Status', connection.isOffline ? 'Offline (last known)' : (health?.isOk ?? true) ? 'Running' : (health?.status ?? 'Unknown'),
-              color: connection.isOffline || !(health?.isOk ?? true) ? scheme.error : Colors.green),
-          _InfoRow('Display', '$width x $height px, ${(settings?.isEnabled ?? health?.isEnabled ?? true) ? 'on' : 'off'}'),
+          _InfoRow(
+            'Status',
+            connection.isOffline
+                ? 'Offline (last known)'
+                : (health?.isOk ?? true)
+                    ? 'Running'
+                    : (health?.status ?? 'Unknown'),
+            color: connection.isOffline || !(health?.isOk ?? true) ? scheme.error : Colors.green,
+          ),
+          _InfoRow(
+            'Display',
+            '$width x $height px, ${(settings?.isEnabled ?? health?.isEnabled ?? true) ? 'on' : 'off'}',
+          ),
           if (settings != null) _InfoRow('Frame rate', '${settings.fps} fps'),
           _InfoRow('Active app', health?.activeApp ?? 'none'),
           if (health != null) _InfoRow('Uptime', formatUptime(health.uptimeSeconds)),
@@ -307,8 +389,18 @@ class _InfoRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 5),
         child: Row(
           children: [
-            Expanded(child: Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
-            Text(value, style: TextStyle(fontWeight: FontWeight.w600, color: color)),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Text(
+              value,
+              style: TextStyle(fontWeight: FontWeight.w600, color: color),
+            ),
           ],
         ),
       );
@@ -326,9 +418,21 @@ class _AppearanceCard extends ConsumerWidget {
         child: SegmentedButton<ThemeMode>(
           showSelectedIcon: false,
           segments: const [
-            ButtonSegment(value: ThemeMode.system, label: Text('System'), icon: Icon(Icons.brightness_auto_outlined)),
-            ButtonSegment(value: ThemeMode.dark, label: Text('Dark'), icon: Icon(Icons.dark_mode_outlined)),
-            ButtonSegment(value: ThemeMode.light, label: Text('Light'), icon: Icon(Icons.light_mode_outlined)),
+            ButtonSegment(
+              value: ThemeMode.system,
+              label: Text('System'),
+              icon: Icon(Icons.brightness_auto_outlined),
+            ),
+            ButtonSegment(
+              value: ThemeMode.dark,
+              label: Text('Dark'),
+              icon: Icon(Icons.dark_mode_outlined),
+            ),
+            ButtonSegment(
+              value: ThemeMode.light,
+              label: Text('Light'),
+              icon: Icon(Icons.light_mode_outlined),
+            ),
           ],
           selected: {mode},
           onSelectionChanged: (s) => ref.read(themeModeProvider.notifier).set(s.first),
@@ -365,15 +469,20 @@ class _AudioCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Icon(audio.isStreaming ? Icons.mic : Icons.mic_off, color: audio.isStreaming ? theme.colorScheme.error : null),
+              Icon(
+                audio.isStreaming ? Icons.mic : Icons.mic_off,
+                color: audio.isStreaming ? theme.colorScheme.error : null,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Audio streaming', style: theme.textTheme.titleMedium),
-                    Text(audio.isStreaming ? 'Microphone is active' : 'Stream audio to the equalizer',
-                        style: theme.textTheme.bodySmall),
+                    Text(
+                      audio.isStreaming ? 'Microphone is active' : 'Stream audio to the equalizer',
+                      style: theme.textTheme.bodySmall,
+                    ),
                   ],
                 ),
               ),
@@ -388,14 +497,26 @@ class _AudioCard extends ConsumerWidget {
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: theme.colorScheme.errorContainer, borderRadius: BorderRadius.circular(8)),
-              child: Text(audio.error!, style: TextStyle(color: theme.colorScheme.onErrorContainer, fontSize: 12)),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                audio.error!,
+                style: TextStyle(
+                  color: theme.colorScheme.onErrorContainer,
+                  fontSize: 12,
+                ),
+              ),
             ),
           ],
           const SizedBox(height: 8),
           Text(
             'Set the equalizer to "Microphone" mode in its app settings.',
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontStyle: FontStyle.italic,
+            ),
           ),
         ],
       ),

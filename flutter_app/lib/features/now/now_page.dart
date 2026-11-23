@@ -14,11 +14,11 @@ class NowPage extends ConsumerWidget {
 
   Future<void> _refresh(WidgetRef ref) async {
     ref.invalidate(appListProvider);
-    ref.invalidate(deviceSettingsProvider);
     ref.invalidate(transitionsProvider);
     await Future.wait([
       ref.read(appListProvider.future).then<void>((_) {}, onError: (_) {}),
-      ref.read(deviceSettingsProvider.future).then<void>((_) {}, onError: (_) {}),
+      // Reload in place: invalidating would drop a slider change that has not been sent yet.
+      ref.read(deviceSettingsProvider.notifier).reload(),
     ]);
   }
 
@@ -31,7 +31,12 @@ class NowPage extends ConsumerWidget {
         onRefresh: () => _refresh(ref),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(Space.lg, Space.xs, Space.lg, Space.xl),
+          padding: const EdgeInsets.fromLTRB(
+            Space.lg,
+            Space.xs,
+            Space.lg,
+            Space.xl,
+          ),
           children: [
             const PreviewCard(),
             const SizedBox(height: Space.lg),
@@ -39,7 +44,10 @@ class NowPage extends ConsumerWidget {
               data: (list) => _NowShowing(list: list),
               loading: () => const _NowShowingSkeleton(),
               error: (e, _) => SectionCard(
-                child: ErrorView(error: e, onRetry: () => ref.invalidate(appListProvider)),
+                child: ErrorView(
+                  error: e,
+                  onRetry: () => ref.invalidate(appListProvider),
+                ),
               ),
             ),
             const SizedBox(height: Space.lg),
@@ -78,16 +86,31 @@ class _NowShowing extends StatelessWidget {
               borderRadius: BorderRadius.circular(Radii.md),
               border: Border.all(color: scheme.primary.withValues(alpha: 0.5)),
             ),
-            child: Icon(iconForApp(list.activeApp ?? ''), color: scheme.primary, size: 28),
+            child: Icon(
+              iconForApp(list.activeApp ?? ''),
+              color: scheme.primary,
+              size: 28,
+            ),
           ),
           const SizedBox(width: Space.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Now showing', style: text.labelMedium?.copyWith(color: scheme.onSurfaceVariant, letterSpacing: 1)),
+                Text(
+                  'Now showing',
+                  style: text.labelMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    letterSpacing: 1,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.headlineSmall),
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.headlineSmall,
+                ),
               ],
             ),
           ),
@@ -135,7 +158,12 @@ class _DeviceControls extends ConsumerWidget {
       loading: () => const _ControlsSkeleton(),
       error: (e, _) => hideErrors
           ? const SizedBox.shrink()
-          : SectionCard(child: ErrorView(error: e, onRetry: () => ref.invalidate(deviceSettingsProvider))),
+          : SectionCard(
+              child: ErrorView(
+                error: e,
+                onRetry: () => ref.invalidate(deviceSettingsProvider),
+              ),
+            ),
       data: (s) {
         final notifier = ref.read(deviceSettingsProvider.notifier);
         final stale = ref.watch(connectionStaleProvider);
@@ -148,10 +176,16 @@ class _DeviceControls extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _PowerTile(on: s.isEnabled, onChanged: stale ? null : notifier.setPower),
+                  _PowerTile(
+                    on: s.isEnabled,
+                    onChanged: stale ? null : notifier.setPower,
+                  ),
                   const SizedBox(height: Space.md),
                   _BrightnessCard(
-                      percent: s.brightnessPercent, onChanged: stale ? null : notifier.setBrightnessPercent, enabled: s.isEnabled && !stale),
+                    percent: s.brightnessPercent,
+                    onChanged: stale ? null : notifier.setBrightnessPercent,
+                    enabled: s.isEnabled && !stale,
+                  ),
                 ],
               ),
             ),
@@ -191,8 +225,10 @@ class _StaleNote extends StatelessWidget {
           Icon(Icons.history_rounded, size: 16, color: scheme.onSurfaceVariant),
           const SizedBox(width: Space.sm),
           Expanded(
-            child: Text('Last known state. Controls return when the display is back.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+            child: Text(
+              'Last known state. Controls return when the display is back.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+            ),
           ),
         ],
       ),
@@ -236,31 +272,46 @@ class _PowerTile extends StatelessWidget {
           color: on ? scheme.primaryContainer : scheme.surfaceContainerLow,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(Radii.lg),
-            side: BorderSide(color: on ? scheme.primary.withValues(alpha: 0.55) : scheme.outlineVariant),
+            side: BorderSide(
+              color: on ? scheme.primary.withValues(alpha: 0.55) : scheme.outlineVariant,
+            ),
           ),
           child: InkWell(
             key: const Key('power-tile'),
             borderRadius: BorderRadius.circular(Radii.lg),
             onTap: change == null ? null : () => change(!on),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.md),
+              padding: const EdgeInsets.symmetric(
+                horizontal: Space.lg,
+                vertical: Space.md,
+              ),
               child: Row(
                 children: [
-                  Icon(Icons.power_settings_new_rounded,
-                      size: 32, color: on ? scheme.primary : scheme.onSurfaceVariant),
+                  Icon(
+                    Icons.power_settings_new_rounded,
+                    size: 32,
+                    color: on ? scheme.primary : scheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: Space.md),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Display power', style: text.titleMedium),
-                        Text(on ? 'On' : 'Off',
-                            style: text.bodyMedium?.copyWith(color: on ? scheme.onPrimaryContainer : scheme.onSurfaceVariant)),
+                        Text(
+                          on ? 'On' : 'Off',
+                          style: text.bodyMedium?.copyWith(
+                            color: on ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   IgnorePointer(
-                    child: Transform.scale(scale: 1.2, child: Switch(value: on, onChanged: change)),
+                    child: Transform.scale(
+                      scale: 1.2,
+                      child: Switch(value: on, onChanged: change),
+                    ),
                   ),
                 ],
               ),
@@ -273,7 +324,11 @@ class _PowerTile extends StatelessWidget {
 }
 
 class _BrightnessCard extends StatelessWidget {
-  const _BrightnessCard({required this.percent, required this.onChanged, required this.enabled});
+  const _BrightnessCard({
+    required this.percent,
+    required this.onChanged,
+    required this.enabled,
+  });
 
   final int percent;
   final ValueChanged<int>? onChanged;
@@ -284,7 +339,12 @@ class _BrightnessCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     return SectionCard(
-      padding: const EdgeInsets.fromLTRB(Space.lg, Space.md, Space.lg, Space.sm),
+      padding: const EdgeInsets.fromLTRB(
+        Space.lg,
+        Space.md,
+        Space.lg,
+        Space.sm,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -292,12 +352,23 @@ class _BrightnessCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(child: Text('Brightness', style: text.titleMedium)),
-              Text('$percent%', style: numericStyle(text.headlineMedium?.copyWith(color: enabled ? scheme.primary : scheme.onSurfaceVariant))),
+              Text(
+                '$percent%',
+                style: numericStyle(
+                  text.headlineMedium?.copyWith(
+                    color: enabled ? scheme.primary : scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
             ],
           ),
           Row(
             children: [
-              Icon(Icons.light_mode_outlined, size: 20, color: scheme.onSurfaceVariant),
+              Icon(
+                Icons.light_mode_outlined,
+                size: 20,
+                color: scheme.onSurfaceVariant,
+              ),
               Expanded(
                 child: Slider(
                   semanticFormatterCallback: (v) => '${v.round()} percent',
@@ -309,7 +380,11 @@ class _BrightnessCard extends StatelessWidget {
                   onChanged: onChanged == null ? null : (v) => onChanged!(v.round()),
                 ),
               ),
-              Icon(Icons.light_mode_rounded, size: 26, color: scheme.onSurfaceVariant),
+              Icon(
+                Icons.light_mode_rounded,
+                size: 26,
+                color: scheme.onSurfaceVariant,
+              ),
             ],
           ),
         ],
@@ -341,10 +416,20 @@ class _TransitionRow extends ConsumerWidget {
             key: const Key('transition-picker'),
             onPressed: stale ? null : () => _showSheet(context, ref, t),
             icon: Icon(Icons.animation_rounded, color: scheme.onSurfaceVariant),
-            label: Text.rich(TextSpan(children: [
-              TextSpan(text: 'Transition  ', style: TextStyle(color: scheme.onSurfaceVariant)),
-              TextSpan(text: current == null ? 'None' : _transitionLabel(current), style: TextStyle(color: scheme.onSurface)),
-            ])),
+            label: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Transition  ',
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                  TextSpan(
+                    text: current == null ? 'None' : _transitionLabel(current),
+                    style: TextStyle(color: scheme.onSurface),
+                  ),
+                ],
+              ),
+            ),
             iconAlignment: IconAlignment.start,
           ),
         );
@@ -362,17 +447,29 @@ class _TransitionRow extends ConsumerWidget {
           final current = ref.watch(transitionsProvider).value?.current ?? t.current;
           return SafeArea(
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.7),
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(ctx).size.height * 0.7,
+              ),
               child: ListView(
                 shrinkWrap: true,
-                padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.lg),
+                padding: const EdgeInsets.fromLTRB(
+                  Space.lg,
+                  0,
+                  Space.lg,
+                  Space.lg,
+                ),
                 children: [
                   const SectionHeader('TRANSITION'),
                   for (final name in t.transitions)
                     ListTile(
                       key: Key('transition-$name'),
                       title: Text(_transitionLabel(name)),
-                      trailing: name == current ? Icon(Icons.check_rounded, color: Theme.of(ctx).colorScheme.primary) : null,
+                      trailing: name == current
+                          ? Icon(
+                              Icons.check_rounded,
+                              color: Theme.of(ctx).colorScheme.primary,
+                            )
+                          : null,
                       selected: name == current,
                       onTap: () {
                         ref.read(transitionsProvider.notifier).select(name);
@@ -408,28 +505,28 @@ class _QuickSwitch extends ConsumerWidget {
         _Dimmed(
           dimmed: stale,
           child: SizedBox(
-          height: rows * _tileHeight + (rows - 1) * Space.sm,
-          child: GridView.builder(
-            key: const Key('quick-switch'),
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.zero,
-            itemCount: list.apps.length,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: rows,
-              mainAxisSpacing: Space.sm,
-              crossAxisSpacing: Space.sm,
-              mainAxisExtent: _tileWidth,
+            height: rows * _tileHeight + (rows - 1) * Space.sm,
+            child: GridView.builder(
+              key: const Key('quick-switch'),
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.zero,
+              itemCount: list.apps.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: rows,
+                mainAxisSpacing: Space.sm,
+                crossAxisSpacing: Space.sm,
+                mainAxisExtent: _tileWidth,
+              ),
+              itemBuilder: (context, i) {
+                final app = list.apps[i];
+                return _AppChip(
+                  name: app.name,
+                  icon: iconForApp(app.id),
+                  active: app.id == list.activeApp,
+                  onTap: () => ref.read(appListProvider.notifier).activate(app.id),
+                );
+              },
             ),
-            itemBuilder: (context, i) {
-              final app = list.apps[i];
-              return _AppChip(
-                name: app.name,
-                icon: iconForApp(app.id),
-                active: app.id == list.activeApp,
-                onTap: () => ref.read(appListProvider.notifier).activate(app.id),
-              );
-            },
-          ),
           ),
         ),
       ],
@@ -438,7 +535,12 @@ class _QuickSwitch extends ConsumerWidget {
 }
 
 class _AppChip extends StatelessWidget {
-  const _AppChip({required this.name, required this.icon, required this.active, required this.onTap});
+  const _AppChip({
+    required this.name,
+    required this.icon,
+    required this.active,
+    required this.onTap,
+  });
 
   final String name;
   final IconData icon;
@@ -458,7 +560,10 @@ class _AppChip extends StatelessWidget {
           color: active ? scheme.primaryContainer : scheme.surfaceContainerLow,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(Radii.md),
-            side: BorderSide(color: active ? scheme.primary : scheme.outlineVariant, width: active ? 1.5 : 1),
+            side: BorderSide(
+              color: active ? scheme.primary : scheme.outlineVariant,
+              width: active ? 1.5 : 1,
+            ),
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(Radii.md),

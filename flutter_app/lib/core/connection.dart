@@ -9,7 +9,12 @@ import 'providers.dart';
 enum ConnectionStatus { connecting, online, offline }
 
 class DeviceConnection {
-  const DeviceConnection({this.status = ConnectionStatus.connecting, this.health, this.failures = 0, this.lastError});
+  const DeviceConnection({
+    this.status = ConnectionStatus.connecting,
+    this.health,
+    this.failures = 0,
+    this.lastError,
+  });
 
   final ConnectionStatus status;
 
@@ -31,11 +36,15 @@ class DeviceConnection {
 class ConnectionNotifier extends Notifier<DeviceConnection> {
   Timer? _timer;
   bool _checking = false;
+  Object? _generation;
 
   @override
   DeviceConnection build() {
-    // A new device URL starts from scratch.
-    ref.watch(apiProvider);
+    // A new device URL starts from scratch: nothing in flight for the old address may touch the new state.
+    final api = ref.watch(apiProvider);
+    _generation = api;
+    _checking = false;
+    _timer?.cancel();
     ref.onDispose(() => _timer?.cancel());
     if (ref.read(pollIntervalProvider) != null) Future.microtask(check);
     return const DeviceConnection();
@@ -48,11 +57,17 @@ class ConnectionNotifier extends Notifier<DeviceConnection> {
     _timer?.cancel();
     final before = state;
     if (before.status == ConnectionStatus.offline) {
-      state = DeviceConnection(status: ConnectionStatus.connecting, health: before.health, failures: before.failures, lastError: before.lastError);
+      state = DeviceConnection(
+        status: ConnectionStatus.connecting,
+        health: before.health,
+        failures: before.failures,
+        lastError: before.lastError,
+      );
     }
-    final result = await ref.read(apiProvider).getHealth();
+    final api = ref.read(apiProvider);
+    final result = await api.getHealth();
+    if (!ref.mounted || !identical(api, _generation)) return; // Stale: the address changed while this was in flight.
     _checking = false;
-    if (!ref.mounted) return;
     final health = result.valueOrNull;
     if (health != null) {
       state = DeviceConnection(status: ConnectionStatus.online, health: health);
@@ -80,7 +95,9 @@ class ConnectionNotifier extends Notifier<DeviceConnection> {
     if (interval == null) return;
     final wait = state.status == ConnectionStatus.online && state.failures == 0
         ? interval
-        : Duration(seconds: (2 << (state.failures - 1).clamp(0, 3)).clamp(2, 15));
+        : Duration(
+            seconds: (2 << (state.failures - 1).clamp(0, 3)).clamp(2, 15),
+          );
     _timer?.cancel();
     _timer = Timer(wait, check);
   }
@@ -90,7 +107,8 @@ class ConnectionNotifier extends Notifier<DeviceConnection> {
     final apps = ref.read(appListProvider).value;
     if (apps != null && apps.activeApp != health.activeApp) ref.read(appListProvider.notifier).syncSilently();
     final device = ref.read(deviceSettingsProvider).value;
-    if (device != null && (device.isEnabled != health.isEnabled || device.width != health.width || device.height != health.height)) {
+    if (device != null &&
+        (device.isEnabled != health.isEnabled || device.width != health.width || device.height != health.height)) {
       ref.read(deviceSettingsProvider.notifier).syncSilently();
     }
   }
@@ -112,10 +130,14 @@ class ConnectionNotifier extends Notifier<DeviceConnection> {
   }
 }
 
-final connectionProvider = NotifierProvider<ConnectionNotifier, DeviceConnection>(ConnectionNotifier.new);
+final connectionProvider = NotifierProvider<ConnectionNotifier, DeviceConnection>(
+  ConnectionNotifier.new,
+);
 
 /// Whether the displayed device state is stale (see [DeviceConnection.isStale]).
-final connectionStaleProvider = Provider<bool>((ref) => ref.watch(connectionProvider.select((c) => c.isStale)));
+final connectionStaleProvider = Provider<bool>(
+  (ref) => ref.watch(connectionProvider.select((c) => c.isStale)),
+);
 
 /// The outcome of "Test connection" for a candidate address.
 class ConnectionTestResult {
@@ -134,7 +156,10 @@ class ConnectionTestResult {
 Future<ConnectionTestResult> testDeviceConnection(LedApi api) async {
   final health = await api.getHealth();
   final h = health.valueOrNull;
-  if (h == null) return ConnectionTestResult.failed(health.errorOrNull?.toString() ?? 'Could not reach the device');
+  if (h == null)
+    return ConnectionTestResult.failed(
+      health.errorOrNull?.toString() ?? 'Could not reach the device',
+    );
   final settings = await api.getSettings();
   return ConnectionTestResult.ok(h, settings.valueOrNull);
 }

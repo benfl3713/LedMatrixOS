@@ -268,7 +268,7 @@ void main() {
     expect(tester.getTopLeft(find.byKey(const Key('sheet-preview'))).dy, before.dy);
   });
 
-  testWidgets('Find display in Settings forgets the saved display and reopens setup', (tester) async {
+  testWidgets('Find display in Settings asks first, then reopens setup with a way back', (tester) async {
     _phone(tester);
     await tester.pumpWidget(testApp(FakeApi()));
     await tester.pumpAndSettle();
@@ -278,8 +278,25 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('find-display')));
     await tester.tap(find.byKey(const Key('find-display')));
     await tester.pumpAndSettle();
+    // Nothing is forgotten until confirmed; cancelling stays put.
+    expect(find.text('Find another display?'), findsOneWidget);
+    expect(find.byType(OnboardingPage), findsNothing);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(OnboardingPage), findsNothing);
 
+    await tester.tap(find.byKey(const Key('find-display')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-find-display')));
+    await tester.pumpAndSettle();
     expect(find.byType(OnboardingPage), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
+
+    // The old address can be kept.
+    expect(find.text('Keep using http://fake'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('keep-previous')));
+    await tester.pumpAndSettle();
+    expect(find.byType(OnboardingPage), findsNothing);
+    expect(find.byType(NavigationBar), findsOneWidget);
   });
 }

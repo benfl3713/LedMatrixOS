@@ -32,8 +32,9 @@ class SaveStatusNotifier extends Notifier<SaveStatus> {
   void set(SaveStatus status) => state = status;
 }
 
-final settingsSaveStatusProvider =
-    NotifierProvider.family<SaveStatusNotifier, SaveStatus, String>(SaveStatusNotifier.new);
+final settingsSaveStatusProvider = NotifierProvider.family<SaveStatusNotifier, SaveStatus, String>(
+  SaveStatusNotifier.new,
+);
 
 /// Settings of one app (active or not). Edits apply locally at once and are saved
 /// 500 ms after the last change; the list also refreshes itself while it is on screen.
@@ -61,7 +62,17 @@ class AppSettingsNotifier extends AsyncNotifier<List<AppSetting>> {
       final timer = Timer.periodic(interval, (_) => _liveRefresh());
       ref.onDispose(timer.cancel);
     }
-    ref.onDispose(() => _debounce?.cancel());
+    ref.onDispose(() {
+      _debounce?.cancel();
+      // Closing the sheet inside the debounce window must not lose the last edits.
+      if (_pending.isNotEmpty) {
+        final batch = Map<String, Object?>.of(_pending);
+        _pending.clear();
+        unawaited(
+          api.updateAppSettings(appId, batch).then<void>((_) {}, onError: (_) {}),
+        );
+      }
+    });
     return (await api.getAppSettings(appId)).getOrThrow();
   }
 
@@ -87,7 +98,13 @@ class AppSettingsNotifier extends AsyncNotifier<List<AppSetting>> {
     if (current == null) return;
     state = AsyncData([
       for (final s in current)
-        s.key == key ? s.copyWith(currentValue: value, currentLabel: label, currentLabels: labels) : s
+        s.key == key
+            ? s.copyWith(
+                currentValue: value,
+                currentLabel: label,
+                currentLabels: labels,
+              )
+            : s,
     ]);
     _pending[key] = value;
     _failed.remove(key);
@@ -104,7 +121,12 @@ class AppSettingsNotifier extends AsyncNotifier<List<AppSetting>> {
     final s = state.value?.where((e) => e.key == key).firstOrNull;
     if (s == null || s.defaultValue == null) return;
     final search = s.type == AppSettingType.search || s.type == AppSettingType.multiSearch;
-    edit(key, s.defaultValue!, label: search ? '' : null, labels: search ? const [] : null);
+    edit(
+      key,
+      s.defaultValue!,
+      label: search ? '' : null,
+      labels: search ? const [] : null,
+    );
   }
 
   /// Puts every changed setting back to its default.
@@ -136,18 +158,32 @@ class AppSettingsNotifier extends AsyncNotifier<List<AppSetting>> {
     if (error != null) {
       // Keep what the user typed on screen, with the server's message, until they fix it or retry
       _failed = {...batch, ..._failed};
-      _status(SaveStatus(SaveState.failed, message: error.message, fieldErrors: _fieldMessages(error, batch.keys)));
+      _status(
+        SaveStatus(
+          SaveState.failed,
+          message: error.message,
+          fieldErrors: _fieldMessages(error, batch.keys),
+        ),
+      );
     } else {
       final errors = ref.read(settingsSaveStatusProvider(appId)).fieldErrors;
       if (_pending.isEmpty) {
-        _status(SaveStatus(_failed.isEmpty ? SaveState.saved : SaveState.failed, fieldErrors: errors));
+        _status(
+          SaveStatus(
+            _failed.isEmpty ? SaveState.saved : SaveState.failed,
+            fieldErrors: errors,
+          ),
+        );
         if (_failed.isEmpty) await reload();
       } // refresh labels and dependent values
     }
   }
 
   /// Per-setting messages from a 400 body: `{path,message}` errors whose path is (or ends with) a setting key.
-  static Map<String, String> _fieldMessages(ApiError error, Iterable<String> keys) {
+  static Map<String, String> _fieldMessages(
+    ApiError error,
+    Iterable<String> keys,
+  ) {
     final result = <String, String>{};
     for (final e in error.fieldErrors) {
       final leaf = e.path.split('.').last;
@@ -159,5 +195,6 @@ class AppSettingsNotifier extends AsyncNotifier<List<AppSetting>> {
   }
 }
 
-final appSettingsProvider =
-    AsyncNotifierProvider.autoDispose.family<AppSettingsNotifier, List<AppSetting>, String>(AppSettingsNotifier.new);
+final appSettingsProvider = AsyncNotifierProvider.autoDispose.family<AppSettingsNotifier, List<AppSetting>, String>(
+  AppSettingsNotifier.new,
+);

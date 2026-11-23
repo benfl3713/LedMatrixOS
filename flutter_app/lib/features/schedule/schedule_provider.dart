@@ -41,7 +41,9 @@ class ScheduleStatusNotifier extends AsyncNotifier<ScheduleStatus> {
   }
 }
 
-final scheduleStatusProvider = AsyncNotifierProvider<ScheduleStatusNotifier, ScheduleStatus>(ScheduleStatusNotifier.new);
+final scheduleStatusProvider = AsyncNotifierProvider<ScheduleStatusNotifier, ScheduleStatus>(
+  ScheduleStatusNotifier.new,
+);
 
 // ---------------------------------------------------------------------------
 // Editing the document
@@ -103,7 +105,10 @@ class ScheduleEditor extends AsyncNotifier<ScheduleEditState> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final text = prefs.getString(_lastSavedKey);
-      if (text != null) return ScheduleDocument.fromJson(jsonDecode(text) as Map<String, dynamic>);
+      if (text != null)
+        return ScheduleDocument.fromJson(
+          jsonDecode(text) as Map<String, dynamic>,
+        );
     } catch (e) {
       if (ref.mounted) ref.read(errorBusProvider.notifier).report('Could not load the cached schedule: $e');
     }
@@ -165,7 +170,9 @@ class ScheduleEditor extends AsyncNotifier<ScheduleEditState> {
           final oldName = playlists[index].name;
           playlists[index] = playlist;
           if (oldName != playlist.name) {
-            rules = [for (final r in rules) r.playlistId == oldName ? r.copyWith(playlistId: playlist.name) : r];
+            rules = [
+              for (final r in rules) r.playlistId == oldName ? r.copyWith(playlistId: playlist.name) : r,
+            ];
           }
         }
         return d.copyWith(playlists: playlists, rules: rules);
@@ -180,7 +187,12 @@ class ScheduleEditor extends AsyncNotifier<ScheduleEditState> {
   String ensureSingleAppPlaylist(String appId, {int durationMs = 60000}) {
     final s = _current;
     if (s != null && !s.draft.playlists.any((p) => p.name == appId)) {
-      upsertPlaylist(PlaylistDoc(name: appId, entries: [EntryDoc(appId: appId, durationMs: durationMs)]));
+      upsertPlaylist(
+        PlaylistDoc(
+          name: appId,
+          entries: [EntryDoc(appId: appId, durationMs: durationMs)],
+        ),
+      );
     }
     return appId;
   }
@@ -196,17 +208,37 @@ class ScheduleEditor extends AsyncNotifier<ScheduleEditState> {
     if (!ref.mounted) return false;
     final error = result.errorOrNull;
     if (error != null) {
-      state = AsyncData(s.copyWith(saving: false, errors: error.errors.isNotEmpty ? error.errors : [error.message]));
-      ref.read(errorBusProvider.notifier).report(error.errors.isNotEmpty ? 'Schedule not saved: ${error.errors.length} problem(s)' : error);
+      state = AsyncData(
+        (_current ?? s).copyWith(
+          saving: false,
+          errors: error.errors.isNotEmpty ? error.errors : [error.message],
+        ),
+      );
+      ref.read(errorBusProvider.notifier).report(
+            error.errors.isNotEmpty ? 'Schedule not saved: ${error.errors.length} problem(s)' : error,
+          );
       return false;
     }
     // The device answers with the stored document.
     final doc = result.valueOrNull!;
-    state = AsyncData(s.copyWith(saved: doc, draft: doc, saving: false, errors: const [], fromDevice: true));
+    // Build from what is current now: edits made while the request was in flight stay in the draft.
+    final now = _current ?? s;
+    final edited = !identical(now.draft, s.draft);
+    state = AsyncData(
+      now.copyWith(
+        saved: doc,
+        draft: edited ? now.draft : doc,
+        saving: false,
+        errors: const [],
+        fromDevice: true,
+      ),
+    );
     await _cache(doc);
     ref.invalidate(scheduleStatusProvider);
     return true;
   }
 }
 
-final scheduleEditorProvider = AsyncNotifierProvider<ScheduleEditor, ScheduleEditState>(ScheduleEditor.new);
+final scheduleEditorProvider = AsyncNotifierProvider<ScheduleEditor, ScheduleEditState>(
+  ScheduleEditor.new,
+);

@@ -28,14 +28,26 @@ Future<RuleEditResult?> showRuleEditor(
   required bool isNew,
   required List<PlaylistDoc> playlists,
 }) =>
-    pushEditor<RuleEditResult>(context, RuleEditor(initial: rule, isNew: isNew, playlists: playlists));
+    pushEditor<RuleEditResult>(
+      context,
+      RuleEditor(initial: rule, isNew: isNew, playlists: playlists),
+    );
 
 const _weekOrder = [1, 2, 3, 4, 5, 6, 0];
 const _dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const _dayPresets = <(String, int)>[('Every day', allDaysMask), ('Weekdays', 62), ('Weekends', 65)];
+const _dayPresets = <(String, int)>[
+  ('Every day', allDaysMask),
+  ('Weekdays', 62),
+  ('Weekends', 65),
+];
 
 class RuleEditor extends ConsumerStatefulWidget {
-  const RuleEditor({super.key, required this.initial, required this.isNew, required this.playlists});
+  const RuleEditor({
+    super.key,
+    required this.initial,
+    required this.isNew,
+    required this.playlists,
+  });
 
   final RuleDoc initial;
   final bool isNew;
@@ -49,7 +61,9 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
   late RuleDoc _rule = widget.initial;
   String? _singleApp;
   bool _touched = false;
-  late final TextEditingController _condition = TextEditingController(text: widget.initial.condition ?? '');
+  late final TextEditingController _condition = TextEditingController(
+    text: widget.initial.condition ?? '',
+  );
 
   @override
   void dispose() {
@@ -67,12 +81,16 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: current ~/ 60, minute: current % 60),
-      builder: (context, child) =>
-          MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
     );
     if (picked == null || !mounted) return;
     final text = formatHm(picked.hour * 60 + picked.minute);
-    _change(() => _rule = start ? _rule.copyWith(startTime: text) : _rule.copyWith(endTime: text));
+    _change(
+      () => _rule = start ? _rule.copyWith(startTime: text) : _rule.copyWith(endTime: text),
+    );
   }
 
   void _apply() {
@@ -112,7 +130,10 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
     if (mask == allDaysMask) return 'Every day';
     if (mask == 62) return 'Weekdays';
     if (mask == 65) return 'Weekends';
-    return [for (final d in _weekOrder) if (mask & (1 << d) != 0) _dayNames[d]].join(', ');
+    return [
+      for (final d in _weekOrder)
+        if (mask & (1 << d) != 0) _dayNames[d],
+    ].join(', ');
   }
 
   @override
@@ -122,7 +143,10 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
     final apps = ref.watch(appListProvider).value?.apps ?? const <MatrixApp>[];
     final names = [for (final p in widget.playlists) p.name];
     final playlistValue = _singleApp != null ? null : (_rule.playlistId.isEmpty ? null : _rule.playlistId);
-    final playlistItems = {...names, if (playlistValue != null) playlistValue}.toList();
+    final playlistItems = {
+      ...names,
+      if (playlistValue != null) playlistValue,
+    }.toList();
     final brightness = _rule.brightnessOverride;
     final problem = _problem;
 
@@ -146,7 +170,9 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
                 initialValue: playlistValue,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Playlist'),
-                items: [for (final n in playlistItems) DropdownMenuItem(value: n, child: Text(n))],
+                items: [
+                  for (final n in playlistItems) DropdownMenuItem(value: n, child: Text(n)),
+                ],
                 onChanged: (v) => _change(() {
                   _singleApp = null;
                   if (v != null) _rule = _rule.copyWith(playlistId: v);
@@ -161,7 +187,9 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
                   labelText: 'Or run a single app',
                   helperText: 'Creates a one-entry playlist named after the app.',
                 ),
-                items: [for (final a in apps) DropdownMenuItem(value: a.id, child: Text(a.name))],
+                items: [
+                  for (final a in apps) DropdownMenuItem(value: a.id, child: Text(a.name)),
+                ],
                 onChanged: (v) => _change(() => _singleApp = v),
               ),
             ],
@@ -187,24 +215,28 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
               ),
               const SizedBox(height: Space.md),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   for (final d in _weekOrder)
-                    _DayChip(
-                      key: Key('day-chip-$d'),
-                      label: _dayNames[d],
-                      selected: _rule.appliesOn(d),
-                      onChanged: (on) => _change(() {
-                        final mask = on ? _rule.daysMask | (1 << d) : _rule.daysMask & ~(1 << d);
-                        _rule = _rule.copyWith(daysMask: mask);
-                      }),
+                    Expanded(
+                      child: _DayChip(
+                        key: Key('day-chip-$d'),
+                        label: _dayNames[d],
+                        selected: _rule.appliesOn(d),
+                        onChanged: (on) => _change(() {
+                          final mask = on ? _rule.daysMask | (1 << d) : _rule.daysMask & ~(1 << d);
+                          _rule = _rule.copyWith(daysMask: mask);
+                        }),
+                      ),
                     ),
                 ],
               ),
               if (_rule.daysMask == 0)
                 Padding(
                   padding: const EdgeInsets.only(top: Space.sm),
-                  child: Text('Pick at least one day.', style: TextStyle(color: scheme.error)),
+                  child: Text(
+                    'Pick at least one day.',
+                    style: TextStyle(color: scheme.error),
+                  ),
                 ),
               const SizedBox(height: Space.lg),
               Row(
@@ -216,7 +248,11 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
                       value: _rule.startTime ?? 'Midnight',
                       isSet: _rule.startTime != null,
                       onTap: () => _pickTime(start: true),
-                      onClear: _rule.startTime == null ? null : () => _change(() => _rule = _rule.copyWith(clearStart: true)),
+                      onClear: _rule.startTime == null
+                          ? null
+                          : () => _change(
+                                () => _rule = _rule.copyWith(clearStart: true),
+                              ),
                     ),
                   ),
                   const SizedBox(width: Space.md),
@@ -227,7 +263,11 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
                       value: _rule.endTime ?? 'End of day',
                       isSet: _rule.endTime != null,
                       onTap: () => _pickTime(start: false),
-                      onClear: _rule.endTime == null ? null : () => _change(() => _rule = _rule.copyWith(clearEnd: true)),
+                      onClear: _rule.endTime == null
+                          ? null
+                          : () => _change(
+                                () => _rule = _rule.copyWith(clearEnd: true),
+                              ),
                     ),
                   ),
                 ],
@@ -235,7 +275,10 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
               if (_rule.wraps)
                 Padding(
                   padding: const EdgeInsets.only(top: Space.sm),
-                  child: Text('Runs past midnight into the next day.', style: text.bodySmall?.copyWith(color: scheme.primary)),
+                  child: Text(
+                    'Runs past midnight into the next day.',
+                    style: text.bodySmall?.copyWith(color: scheme.primary),
+                  ),
                 ),
             ],
           ),
@@ -249,7 +292,10 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
               Row(
                 children: [
                   Expanded(child: Text('Priority', style: text.labelLarge)),
-                  Text('${_rule.priority}', style: numericStyle(text.titleSmall)),
+                  Text(
+                    '${_rule.priority}',
+                    style: numericStyle(text.titleSmall),
+                  ),
                 ],
               ),
               Slider(
@@ -265,11 +311,18 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
               SwitchListTile(
                 key: const Key('rule-brightness-switch'),
                 contentPadding: EdgeInsets.zero,
-                title: Text(brightness == null ? 'Brightness override' : 'Brightness override: ${brightnessToPercent(brightness)}%'),
-                subtitle: const Text('Dim or brighten the display while this rule is active.'),
+                title: Text(
+                  brightness == null
+                      ? 'Brightness override'
+                      : 'Brightness override: ${brightnessToPercent(brightness)}%',
+                ),
+                subtitle: const Text(
+                  'Dim or brighten the display while this rule is active.',
+                ),
                 value: brightness != null,
-                onChanged: (on) =>
-                    _change(() => _rule = on ? _rule.copyWith(brightnessOverride: 50) : _rule.copyWith(clearBrightness: true)),
+                onChanged: (on) => _change(
+                  () => _rule = on ? _rule.copyWith(brightnessOverride: 50) : _rule.copyWith(clearBrightness: true),
+                ),
               ),
               if (brightness != null)
                 Slider(
@@ -280,7 +333,11 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
                   divisions: 100,
                   label: '${brightnessToPercent(brightness)}%',
                   semanticFormatterCallback: (v) => 'Brightness ${v.round()} percent',
-                  onChanged: (v) => _change(() => _rule = _rule.copyWith(brightnessOverride: percentToBrightness(v.round()))),
+                  onChanged: (v) => _change(
+                    () => _rule = _rule.copyWith(
+                      brightnessOverride: percentToBrightness(v.round()),
+                    ),
+                  ),
                 ),
             ],
           ),
@@ -305,12 +362,21 @@ class _RuleEditorState extends ConsumerState<RuleEditor> {
                 spacing: 8,
                 runSpacing: 4,
                 children: [
-                  for (final sample in ['spotify_playing', 'line_disrupted:', 'bus_due:', 'ha_state:', 'bin_day', 'road_disrupted:any'])
+                  for (final sample in [
+                    'spotify_playing',
+                    'line_disrupted:',
+                    'bus_due:',
+                    'ha_state:',
+                    'bin_day',
+                    'road_disrupted:any',
+                  ])
                     ActionChip(
                       label: Text(sample),
                       onPressed: () => _change(() {
                         _condition.text = sample;
-                        _condition.selection = TextSelection.collapsed(offset: sample.length);
+                        _condition.selection = TextSelection.collapsed(
+                          offset: sample.length,
+                        );
                       }),
                     ),
                 ],
@@ -334,13 +400,27 @@ class _SummaryBanner extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: Space.lg),
       padding: const EdgeInsets.all(Space.md),
-      decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(Radii.md)),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(Radii.md),
+      ),
       child: Row(
         children: [
-          Icon(Icons.schedule_rounded, color: scheme.onPrimaryContainer, size: 20),
+          Icon(
+            Icons.schedule_rounded,
+            color: scheme.onPrimaryContainer,
+            size: 20,
+          ),
           const SizedBox(width: Space.sm),
           Expanded(
-            child: Text(text, key: const Key('rule-summary'), style: TextStyle(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w600)),
+            child: Text(
+              text,
+              key: const Key('rule-summary'),
+              style: TextStyle(
+                color: scheme.onPrimaryContainer,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -350,7 +430,12 @@ class _SummaryBanner extends StatelessWidget {
 
 /// A round single-letter-ish day toggle with a 48px tap target.
 class _DayChip extends StatelessWidget {
-  const _DayChip({super.key, required this.label, required this.selected, required this.onChanged});
+  const _DayChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onChanged,
+  });
 
   final String label;
   final bool selected;
@@ -367,26 +452,30 @@ class _DayChip extends StatelessWidget {
         onTap: () => onChanged(!selected),
         radius: 26,
         child: SizedBox(
-          width: 42,
           height: 48,
           child: Center(
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 120),
+              constraints: const BoxConstraints(maxWidth: 38, maxHeight: 38),
               width: 38,
               height: 38,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: selected ? scheme.primary : scheme.surfaceContainerHigh,
-                border: Border.all(color: selected ? scheme.primary : scheme.outlineVariant),
+                border: Border.all(
+                  color: selected ? scheme.primary : scheme.outlineVariant,
+                ),
               ),
               child: ExcludeSemantics(
-                child: Text(
-                  label.substring(0, 2),
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelMedium
-                      ?.copyWith(color: selected ? scheme.onPrimary : scheme.onSurfaceVariant),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label.substring(0, 2),
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+                        ),
+                  ),
                 ),
               ),
             ),
@@ -429,7 +518,12 @@ class _TimeTile extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 64),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(Space.md, Space.sm, 4, Space.sm),
+              padding: const EdgeInsets.fromLTRB(
+                Space.md,
+                Space.sm,
+                4,
+                Space.sm,
+              ),
               child: Row(
                 children: [
                   Expanded(
@@ -437,12 +531,21 @@ class _TimeTile extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(label, style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                          Text(
+                            label,
+                            style: text.labelSmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
                           const SizedBox(height: 2),
                           Text(
                             value,
                             overflow: TextOverflow.ellipsis,
-                            style: numericStyle(text.titleMedium?.copyWith(color: isSet ? scheme.onSurface : scheme.onSurfaceVariant)),
+                            style: numericStyle(
+                              text.titleMedium?.copyWith(
+                                color: isSet ? scheme.onSurface : scheme.onSurfaceVariant,
+                              ),
+                            ),
                           ),
                         ],
                       ),

@@ -22,16 +22,36 @@ class FoundDevice {
 }
 
 /// Asks `GET {baseUrl}/api/health` and returns the reading, or null when nothing (or not a LedMatrixOS) answers.
-typedef HealthProbe = Future<Health?> Function(String baseUrl, Duration timeout);
+typedef HealthProbe = Future<Health?> Function(
+  String baseUrl,
+  Duration timeout,
+);
 
 /// Starts a network scan; the stream emits devices as they are found and closes when the scan is done.
 /// Cancelling the subscription stops the scan.
 typedef DeviceScanner = Stream<FoundDevice> Function();
 
 /// The scanner the onboarding screen uses. Tests override this with a canned stream.
-final deviceScannerProvider = Provider<DeviceScanner>((ref) => () => scanForDevices());
+final deviceScannerProvider = Provider<DeviceScanner>(
+  (ref) => () => scanForDevices(),
+);
 
 Future<Health?> httpHealthProbe(String baseUrl, Duration timeout) async {
+  final uri = Uri.parse(baseUrl);
+  if (!kIsWeb) {
+    // Cheap TCP pre-check whose timeout really aborts the connect. Timing out an http request only abandons the
+    // future and leaves the socket connecting, which piles up across a /24 scan and repeated scans.
+    try {
+      final socket = await Socket.connect(
+        uri.host,
+        uri.hasPort ? uri.port : 80,
+        timeout: timeout,
+      );
+      socket.destroy();
+    } catch (_) {
+      return null;
+    }
+  }
   final client = http.Client();
   try {
     final response = await client.get(Uri.parse('$baseUrl/api/health')).timeout(timeout);
@@ -50,7 +70,10 @@ Future<Health?> httpHealthProbe(String baseUrl, Duration timeout) async {
 Future<List<String>> localIPv4Addresses() async {
   if (kIsWeb) return const [];
   try {
-    final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4, includeLoopback: false);
+    final interfaces = await NetworkInterface.list(
+      type: InternetAddressType.IPv4,
+      includeLoopback: false,
+    );
     return [
       for (final i in interfaces)
         for (final a in i.addresses)
@@ -66,7 +89,10 @@ List<String> subnetHosts(String address) {
   final parts = address.split('.');
   if (parts.length != 4) return const [];
   final prefix = parts.take(3).join('.');
-  return [for (var i = 1; i < 255; i++) if ('$prefix.$i' != address) '$prefix.$i'];
+  return [
+    for (var i = 1; i < 255; i++)
+      if ('$prefix.$i' != address) '$prefix.$i',
+  ];
 }
 
 /// Looks for displays: first the well-known names (`ledmatrix.local` and the configured default), then every host on
@@ -75,7 +101,10 @@ List<String> subnetHosts(String address) {
 Stream<FoundDevice> scanForDevices({
   HealthProbe probe = httpHealthProbe,
   Future<List<String>> Function() localAddresses = localIPv4Addresses,
-  List<String> priority = const ['http://ledmatrix.local:$defaultDevicePort', defaultApiUrl],
+  List<String> priority = const [
+    'http://ledmatrix.local:$defaultDevicePort',
+    defaultApiUrl,
+  ],
   int concurrency = 32,
   Duration priorityTimeout = const Duration(seconds: 2),
   Duration scanTimeout = const Duration(milliseconds: 700),
@@ -94,7 +123,9 @@ Stream<FoundDevice> scanForDevices({
   }
 
   Future<void> run() async {
-    await Future.wait([for (final url in priority) check(url, priorityTimeout)]);
+    await Future.wait([
+      for (final url in priority) check(url, priorityTimeout),
+    ]);
     if (cancelled || kIsWeb) return;
     final hosts = <String>{};
     for (final address in await localAddresses()) {
