@@ -17,6 +17,11 @@ class FakeApi implements LedApi {
 
   bool failActivate;
   bool failApps;
+  bool failHealth = false;
+
+  /// When set, power/brightness calls fail.
+  bool failPower = false;
+  bool failBrightness = false;
 
   /// When set, settings updates fail with this error (nothing is applied).
   ApiError? failUpdate;
@@ -108,6 +113,7 @@ class FakeApi implements LedApi {
   @override
   Future<Result<void>> setBrightness(int value) async {
     calls.add('brightness:$value');
+    if (failBrightness) return const Err(ApiError(ApiErrorKind.network, 'Cannot reach the device: boom'));
     brightness = value;
     return const Ok(null);
   }
@@ -115,6 +121,7 @@ class FakeApi implements LedApi {
   @override
   Future<Result<void>> setPower(bool enabled) async {
     calls.add('power:$enabled');
+    if (failPower) return const Err(ApiError(ApiErrorKind.network, 'Cannot reach the device: boom'));
     power = enabled;
     return const Ok(null);
   }
@@ -131,8 +138,10 @@ class FakeApi implements LedApi {
   }
 
   @override
-  Future<Result<Health>> getHealth() async => const Ok(
-      Health(status: 'ok', activeApp: 'clock', isEnabled: true, width: 256, height: 64, uptimeSeconds: 3700));
+  Future<Result<Health>> getHealth() async {
+    if (failHealth) return const Err(ApiError(ApiErrorKind.network, 'Cannot reach the device: boom'));
+    return Ok(Health(status: 'ok', activeApp: active, isEnabled: power, width: 256, height: 64, uptimeSeconds: 3700));
+  }
 
   // Schedule ---------------------------------------------------------------
 
@@ -383,6 +392,7 @@ Widget testApp(FakeApi api) => ProviderScope(
       retry: _noRetry,
       overrides: [
         apiProvider.overrideWithValue(api),
+        apiFactoryProvider.overrideWithValue((_) => api),
         pollIntervalProvider.overrideWithValue(null),
         previewFeedProvider.overrideWith((ref) => Stream.value(const PreviewUpdate(connected: true))),
       ],
