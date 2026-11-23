@@ -1,4 +1,3 @@
-import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,15 +16,13 @@ class LedMatrixApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return DynamicColorBuilder(
-      builder: (lightDynamic, darkDynamic) => MaterialApp.router(
-        title: 'LED Matrix',
-        debugShowCheckedModeBanner: false,
-        theme: buildTheme(Brightness.light, dynamicScheme: lightDynamic?.harmonized()),
-        darkTheme: buildTheme(Brightness.dark, dynamicScheme: darkDynamic?.harmonized()),
-        themeMode: ThemeMode.system,
-        routerConfig: ref.watch(routerProvider),
-      ),
+    return MaterialApp.router(
+      title: 'LED Matrix',
+      debugShowCheckedModeBanner: false,
+      theme: buildTheme(Brightness.light),
+      darkTheme: buildTheme(Brightness.dark),
+      themeMode: ThemeMode.dark, // night-display identity; the light theme is kept for future toggling
+      routerConfig: ref.watch(routerProvider),
     );
   }
 }
