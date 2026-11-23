@@ -24,7 +24,7 @@ namespace LedMatrixOS.Apps;
 /// </summary>
 [LegacySettingKey("stationSearch")]
 [LegacySettingKey("stationSelect", "stationId")]
-[AppMeta(AppCategory.Clocks, "Time, weather and commute for the morning")]
+[AppMeta(AppCategory.Clocks, "Time, weather and commute for the morning", "morning", "summary", "start", "day")]
 public class MorningBriefingApp : WidgetApp
 {
     public override string Id => "morning-briefing";

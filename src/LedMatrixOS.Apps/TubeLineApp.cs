@@ -17,7 +17,7 @@ namespace LedMatrixOS.Apps;
 /// pulses when something is wrong, live trains glide along the stations, and the bottom strip tells you where the line runs, which train
 /// is next, or what the disruption is.
 /// </summary>
-[AppMeta(AppCategory.Travel, "Status and disruption for one Tube line")]
+[AppMeta(AppCategory.Travel, "Status and disruption for one Tube line", "underground", "metro", "train", "london", "line")]
 public sealed class TubeLineApp : WidgetApp
 {
     private static readonly string[] SupportedLineIds =

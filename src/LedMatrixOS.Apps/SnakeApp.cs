@@ -17,7 +17,7 @@ public enum SnakeMode { Title, Playing, Dead, Attract }
 /// 20 seconds a simple pathfinding bot plays so the display is never dead. The high score is an Advanced setting, so it is persisted.
 /// Everything is preallocated: the body is a ring buffer, the bot's search uses fixed arrays, text is cached in <see cref="TextRun"/>s.
 /// </summary>
-[AppMeta(AppCategory.Games, "Classic snake, played with the gamepad")]
+[AppMeta(AppCategory.Games, "Classic snake, played with the gamepad", "game", "arcade", "retro")]
 public sealed class SnakeApp : SettingsAppBase, IInputConsumer
 {
     public const int Cell = 2;

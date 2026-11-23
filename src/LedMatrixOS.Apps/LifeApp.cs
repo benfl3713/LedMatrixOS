@@ -10,7 +10,7 @@ namespace LedMatrixOS.Apps;
 /// Cells are drawn straight into the frame buffer. When the grid dies out, settles into a still life or short loop, or simply
 /// runs for long enough, it is reseeded so the display never goes stale.
 /// </summary>
-[AppMeta(AppCategory.Ambient, "Conway's Game of Life")]
+[AppMeta(AppCategory.Ambient, "Conway's Game of Life", "game", "conway", "cellular", "automaton")]
 public sealed class LifeApp : WidgetApp
 {
     public const string Conway = "Conway";

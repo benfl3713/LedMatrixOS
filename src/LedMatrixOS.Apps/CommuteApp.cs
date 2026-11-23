@@ -19,7 +19,7 @@ namespace LedMatrixOS.Apps;
 /// </summary>
 [LegacySettingKey("stationSearch")]
 [LegacySettingKey("stationSelect", "stationId")]
-[AppMeta(AppCategory.Travel, "When to leave to catch your train")]
+[AppMeta(AppCategory.Travel, "When to leave to catch your train", "train", "leave", "journey", "work")]
 public class CommuteApp : WidgetApp
 {
     public override string Id => "commute";

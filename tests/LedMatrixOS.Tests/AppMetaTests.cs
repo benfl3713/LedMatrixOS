@@ -19,4 +19,16 @@ public sealed class AppMetaTests
             Assert.True(meta.Description.Length <= 50, $"{type.Name} description is longer than 50 chars");
         }
     }
+
+    [Fact]
+    public void KeywordsReachTheCatalogueAndSerialise()
+    {
+        var meta = typeof(RailDeparturesApp).GetCustomAttribute<AppMetaAttribute>(false)!;
+        Assert.Contains("train", meta.Keywords);
+
+        var info = new AppInfo("rail-departures", "Rail Departures", true, meta.Category, meta.Description, meta.Keywords);
+        var json = System.Text.Json.JsonSerializer.Serialize(new { info.Id, keywords = info.Keywords ?? [] });
+        Assert.Contains("\"keywords\":[", json);
+        Assert.Contains("\"train\"", json);
+    }
 }

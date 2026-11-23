@@ -9,7 +9,7 @@ namespace LedMatrixOS.Apps;
 /// Hypnotic demoscene shader: counter-rotating log-spiral vortices over a drifting plasma that warps their arms, a cyclic colour
 /// palette with a complementary hue in the gaps, glowing cores, comets that trail along the spiral, and a bloom pass.
 /// </summary>
-[AppMeta(AppCategory.Ambient, "Hypnotic rainbow spiral")]
+[AppMeta(AppCategory.Ambient, "Hypnotic rainbow spiral", "colour", "color", "hypnotic", "swirl")]
 public sealed class RainbowSpiralApp : WidgetApp
 {
     public override string Id => "rainbow-spiral";

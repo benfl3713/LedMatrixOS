@@ -6,7 +6,7 @@ using LedMatrixOS.Graphics.UI;
 namespace LedMatrixOS.Apps;
 
 /// <summary>A calm fish tank: pixel fish, bubbles and swaying seaweed. Fully deterministic for a given time.</summary>
-[AppMeta(AppCategory.Ambient, "Fish swimming in a tank")]
+[AppMeta(AppCategory.Ambient, "Fish swimming in a tank", "fish", "tank", "water")]
 public sealed class AquariumApp : WidgetApp
 {
     private AquariumField? _field;

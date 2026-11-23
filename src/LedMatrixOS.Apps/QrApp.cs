@@ -12,7 +12,7 @@ namespace LedMatrixOS.Apps;
 /// standard <c>WIFI:T:WPA;S:ssid;P:password;;</c> payload that phone cameras offer to join. The Wi-Fi password is configuration only
 /// (<c>Qr:WifiPassword</c>, picked up on activation) so it can never be read back through the settings API.
 /// </summary>
-[AppMeta(AppCategory.Info, "Show a QR code for a link or Wi-Fi")]
+[AppMeta(AppCategory.Info, "Show a QR code for a link or Wi-Fi", "code", "link", "wifi", "scan", "barcode")]
 public sealed class QrApp : WidgetApp
 {
     private const int MaxLine = 40;

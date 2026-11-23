@@ -12,7 +12,7 @@ namespace LedMatrixOS.Apps;
 /// from <see cref="AudioDataService"/> (the phone microphone stream); with no audio arriving a synthetic beat at the configured tempo keeps the
 /// show going. Fire flares on every beat and the bursts go off on them; <see cref="Beat"/> is public so other code can reuse the pulse.
 /// </summary>
-[AppMeta(AppCategory.Ambient, "Flashing lights and effects for parties")]
+[AppMeta(AppCategory.Ambient, "Flashing lights and effects for parties", "party", "disco", "lights", "strobe", "celebration")]
 public sealed class PartyModeApp : WidgetApp
 {
     private static readonly string[] Cycle = ["Bars", "Fire", "Bursts"];

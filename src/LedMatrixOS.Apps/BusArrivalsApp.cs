@@ -18,7 +18,7 @@ namespace LedMatrixOS.Apps;
 /// </summary>
 [LegacySettingKey("stopSearch")]
 [LegacySettingKey("stopSelect", "stopIds")]
-[AppMeta(AppCategory.Travel, "Live arrivals at your bus stop")]
+[AppMeta(AppCategory.Travel, "Live arrivals at your bus stop", "stop", "transport", "tfl", "bus stop")]
 public class BusArrivalsApp : WidgetApp
 {
     public override string Id => "bus-arrivals";

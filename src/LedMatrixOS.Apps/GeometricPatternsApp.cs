@@ -9,7 +9,7 @@ namespace LedMatrixOS.Apps;
 /// Hypnotic neon geometry: breathing spirographs, a twisting polygon tunnel, Lissajous figures, a mirrored kaleidoscope and a rippling
 /// hex tessellation. In "auto" the styles take turns, blending into each other with a random screen transition.
 /// </summary>
-[AppMeta(AppCategory.Ambient, "Shifting geometric patterns")]
+[AppMeta(AppCategory.Ambient, "Shifting geometric patterns", "shapes", "pattern", "art")]
 public sealed class GeometricPatternsApp : WidgetApp
 {
     private GeometricField? _field;
