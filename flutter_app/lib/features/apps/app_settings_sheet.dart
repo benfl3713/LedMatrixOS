@@ -5,6 +5,7 @@ import '../../api/models.dart';
 import '../../core/app_icons.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
+import 'sheet_parts.dart';
 import 'app_settings_provider.dart';
 import 'color_picker.dart';
 import 'named_colors.dart';
@@ -14,8 +15,10 @@ import 'structured_settings.dart';
 
 /// Opens the settings of [app] in a draggable sheet. Works for active and inactive apps.
 Future<void> showAppSettingsSheet(BuildContext context, MatrixApp app) {
+  // Root navigator: the sheet must cover the bottom navigation bar, not sit behind it.
   return showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     showDragHandle: true,
     useSafeArea: true,
@@ -24,16 +27,19 @@ Future<void> showAppSettingsSheet(BuildContext context, MatrixApp app) {
       initialChildSize: 0.75,
       minChildSize: 0.4,
       maxChildSize: 0.95,
-      builder: (context, controller) => AppSettingsView(app: app, scrollController: controller),
+      builder: (context, controller) => AppSettingsView(app: app, scrollController: controller, showPreview: true),
     ),
   );
 }
 
 class AppSettingsView extends ConsumerWidget {
-  const AppSettingsView({super.key, required this.app, this.scrollController});
+  const AppSettingsView({super.key, required this.app, this.scrollController, this.showPreview = false});
 
   final MatrixApp app;
   final ScrollController? scrollController;
+
+  /// Shows the live matrix (or a "show on display" action) above the settings. Off in tests that have no preview feed.
+  final bool showPreview;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -48,19 +54,15 @@ class AppSettingsView extends ConsumerWidget {
       children: [
         Row(
           children: [
-            Icon(iconForApp(app.id), size: 32),
+            Icon(iconForApp(app.id), size: 32, color: Theme.of(context).colorScheme.primary),
             const SizedBox(width: 12),
             Expanded(child: Text(app.name, style: Theme.of(context).textTheme.titleLarge)),
-            if (isActive)
-              const Chip(label: Text('Active'), avatar: Icon(Icons.check_circle_rounded, size: 18))
-            else
-              FilledButton.icon(
-                onPressed: () => ref.read(appListProvider.notifier).activate(app.id),
-                icon: const Icon(Icons.play_arrow_rounded),
-                label: const Text('Activate'),
-              ),
+            if (isActive) const OnDisplayBadge(),
           ],
         ),
+        const SizedBox(height: 12),
+        if (isActive && showPreview) const SheetPreview(),
+        if (!isActive) ShowOnDisplayCard(app: app, withPreviewHint: showPreview),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -344,21 +346,10 @@ class SettingTile extends StatelessWidget {
 
       case AppSettingType.select:
         final options = s.options ?? const <String>[];
-        final current = s.currentValue?.toString();
         if (options.isEmpty) return _TextSetting(setting: s, onSubmitted: onChanged);
         if (looksLikeColourSelect(options)) return ColourSelect(setting: s, options: options, onChanged: onChanged);
         if (options.length > searchableSelectThreshold) return SearchableSelect(setting: s, options: options, onChanged: onChanged);
-        return DropdownButtonFormField<String>(
-          // initialValue is only read on creation; re-key so changed options/values rebuild it.
-          key: ValueKey('${s.key}|$current|${options.join(',')}'),
-          initialValue: options.contains(current) ? current : null,
-          isExpanded: true,
-          decoration: InputDecoration(labelText: s.name, helperText: s.description.isEmpty ? null : s.description, helperMaxLines: 6, border: const OutlineInputBorder()),
-          items: [for (final o in options) DropdownMenuItem(value: o, child: Text(o))],
-          onChanged: (v) {
-            if (v != null) onChanged(v);
-          },
-        );
+        return ChipSelect(setting: s, options: options, onChanged: onChanged);
 
       case AppSettingType.search:
       case AppSettingType.multiSearch:

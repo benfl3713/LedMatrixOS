@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/models.dart';
 import '../../core/app_icons.dart';
 import '../../core/providers.dart';
+import '../../core/tokens.dart';
 import '../../core/widgets.dart';
 import 'app_settings_sheet.dart';
+import 'sheet_parts.dart';
 
 class AppsPage extends ConsumerStatefulWidget {
   const AppsPage({super.key});
@@ -24,84 +27,51 @@ class _AppsPageState extends ConsumerState<AppsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Apps')),
       body: apps.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const _GridSkeleton(),
         error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(appListProvider)),
         data: (list) {
           final q = _query.trim().toLowerCase();
           final shown = q.isEmpty
               ? list.apps
               : list.apps.where((a) => a.name.toLowerCase().contains(q) || a.id.toLowerCase().contains(q)).toList();
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: SearchBar(
-                  hintText: 'Search apps',
-                  leading: const Icon(Icons.search),
-                  onChanged: (v) => setState(() => _query = v),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Card(
-                  margin: EdgeInsets.zero,
-                  child: ListTile(
-                    key: const Key('screens-entry'),
-                    leading: const Icon(Icons.dashboard_customize_rounded),
-                    title: const Text('Screens'),
-                    subtitle: const Text('Build your own screens'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/apps/screens'),
+          return RefreshIndicator(
+            onRefresh: () => ref.read(appListProvider.notifier).refresh(),
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, Space.md),
+                  sliver: SliverToBoxAdapter(
+                    child: SearchBar(
+                      hintText: 'Search apps',
+                      leading: const Icon(Icons.search),
+                      onChanged: (v) => setState(() => _query = v),
+                    ),
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Card(
-                  margin: EdgeInsets.zero,
-                  child: ListTile(
-                    key: const Key('media-entry'),
-                    leading: const Icon(Icons.photo_library_rounded),
-                    title: const Text('Media'),
-                    subtitle: const Text('Pictures, GIFs and videos'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/apps/media'),
+                if (q.isEmpty) const SliverPadding(padding: EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.md), sliver: SliverToBoxAdapter(child: _FeatureRow())),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 0),
+                  sliver: SliverToBoxAdapter(child: SectionHeader(q.isEmpty ? 'All apps' : 'Results')),
+                ),
+                if (shown.isEmpty)
+                  const SliverFillRemaining(hasScrollBody: false, child: Padding(padding: EdgeInsets.all(48), child: Center(child: Text('No apps match.'))))
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.xl),
+                    sliver: SliverGrid.builder(
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 200,
+                        mainAxisExtent: 132,
+                        crossAxisSpacing: Space.md,
+                        mainAxisSpacing: Space.md,
+                      ),
+                      itemCount: shown.length,
+                      itemBuilder: (context, i) => _AppTile(app: shown[i], isActive: shown[i].id == list.activeApp),
+                    ),
                   ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Card(
-                  margin: EdgeInsets.zero,
-                  child: ListTile(
-                    key: const Key('gamepad-entry'),
-                    leading: const Icon(Icons.sports_esports_rounded),
-                    title: const Text('Gamepad'),
-                    subtitle: const Text('Control games on the display'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/gamepad'),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () => ref.read(appListProvider.notifier).refresh(),
-                  child: shown.isEmpty
-                      ? ListView(children: const [Padding(padding: EdgeInsets.all(48), child: Center(child: Text('No apps match.')))])
-                      : GridView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 200,
-                            mainAxisExtent: 148,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                          ),
-                          itemCount: shown.length,
-                          itemBuilder: (context, i) => _AppTile(app: shown[i], isActive: shown[i].id == list.activeApp),
-                        ),
-                ),
-              ),
-            ],
+              ],
+            ),
           );
         },
       ),
@@ -109,47 +79,155 @@ class _AppsPageState extends ConsumerState<AppsPage> {
   }
 }
 
+class _GridSkeleton extends StatelessWidget {
+  const _GridSkeleton();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: GridView.count(
+          crossAxisCount: 2,
+          mainAxisSpacing: Space.md,
+          crossAxisSpacing: Space.md,
+          childAspectRatio: 1.4,
+          children: [for (var i = 0; i < 6; i++) const Skeleton(radius: Radii.md)],
+        ),
+      );
+}
+
+/// Screens, Media and Gamepad as one compact row of cards.
+class _FeatureRow extends StatelessWidget {
+  const _FeatureRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: _FeatureCard(key: const Key('screens-entry'), icon: Icons.dashboard_customize_rounded, label: 'Screens', onTap: () => context.push('/apps/screens'))),
+        const SizedBox(width: Space.sm),
+        Expanded(child: _FeatureCard(key: const Key('media-entry'), icon: Icons.photo_library_rounded, label: 'Media', onTap: () => context.push('/apps/media'))),
+        const SizedBox(width: Space.sm),
+        Expanded(child: _FeatureCard(key: const Key('gamepad-entry'), icon: Icons.sports_esports_rounded, label: 'Gamepad', onTap: () => context.push('/gamepad'))),
+      ],
+    );
+  }
+}
+
+class _FeatureCard extends StatelessWidget {
+  const _FeatureCard({super.key, required this.icon, required this.label, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      label: label,
+      child: ExcludeSemantics(
+        child: Material(
+          color: scheme.surfaceContainerLow,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.md), side: BorderSide(color: scheme.outlineVariant)),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(Radii.md),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Space.md, horizontal: Space.xs),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: scheme.tertiary, size: 26),
+                  const SizedBox(height: Space.xs),
+                  Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.labelLarge),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tap opens the app's detail sheet, long press (or the Show button) puts it on the display.
 class _AppTile extends ConsumerWidget {
   const _AppTile({required this.app, required this.isActive});
 
   final MatrixApp app;
   final bool isActive;
 
+  void _activate(WidgetRef ref) => ref.read(appListProvider.notifier).activate(app.id);
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    return Card(
-      color: isActive ? scheme.primaryContainer : null,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        key: Key('app-tile-${app.id}'),
-        // Tapping configures; the play button activates.
-        onTap: () => showAppSettingsSheet(context, app),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 4, 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(iconForApp(app.id), size: 32, color: isActive ? scheme.onPrimaryContainer : scheme.primary),
-              const Spacer(),
-              Text(app.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      isActive ? 'Active' : (app.hasSettings ? 'Tap to configure' : 'No settings'),
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
+    final text = Theme.of(context).textTheme;
+    return Semantics(
+      button: true,
+      selected: isActive,
+      label: isActive ? '${app.name}, on display' : app.name,
+      hint: 'Opens details. Long press to show on display.',
+      child: ExcludeSemantics(
+        excluding: false,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(Radii.md),
+            boxShadow: [if (isActive) BoxShadow(color: scheme.primary.withValues(alpha: 0.22), blurRadius: 18, spreadRadius: -2)],
+          ),
+          child: Material(
+            color: isActive ? scheme.primaryContainer : scheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(Radii.md),
+              side: BorderSide(color: isActive ? scheme.primary : scheme.outlineVariant, width: isActive ? 1.5 : 1),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              key: Key('app-tile-${app.id}'),
+              onTap: () => showAppSettingsSheet(context, app),
+              onLongPress: isActive
+                  ? null
+                  : () {
+                      HapticFeedback.mediumImpact();
+                      _activate(ref);
+                    },
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(Space.md, Space.md, Space.md, Space.sm),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(iconForApp(app.id), size: 28, color: isActive ? scheme.primary : scheme.onSurfaceVariant),
+                        const Spacer(),
+                        if (app.hasSettings) Icon(Icons.tune_rounded, size: 16, color: scheme.onSurfaceVariant),
+                      ],
                     ),
-                  ),
-                  IconButton(
-                    key: Key('activate-${app.id}'),
-                    tooltip: 'Activate ${app.name}',
-                    onPressed: isActive ? null : () => ref.read(appListProvider.notifier).activate(app.id),
-                    icon: const Icon(Icons.play_circle_rounded),
-                  ),
-                ],
+                    const Spacer(),
+                    Text(app.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.titleSmall),
+                    const SizedBox(height: Space.xs),
+                    if (isActive)
+                      const Align(alignment: Alignment.centerLeft, child: OnDisplayBadge())
+                    else
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          key: Key('activate-${app.id}'),
+                          onPressed: () => _activate(ref),
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(0, 32),
+                            padding: const EdgeInsets.symmetric(horizontal: Space.sm),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                          label: const Text('Show'),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
         ),
       ),

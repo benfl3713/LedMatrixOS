@@ -3,8 +3,53 @@ import 'package:flutter/material.dart';
 import '../../api/models.dart';
 import 'named_colors.dart';
 
-/// Selects with more options than this open a searchable picker instead of a dropdown.
-const searchableSelectThreshold = 8;
+/// Selects with more options than this open a searchable picker; smaller sets are shown as chips.
+const searchableSelectThreshold = 12;
+
+/// A small fixed set of options as choice chips: every option is visible and one tap picks it.
+class ChipSelect extends StatelessWidget {
+  const ChipSelect({super.key, required this.setting, required this.options, required this.onChanged});
+
+  final AppSetting setting;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = setting;
+    final theme = Theme.of(context);
+    final current = s.currentValue?.toString();
+    return Semantics(
+      container: true,
+      label: s.name,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(s.name, style: theme.textTheme.bodyLarge),
+          if (s.description.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(s.description, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final o in options)
+                ChoiceChip(
+                  key: Key('chip-${s.key}-$o'),
+                  label: Text(o),
+                  selected: o == current,
+                  onSelected: (_) => onChanged(o),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// Looks like a dropdown, opens a bottom sheet with a search field and the filtered options.
 class SearchableSelect extends StatelessWidget {
@@ -23,6 +68,7 @@ class SearchableSelect extends StatelessWidget {
       onTap: () async {
         final picked = await showModalBottomSheet<String>(
           context: context,
+          useRootNavigator: true,
           isScrollControlled: true,
           useSafeArea: true,
           showDragHandle: true,

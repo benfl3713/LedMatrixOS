@@ -302,6 +302,7 @@ class _TransitionRow extends ConsumerWidget {
   void _showSheet(BuildContext context, WidgetRef ref, TransitionList t) {
     showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       builder: (ctx) => Consumer(
         builder: (ctx, ref, _) {
@@ -340,8 +341,8 @@ class _QuickSwitch extends ConsumerWidget {
 
   final AppList list;
 
-  static const _tileWidth = 96.0;
-  static const _tileHeight = 78.0;
+  static const _tileWidth = 104.0;
+  static const _tileHeight = 96.0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -414,7 +415,7 @@ class _AppChip extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     name,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -441,11 +442,11 @@ class _QuickSwitchSkeleton extends StatelessWidget {
           SectionHeader('Quick switch'),
           Row(
             children: [
-              Skeleton(height: 78, width: 96, radius: Radii.md),
+              Skeleton(height: 96, width: 104, radius: Radii.md),
               SizedBox(width: Space.sm),
-              Skeleton(height: 78, width: 96, radius: Radii.md),
+              Skeleton(height: 96, width: 104, radius: Radii.md),
               SizedBox(width: Space.sm),
-              Skeleton(height: 78, width: 96, radius: Radii.md),
+              Skeleton(height: 96, width: 104, radius: Radii.md),
             ],
           ),
         ],

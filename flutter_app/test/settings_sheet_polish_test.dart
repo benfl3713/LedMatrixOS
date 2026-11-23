@@ -173,7 +173,7 @@ void main() {
   });
 
   group('select pickers', () {
-    final many = [for (var i = 1; i <= 12; i++) 'Option$i'];
+    final many = [for (var i = 1; i <= 16; i++) 'Option$i'];
 
     testWidgets('a long Select opens a searchable list', (tester) async {
       final api = FakeApi();
@@ -185,7 +185,7 @@ void main() {
       expect(find.text('Which one'), findsOneWidget);
       await tester.tap(find.byKey(const Key('select-mode')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('option-Option12')), findsOneWidget);
+      expect(find.byKey(const Key('option-Option16')), findsOneWidget);
 
       await tester.enterText(find.byKey(const Key('option-search')), 'tion1');
       await tester.pumpAndSettle();
@@ -198,11 +198,12 @@ void main() {
       expect(api.settingUpdates.single, {'mode': 'Option11'});
     });
 
-    testWidgets('a short Select stays a dropdown', (tester) async {
+    testWidgets('a short Select shows choice chips', (tester) async {
       await _open(tester, FakeApi(), [
         const AppSetting(key: 'mode', name: 'Mode', type: AppSettingType.select, currentValue: 'a', options: ['a', 'b']),
       ]);
-      expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+      expect(find.byType(DropdownButtonFormField<String>), findsNothing);
+      expect(find.byType(ChoiceChip), findsNWidgets(2));
     });
 
     testWidgets('a colour-name Select shows swatches and sends the name', (tester) async {
