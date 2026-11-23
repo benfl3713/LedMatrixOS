@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/media_models.dart';
 import '../../core/providers.dart';
+import '../../core/tokens.dart';
 import '../../core/widgets.dart';
 import 'media_provider.dart';
 
@@ -36,6 +37,7 @@ class MediaPage extends ConsumerWidget {
   Future<MediaSource?> _chooseSource(BuildContext context) {
     return showModalBottomSheet<MediaSource>(
       context: context,
+      useRootNavigator: true,
       showDragHandle: true,
       builder: (context) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -70,7 +72,7 @@ class MediaPage extends ConsumerWidget {
         label: const Text('Upload'),
       ),
       body: media.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const _MediaSkeleton(),
         error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(mediaListProvider)),
         data: (items) => RefreshIndicator(
           onRefresh: () => ref.read(mediaListProvider.notifier).refresh(),
@@ -79,7 +81,10 @@ class MediaPage extends ConsumerWidget {
             slivers: [
               SliverToBoxAdapter(child: _Header(caps: caps, upload: upload, hasItems: items.isNotEmpty)),
               if (items.isEmpty)
-                const SliverFillRemaining(hasScrollBody: false, child: _EmptyState())
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: _EmptyState(onUpload: upload == null ? () => _upload(context, ref, caps) : null)),
+                )
               else
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
@@ -119,7 +124,9 @@ class _Header extends ConsumerWidget {
         children: [
           FilledButton.icon(
             key: const Key('media-play-all'),
-            onPressed: () async {
+            onPressed: !hasItems
+                ? null
+                : () async {
               final ok = await ref.read(mediaListProvider.notifier).playAll();
               if (ok && context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Playing media on the display')));
@@ -163,26 +170,42 @@ class _Header extends ConsumerWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  const _EmptyState({this.onUpload});
+
+  final VoidCallback? onUpload;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.photo_library_outlined, size: 56, color: scheme.onSurfaceVariant),
-          const SizedBox(height: 12),
-          Text('No media yet', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text('Upload a picture or GIF to show it on the display.',
-              textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => EmptyState(
+        icon: Icons.photo_library_outlined,
+        title: 'No media yet',
+        message: 'Upload a picture or GIF and it can play on the display, scaled to fit the panel.',
+        actionLabel: 'Upload your first picture',
+        actionIcon: Icons.upload_rounded,
+        actionKey: const Key('media-empty-upload'),
+        onAction: onUpload,
+      );
+}
+
+/// Placeholder grid while the library loads.
+class _MediaSkeleton extends StatelessWidget {
+  const _MediaSkeleton();
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        label: 'Loading media',
+        child: GridView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 180,
+            mainAxisExtent: 150,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+          ),
+          itemCount: 6,
+          itemBuilder: (context, i) => const Skeleton(height: 150, radius: Radii.lg),
+        ),
+      );
 }
 
 class _MediaTile extends ConsumerWidget {
@@ -208,11 +231,13 @@ class _MediaTile extends ConsumerWidget {
                 fit: StackFit.expand,
                 children: [
                   ColoredBox(
-                    color: Colors.black,
+                    color: Brand.panel,
                     child: Image.network(
                       api.mediaThumbUrl(item.id),
                       fit: BoxFit.contain,
                       filterQuality: FilterQuality.none,
+                      loadingBuilder: (context, child, progress) =>
+                          progress == null ? child : const Skeleton(radius: 0),
                       errorBuilder: (_, __, ___) => Icon(Icons.broken_image_outlined, color: scheme.onSurfaceVariant),
                     ),
                   ),
@@ -254,6 +279,7 @@ class _MediaTile extends ConsumerWidget {
 void _showActions(BuildContext context, WidgetRef ref, MediaItem item) {
   showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     showDragHandle: true,
     builder: (sheetContext) => SafeArea(
       child: Column(

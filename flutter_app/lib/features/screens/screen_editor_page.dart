@@ -39,38 +39,67 @@ class _ScreenEditorPageState extends ConsumerState<ScreenEditorPage> {
     // After a failed save, open the first node that has a problem.
     ref.listen(screenEditorProvider(widget.id), (previous, next) {
       final s = next.value;
-      if (s == null || s.errors.isEmpty || identical(previous?.value?.errors, s.errors)) return;
+      if (s == null ||
+          s.errors.isEmpty ||
+          identical(previous?.value?.errors, s.errors)) {
+        return;
+      }
       final first = s.placed.byNode.keys.firstOrNull;
       if (first != null && _selected == null) setState(() => _selected = first);
     });
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(state == null || state.draft.name.isEmpty ? 'Screen' : state.draft.name),
-        actions: [
-          if (state != null) ...[
-            IconButton(
-              key: const Key('delete-screen'),
-              tooltip: 'Delete screen',
-              onPressed: () => _confirmDelete(context, notifier, state),
-              icon: const Icon(Icons.delete_outline_rounded),
+    return PopScope(
+        canPop: _allowPop || !(state?.dirty ?? false),
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _confirmLeave(context);
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(state == null || state.draft.name.isEmpty
+                ? 'Screen'
+                : state.draft.name),
+            actions: [
+              if (state != null) ...[
+                IconButton(
+                  key: const Key('delete-screen'),
+                  tooltip: 'Delete screen',
+                  onPressed: () => _confirmDelete(context, notifier, state),
+                  icon: const Icon(Icons.delete_outline_rounded),
+                ),
+              ],
+            ],
+          ),
+          body: editor.when(
+            loading: () => const ListSkeleton(rows: 4, rowHeight: 80),
+            error: (e, _) => ErrorView(error: e, onRetry: notifier.reload),
+            data: (s) => schema.when(
+              loading: () => const ListSkeleton(rows: 4, rowHeight: 80),
+              error: (e, _) => ErrorView(
+                  error: e,
+                  onRetry: () => ref.invalidate(screenSchemaProvider)),
+              data: (sch) => _body(context, s, sch, notifier),
             ),
-          ],
-        ],
-      ),
-      body: editor.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ErrorView(error: e, onRetry: notifier.reload),
-        data: (s) => schema.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(screenSchemaProvider)),
-          data: (sch) => _body(context, s, sch, notifier),
-        ),
-      ),
-    );
+          ),
+        ));
   }
 
-  Widget _body(BuildContext context, ScreenEditState s, ScreenSchema schema, ScreenEditor notifier) {
+  bool _allowPop = false;
+
+  Future<void> _confirmLeave(BuildContext context) async {
+    final leave = await confirmDestructive(
+      context,
+      title: 'Discard your changes?',
+      message: 'This screen has edits that are not saved to the device.',
+      confirmLabel: 'Discard',
+      confirmKey: const Key('leave-discard'),
+    );
+    if (!leave || !context.mounted) return;
+    setState(() => _allowPop = true);
+    context.pop();
+  }
+
+  Widget _body(BuildContext context, ScreenEditState s, ScreenSchema schema,
+      ScreenEditor notifier) {
     _name ??= TextEditingController(text: s.draft.name);
     final placed = s.placed;
     final paths = nodePaths(s.draft.root);
@@ -83,8 +112,13 @@ class _ScreenEditorPageState extends ConsumerState<ScreenEditorPage> {
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 8),
           child: Text(
-            s.dirty ? 'Preview shows what is on the device: Save, then Activate, to see your edits.' : 'Preview shows the active app.',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
+            s.dirty
+                ? 'Preview shows what is on the device: Save, then Activate, to see your edits.'
+                : 'Preview shows the active app.',
+            style: Theme.of(context)
+                .textTheme
+                .labelSmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ),
         TextField(
@@ -94,7 +128,6 @@ class _ScreenEditorPageState extends ConsumerState<ScreenEditorPage> {
             labelText: 'Name',
             helperText: 'id: ${s.draft.id}',
             errorText: placed.name.isEmpty ? null : placed.name.join('; '),
-            border: const OutlineInputBorder(),
           ),
           onChanged: notifier.setName,
         ),
@@ -106,7 +139,10 @@ class _ScreenEditorPageState extends ConsumerState<ScreenEditorPage> {
                 key: const Key('save-screen'),
                 onPressed: s.saving || !s.dirty ? null : () => notifier.save(),
                 icon: s.saving
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.save_rounded),
                 label: Text(s.isNew ? 'Save new screen' : 'Save'),
               ),
@@ -145,12 +181,13 @@ class _ScreenEditorPageState extends ConsumerState<ScreenEditorPage> {
               color: scheme.errorContainer,
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: Text(placed.general.join('\n'), style: TextStyle(color: scheme.onErrorContainer)),
+                child: Text(placed.general.join('\n'),
+                    style: TextStyle(color: scheme.onErrorContainer)),
               ),
             ),
           ),
         const SizedBox(height: 12),
-        Text('Layout', style: Theme.of(context).textTheme.titleMedium),
+        const SectionHeader('Layout'),
         const SizedBox(height: 4),
         _TreeNode(
           node: s.draft.root,
@@ -164,30 +201,34 @@ class _ScreenEditorPageState extends ConsumerState<ScreenEditorPage> {
           schema: schema,
           notifier: notifier,
           selected: _selected,
-          onSelect: (n) => setState(() => _selected = identical(_selected, n) ? null : n),
+          onSelect: (n) =>
+              setState(() => _selected = identical(_selected, n) ? null : n),
           onDeleted: (n) {
             final sel = _selected;
-            if (sel != null && nodePaths(n).containsKey(sel)) setState(() => _selected = null);
+            if (sel != null && nodePaths(n).containsKey(sel)) {
+              setState(() => _selected = null);
+            }
           },
         ),
       ],
     );
   }
 
-  Future<void> _confirmDelete(BuildContext context, ScreenEditor notifier, ScreenEditState s) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete screen?'),
-        content: Text(s.isNew ? 'Discard this unsaved screen?' : 'Delete "${s.draft.name}" from the device? This cannot be undone.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-          FilledButton(key: const Key('confirm-delete-screen'), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Delete')),
-        ],
-      ),
+  Future<void> _confirmDelete(
+      BuildContext context, ScreenEditor notifier, ScreenEditState s) async {
+    final ok = await confirmDestructive(
+      context,
+      title: 'Delete screen?',
+      message: s.isNew
+          ? 'Discard this unsaved screen?'
+          : 'Delete "${s.draft.name}" from the device? This cannot be undone.',
+      confirmKey: const Key('confirm-delete-screen'),
     );
-    if (ok != true) return;
-    if (await notifier.delete() && context.mounted) context.pop();
+    if (!ok) return;
+    if (await notifier.delete() && context.mounted) {
+      setState(() => _allowPop = true);
+      context.pop();
+    }
   }
 }
 
@@ -236,7 +277,14 @@ class _TreeNode extends StatelessWidget {
   }
 
   String _summary() {
-    for (final k in const ['text', 'format', 'source', 'value', 'values', 'interval_ms']) {
+    for (final k in const [
+      'text',
+      'format',
+      'source',
+      'value',
+      'values',
+      'interval_ms'
+    ]) {
       final v = node.props[k];
       if (v != null) return '$v';
     }
@@ -250,7 +298,8 @@ class _TreeNode extends StatelessWidget {
     final problems = editorState.placed.byNode[node] ?? const <NodeProblem>[];
     final isSelected = identical(selected, node);
     final open = _openSlots();
-    final title = [if (slot.isNotEmpty && slot != childrenSlot) slot, node.type].join(': ');
+    final title = [if (slot.isNotEmpty && slot != childrenSlot) slot, node.type]
+        .join(': ');
     final summary = _summary();
     final siblings = parent?.children.length ?? 0;
     final nodeInsideList = insideList || node.type == 'list';
@@ -274,10 +323,12 @@ class _TreeNode extends StatelessWidget {
                     padding: const EdgeInsets.only(left: 12),
                     child: Row(
                       children: [
-                        if (problems.isNotEmpty) Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Icon(Icons.error_outline, size: 18, color: scheme.error),
-                        ),
+                        if (problems.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: Icon(Icons.error_outline,
+                                size: 18, color: scheme.error),
+                          ),
                         Expanded(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 10),
@@ -286,7 +337,12 @@ class _TreeNode extends StatelessWidget {
                               children: [
                                 Text(title, style: theme.textTheme.titleSmall),
                                 if (summary.isNotEmpty)
-                                  Text(summary, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                                  Text(summary,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                              color: scheme.onSurfaceVariant)),
                               ],
                             ),
                           ),
@@ -298,20 +354,28 @@ class _TreeNode extends StatelessWidget {
                             onPressed: () => _add(context, open),
                             icon: const Icon(Icons.add_circle_outline_rounded),
                           ),
-                        if (parent != null && slot == childrenSlot && siblings > 1) ...[
+                        if (parent != null &&
+                            slot == childrenSlot &&
+                            siblings > 1) ...[
                           IconButton(
                             key: Key('up-$_path'),
                             tooltip: 'Move up',
                             visualDensity: VisualDensity.compact,
-                            onPressed: index! > 0 ? () => notifier.moveChild(parent!, index!, -1) : null,
-                            icon: const Icon(Icons.arrow_upward_rounded, size: 20),
+                            onPressed: index! > 0
+                                ? () => notifier.moveChild(parent!, index!, -1)
+                                : null,
+                            icon: const Icon(Icons.arrow_upward_rounded,
+                                size: 20),
                           ),
                           IconButton(
                             key: Key('down-$_path'),
                             tooltip: 'Move down',
                             visualDensity: VisualDensity.compact,
-                            onPressed: index! < siblings - 1 ? () => notifier.moveChild(parent!, index!, 1) : null,
-                            icon: const Icon(Icons.arrow_downward_rounded, size: 20),
+                            onPressed: index! < siblings - 1
+                                ? () => notifier.moveChild(parent!, index!, 1)
+                                : null,
+                            icon: const Icon(Icons.arrow_downward_rounded,
+                                size: 20),
                           ),
                         ],
                         if (parent != null)
@@ -323,7 +387,8 @@ class _TreeNode extends StatelessWidget {
                               notifier.removeNode(parent!, slot, index);
                               onDeleted(node);
                             },
-                            icon: const Icon(Icons.delete_outline_rounded, size: 20),
+                            icon: const Icon(Icons.delete_outline_rounded,
+                                size: 20),
                           )
                         else
                           const SizedBox(width: 8),
@@ -334,7 +399,9 @@ class _TreeNode extends StatelessWidget {
                 if (!isSelected && problems.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                    child: Text(problems.join('\n'), key: Key('problems-$_path'), style: TextStyle(color: scheme.error, fontSize: 12)),
+                    child: Text(problems.join('\n'),
+                        key: Key('problems-$_path'),
+                        style: TextStyle(color: scheme.error, fontSize: 12)),
                   ),
                 if (isSelected)
                   Padding(
@@ -344,7 +411,8 @@ class _TreeNode extends StatelessWidget {
                       schema: schema,
                       problems: problems,
                       insideList: nodeInsideList,
-                      onSet: (prop, value) => notifier.setProp(node, prop, value),
+                      onSet: (prop, value) =>
+                          notifier.setProp(node, prop, value),
                     ),
                   ),
               ],
@@ -377,6 +445,7 @@ class _TreeNode extends StatelessWidget {
     if (open.length > 1) {
       final picked = await showModalBottomSheet<String>(
         context: context,
+        useRootNavigator: true,
         showDragHandle: true,
         builder: (sheetContext) => SafeArea(
           child: Column(
