@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/models.dart';
 import '../../core/app_icons.dart';
+import '../../core/app_prefs.dart';
 import '../../core/providers.dart';
+import '../../core/tokens.dart';
 import '../../core/widgets.dart';
 import 'sheet_parts.dart';
 import 'app_settings_provider.dart';
@@ -72,6 +74,16 @@ class AppSettingsView extends ConsumerWidget {
                         const SizedBox(width: 12),
                         Expanded(child: Text(app.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleLarge)),
                         if (isActive) const OnDisplayBadge(),
+                        Builder(builder: (context) {
+                          final fav = ref.watch(appPrefsProvider).isFavourite(app.id);
+                          return IconButton(
+                            key: const Key('sheet-favourite'),
+                            tooltip: fav ? 'Remove ${app.name} from favourites' : 'Add ${app.name} to favourites',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => ref.read(appPrefsProvider.notifier).toggleFavourite(app.id),
+                            icon: Icon(fav ? Icons.star_rounded : Icons.star_border_rounded, color: fav ? Brand.amber : scheme.onSurfaceVariant),
+                          );
+                        }),
                       ],
                     ),
                   ),

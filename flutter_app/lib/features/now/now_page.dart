@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/models.dart';
 import '../../core/app_icons.dart';
+import '../../core/app_prefs.dart';
 import '../../core/connection.dart';
 import '../../core/providers.dart';
 import '../../core/tokens.dart';
 import '../../core/widgets.dart';
+import '../apps/apps_logic.dart';
 import 'preview_card.dart';
 
 class NowPage extends ConsumerWidget {
@@ -496,7 +498,9 @@ class _QuickSwitch extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final rows = list.apps.length > 4 ? 2 : 1;
+    final prefs = ref.watch(appPrefsProvider);
+    final apps = quickSwitchApps(list.apps, prefs.favourites, prefs.recents);
+    final rows = apps.length > 4 ? 2 : 1;
     final stale = ref.watch(connectionStaleProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -510,7 +514,7 @@ class _QuickSwitch extends ConsumerWidget {
               key: const Key('quick-switch'),
               scrollDirection: Axis.horizontal,
               padding: EdgeInsets.zero,
-              itemCount: list.apps.length,
+              itemCount: apps.length,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: rows,
                 mainAxisSpacing: Space.sm,
@@ -518,7 +522,7 @@ class _QuickSwitch extends ConsumerWidget {
                 mainAxisExtent: _tileWidth,
               ),
               itemBuilder: (context, i) {
-                final app = list.apps[i];
+                final app = apps[i];
                 return _AppChip(
                   name: app.name,
                   icon: iconForApp(app.id),

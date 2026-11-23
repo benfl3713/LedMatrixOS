@@ -43,10 +43,10 @@ class FakeApi implements LedApi {
   /// Labels the fake reports for picked ids (falls back to the id).
   final Map<String, String> knownLabels = {};
 
-  final apps = const [
-    MatrixApp(id: 'clock', name: 'Clock', hasSettings: true),
-    MatrixApp(id: 'weather', name: 'Weather', hasSettings: true),
-    MatrixApp(id: 'fire', name: 'Fire', hasSettings: false),
+  List<MatrixApp> apps = const [
+    MatrixApp(id: 'clock', name: 'Clock', hasSettings: true, category: 'clocks', description: 'Digital, animated and flip clock styles'),
+    MatrixApp(id: 'weather', name: 'Weather', hasSettings: true, category: 'info', description: 'Current conditions and forecast'),
+    MatrixApp(id: 'fire', name: 'Fire', hasSettings: false, category: 'ambient', description: 'Flickering flames'),
   ];
 
   final settings = <AppSetting>[

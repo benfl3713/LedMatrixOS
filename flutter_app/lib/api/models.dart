@@ -7,20 +7,48 @@ int percentToBrightness(int percent) => percent.clamp(0, 100);
 int _int(Object? v, [int fallback = 0]) => v is num ? v.round() : fallback;
 
 class MatrixApp {
-  const MatrixApp({required this.id, required this.name, required this.hasSettings});
+  const MatrixApp({
+    required this.id,
+    required this.name,
+    required this.hasSettings,
+    this.category = 'other',
+    this.description = '',
+    this.isScreen = false,
+  });
 
   final String id;
   final String name;
   final bool hasSettings;
 
-  factory MatrixApp.fromJson(Map<String, dynamic> json) => MatrixApp(
-        id: (json['id'] ?? '') as String,
-        name: (json['name'] ?? '') as String,
-        hasSettings: (json['hasSettings'] ?? false) as bool,
-      );
+  /// Lower-case catalogue category from the server (clocks, travel, ..., screens). Missing means 'other'.
+  final String category;
+  final String description;
+  final bool isScreen;
 
-  MatrixApp copyWith({String? id, String? name, bool? hasSettings}) =>
-      MatrixApp(id: id ?? this.id, name: name ?? this.name, hasSettings: hasSettings ?? this.hasSettings);
+  factory MatrixApp.fromJson(Map<String, dynamic> json) {
+    final isScreen = (json['isScreen'] ?? false) == true;
+    final raw = json['category'];
+    final category = raw is String && raw.trim().isNotEmpty ? raw.trim().toLowerCase() : (isScreen ? 'screens' : 'other');
+    final desc = json['description'];
+    return MatrixApp(
+      id: (json['id'] ?? '') as String,
+      name: (json['name'] ?? '') as String,
+      hasSettings: (json['hasSettings'] ?? false) as bool,
+      category: category,
+      description: desc is String ? desc : '',
+      isScreen: isScreen,
+    );
+  }
+
+  MatrixApp copyWith({String? id, String? name, bool? hasSettings, String? category, String? description, bool? isScreen}) =>
+      MatrixApp(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        hasSettings: hasSettings ?? this.hasSettings,
+        category: category ?? this.category,
+        description: description ?? this.description,
+        isScreen: isScreen ?? this.isScreen,
+      );
 }
 
 class AppList {

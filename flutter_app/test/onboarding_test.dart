@@ -239,12 +239,12 @@ void main() {
       final container = ProviderScope.containerOf(tester.element(find.byType(NavigationBar)));
       await tester.tap(find.text('Apps'));
       await tester.pumpAndSettle();
-      expect(tester.widget<ButtonStyleButton>(find.byKey(const Key('activate-weather'))).onPressed, isNotNull);
+      expect(tester.widget<IconButton>(find.byKey(const Key('activate-weather'))).onPressed, isNotNull);
 
       api.failHealth = true;
       await container.read(connectionProvider.notifier).check();
       await tester.pumpAndSettle();
-      expect(tester.widget<ButtonStyleButton>(find.byKey(const Key('activate-weather'))).onPressed, isNull);
+      expect(tester.widget<IconButton>(find.byKey(const Key('activate-weather'))).onPressed, isNull);
     });
   });
 

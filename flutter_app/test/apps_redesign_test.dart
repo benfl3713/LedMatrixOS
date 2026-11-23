@@ -15,14 +15,18 @@ Future<void> _openApps(WidgetTester tester, FakeApi api) async {
 }
 
 void main() {
-  testWidgets('tapping a tile opens details, long press activates, active tile says On display', (tester) async {
+  testWidgets('tapping a tile opens details, long press opens a menu, active tile says On display', (tester) async {
     final api = FakeApi();
     await _openApps(tester, api);
 
     expect(find.text('On display'), findsOneWidget); // the active app (clock)
+    expect(find.byKey(const Key('on-display-strip')), findsOneWidget);
     expect(find.byKey(const Key('screens-entry')), findsOneWidget);
 
+    // Long press opens the quick menu; Show on display activates.
     await tester.longPress(find.byKey(const Key('app-tile-weather')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('menu-show')));
     await tester.pumpAndSettle();
     expect(api.calls, contains('activate:weather'));
 
