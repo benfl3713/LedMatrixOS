@@ -21,12 +21,15 @@ class ScreensPage extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Screens')),
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('new-screen'),
-        onPressed: () => _newScreen(context, ref, screens.value ?? const []),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('New screen'),
-      ),
+      // The empty state already offers "Create your first screen".
+      floatingActionButton: screens.value?.isEmpty ?? false
+          ? null
+          : FloatingActionButton.extended(
+              key: const Key('new-screen'),
+              onPressed: () => _newScreen(context, ref, screens.value ?? const []),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('New screen'),
+            ),
       body: screens.when(
         loading: () => const ListSkeleton(rows: 4, rowHeight: 76),
         error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(screenListProvider)),

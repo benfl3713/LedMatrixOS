@@ -65,12 +65,15 @@ class MediaPage extends ConsumerWidget {
     final upload = ref.watch(uploadProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Media')),
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('media-upload'),
-        onPressed: upload == null ? () => _upload(context, ref, caps) : null,
-        icon: const Icon(Icons.upload_rounded),
-        label: const Text('Upload'),
-      ),
+      // The empty state already offers "Upload your first picture".
+      floatingActionButton: media.value?.isEmpty ?? false
+          ? null
+          : FloatingActionButton.extended(
+              key: const Key('media-upload'),
+              onPressed: upload == null ? () => _upload(context, ref, caps) : null,
+              icon: const Icon(Icons.upload_rounded),
+              label: const Text('Upload'),
+            ),
       body: media.when(
         loading: () => const _MediaSkeleton(),
         error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(mediaListProvider)),
@@ -122,19 +125,18 @@ class _Header extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          FilledButton.icon(
-            key: const Key('media-play-all'),
-            onPressed: !hasItems
-                ? null
-                : () async {
-              final ok = await ref.read(mediaListProvider.notifier).playAll();
-              if (ok && context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Playing media on the display')));
-              }
-            },
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('Play on display'),
-          ),
+          if (hasItems)
+            FilledButton.icon(
+              key: const Key('media-play-all'),
+              onPressed: () async {
+                final ok = await ref.read(mediaListProvider.notifier).playAll();
+                if (ok && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Playing media on the display')));
+                }
+              },
+              icon: const Icon(Icons.play_arrow_rounded),
+              label: const Text('Play on display'),
+            ),
           if (upload != null) ...[
             const SizedBox(height: 12),
             Text('Uploading ${upload!.name}', key: const Key('media-uploading'), maxLines: 1, overflow: TextOverflow.ellipsis),
