@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:led_matrix_controller/api/models.dart';
 import 'package:led_matrix_controller/core/app_icons.dart';
+import 'package:led_matrix_controller/core/app_prefs.dart';
 import 'package:led_matrix_controller/features/apps/apps_logic.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -281,5 +283,26 @@ void main() {
 
     expect(find.byKey(const Key('apps-search')).hitTestable(), findsOneWidget);
     expect(find.byKey(const Key('filter-all')).hitTestable(), findsOneWidget);
+  });
+
+  test('using an app before stored prefs have loaded keeps the saved favourites and recents', () async {
+    SharedPreferences.setMockInitialValues({
+      'flutter.app_favourites': ['tube-status'],
+      'flutter.app_recents': ['clock'],
+    });
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    // The first read creates the provider; the change lands before the async load completes.
+    container.read(appPrefsProvider.notifier).recordUse('snake');
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    final prefs = container.read(appPrefsProvider);
+    expect(prefs.favourites, ['tube-status']);
+    expect(prefs.recents, ['snake', 'clock']);
+    final stored = await SharedPreferences.getInstance();
+    expect(stored.getStringList('app_favourites'), ['tube-status']);
+    expect(stored.getStringList('app_recents'), ['snake', 'clock']);
   });
 }
