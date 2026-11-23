@@ -1,207 +1,74 @@
-# LED Matrix Controller - Flutter App
+# LED Matrix Controller (Flutter)
 
-A Flutter mobile app to control the LED Matrix display through the REST API.
+Phone app for controlling a LedMatrixOS display (256x64 RGB matrix on a Raspberry Pi) over its REST API.
+Targets Android and iOS. The app talks plain HTTP on your LAN (default port 5005).
 
-## Features
+## Pointing the app at your Pi
 
-- **App Control**: Switch between different display apps (clock, matrix rain, bouncing balls, etc.)
-- **Live Preview**: Real-time preview of the LED Matrix display (simulator mode only)
-- **Brightness Control**: Adjust display brightness from 0-100%
-- **Real-time Updates**: Auto-refreshing preview and status
+1. Make sure LedMatrixOS is running on the Pi and your phone is on the same network.
+2. Open **Settings > Connection** and enter the device address, e.g. `192.168.1.50:5005`
+   (or a hostname such as `ledmatrix.local:5005`). Use **Test** to verify, or use the scan to find the device.
+3. For a dev machine running the simulator, use the machine's LAN IP (not `localhost`) on a physical phone;
+   the Android emulator reaches the host at `10.0.2.2`.
 
-## Available Apps
+Settings also has an **Appearance** switch (System / Dark / Light; default Dark).
 
-The app can control the following LED Matrix applications:
-- **Clock** - Digital clock display
-- **Solid Color** - Single color display
-- **Rainbow Spiral** - Animated rainbow spiral
-- **Bouncing Balls** - Physics simulation with bouncing balls
-- **Matrix Rain** - Classic Matrix-style falling characters
-- **Geometric Patterns** - Dynamic geometric shapes
-- **Animated Clock** - Enhanced animated clock
-- **DVD Logo** - Bouncing DVD logo screensaver
-- **Weather** - Weather information display
-- **Spotify** - Spotify playback visualization
+## Development
 
-## Setup Instructions
-
-### Prerequisites
-
-1. **Flutter Development Environment**
-   ```bash
-   # Install Flutter (Linux)
-   sudo snap install flutter --classic
-   
-   # Or download from https://flutter.dev/docs/get-started/install
-   ```
-
-2. **Running LED Matrix OS**
-   The LED Matrix OS server must be running and accessible. Start it with:
-   ```bash
-   cd src/LedMatrixOS
-   ASPNETCORE_ENVIRONMENT=Development dotnet run
-   ```
-   
-   This will start the server on `http://localhost:5005`
-
-### Installation
-
-1. **Navigate to the Flutter app directory**
-   ```bash
-   cd flutter_app
-   ```
-
-2. **Install dependencies**
-   ```bash
-   flutter pub get
-   ```
-
-3. **Configure API endpoint (if needed)**
-   Edit `lib/api_service.dart` and modify the base URL:
-   ```dart
-   final LedMatrixApi _api = LedMatrixApi(baseUrl: 'http://your-server:5005');
-   ```
-
-### Running the App
-
-#### On Android Device/Emulator
 ```bash
-# Connect Android device or start emulator
+cd flutter_app
+flutter pub get
+flutter analyze
+flutter test
 flutter run
 ```
 
-#### On iOS Simulator (macOS only)
+## Release builds
+
+Version lives in `pubspec.yaml` (`version: 1.1.0+3`); keep `appVersion` in
+`lib/features/settings/settings_page.dart` in step.
+
+### Android
+
+Cleartext HTTP is allowed via `android/app/src/main/res/xml/network_security_config.xml`
+(the device address is user-entered, so it cannot be domain-scoped).
+
+Create an upload keystore once and keep it out of git (`*.jks` and `key.properties` are gitignored):
+
 ```bash
-flutter run -d simulator
+keytool -genkey -v -keystore ~/ledmatrix-upload.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
 ```
 
-#### On Web Browser
-```bash
-flutter run -d chrome
+Create `android/key.properties`:
+
+```properties
+storePassword=...
+keyPassword=...
+keyAlias=upload
+storeFile=/absolute/path/to/ledmatrix-upload.jks
 ```
 
-#### On Desktop (Linux/Windows/macOS)
+Then:
+
 ```bash
-flutter run -d linux    # Linux
-flutter run -d windows  # Windows
-flutter run -d macos    # macOS
+flutter build appbundle --release   # Play Store
+flutter build apk --release         # sideload
 ```
 
-## API Endpoints Used
+Without `key.properties`, release builds fall back to the debug key (fine for local testing only).
+R8 minification is off; enabling it would need keep rules for the audio/permission plugins.
 
-The Flutter app communicates with these REST endpoints:
+### iOS (macOS + Xcode)
 
-- `GET /api/apps` - Get list of available apps and current active app
-- `POST /api/apps/{id}` - Activate a specific app
-- `GET /api/settings` - Get display settings (resolution, brightness)
-- `POST /api/settings/brightness/{value}` - Set brightness (0-100)
-- `GET /preview` - Get preview image (simulator mode only)
-
-## Network Configuration
-
-### For Local Testing
-The default configuration connects to `localhost:5005`. This works when:
-- Testing on desktop/web
-- Testing on Android emulator
-- Testing on iOS simulator
-
-### For Physical Device Testing
-When testing on a physical mobile device, you need to:
-
-1. **Find your computer's IP address**
-   ```bash
-   # Linux/macOS
-   ip addr show | grep inet
-   # or
-   ifconfig | grep inet
-   
-   # Windows
-   ipconfig
-   ```
-
-2. **Update the API base URL in the app**
-   Edit `lib/main.dart` and change:
-   ```dart
-   final LedMatrixApi _api = LedMatrixApi(baseUrl: 'http://localhost:5005');
-   ```
-   to:
-   ```dart
-   final LedMatrixApi _api = LedMatrixApi(baseUrl: 'http://YOUR_IP_ADDRESS:5005');
-   ```
-
-3. **Ensure firewall allows connections**
-   Make sure your firewall allows incoming connections on port 5005.
-
-### CORS Configuration
-The LED Matrix OS server is already configured to allow cross-origin requests from any domain, so the Flutter app should work without additional CORS configuration.
-
-## Troubleshooting
-
-### Common Issues
-
-1. **"Failed to load apps" error**
-   - Ensure LED Matrix OS server is running
-   - Check that the API base URL is correct
-   - Verify network connectivity
-
-2. **Preview not showing**
-   - Preview only works when LED Matrix OS is running in simulator mode
-   - Set `Matrix:UseSimulator = true` in appsettings.json
-
-3. **Connection refused on mobile device**
-   - Update the API base URL to use your computer's IP address
-   - Check firewall settings
-   - Ensure both devices are on the same network
-
-### Development Mode
-
-For development, you can enable additional debugging:
-
-1. **Enable Flutter Inspector**
-   ```bash
-   flutter run --debug
-   ```
-
-2. **View network requests**
-   Add debugging to `api_service.dart`:
-   ```dart
-   print('API Request: $url');
-   print('API Response: ${response.body}');
-   ```
-
-## Building for Production
-
-### Android APK
 ```bash
-flutter build apk --release
+cd ios && pod install && cd ..
+flutter build ipa --release
 ```
 
-### Android App Bundle
-```bash
-flutter build appbundle --release
-```
+Set your signing team in Xcode (Runner target > Signing & Capabilities). `Info.plist` already declares
+the microphone, camera, photo library and local-network usage strings and allows LAN HTTP.
 
-### iOS (requires macOS and Xcode)
-```bash
-flutter build ios --release
-```
+## Launcher icon
 
-### Web
-```bash
-flutter build web --release
-```
-
-The built files will be in the `build/` directory.
-
-## Contributing
-
-To modify or extend the Flutter app:
-
-1. **Add new features** by editing the main UI in `lib/main.dart`
-2. **Extend API functionality** by modifying `lib/api_service.dart`
-3. **Update styling** by modifying the Material Design theme
-4. **Add new pages** by creating additional widget files in `lib/`
-
-## License
-
-This Flutter app is part of the LED Matrix OS project and follows the same license terms.
+Icons are generated, not hand-drawn: `dart run tool/gen_icons.dart` rewrites the Android mipmaps and the iOS
+AppIcon set (needs the `image` dev dependency). Edit the script to change the design.

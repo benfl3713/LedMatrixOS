@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router.dart';
 import 'core/theme.dart';
+import 'core/theme_mode_provider.dart';
 
 void main() {
   runApp(const ProviderScope(retry: _noRetry, child: LedMatrixApp()));
@@ -21,7 +22,7 @@ class LedMatrixApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),
-      themeMode: ThemeMode.dark, // night-display identity; the light theme is kept for future toggling
+      themeMode: ref.watch(themeModeProvider),
       routerConfig: ref.watch(routerProvider),
     );
   }

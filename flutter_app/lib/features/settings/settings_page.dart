@@ -4,11 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/connection.dart';
 import '../../core/device_url.dart';
 import '../../core/providers.dart';
+import '../../core/theme_mode_provider.dart';
 import '../../core/widgets.dart';
 import 'audio_stream_provider.dart';
 
 /// Shown in the About section. Keep in step with `version:` in pubspec.yaml.
-const appVersion = '1.0.0 (2)';
+const appVersion = '1.1.0 (3)';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -25,6 +26,9 @@ class SettingsPage extends StatelessWidget {
           SizedBox(height: 20),
           _SectionLabel('Device'),
           _DeviceCard(),
+          SizedBox(height: 20),
+          _SectionLabel('Appearance'),
+          _AppearanceCard(),
           SizedBox(height: 20),
           _SectionLabel('Audio'),
           _AudioCard(),
@@ -312,6 +316,30 @@ class _InfoRow extends StatelessWidget {
           ],
         ),
       );
+}
+
+class _AppearanceCard extends ConsumerWidget {
+  const _AppearanceCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeModeProvider);
+    return SectionCard(
+      child: SizedBox(
+        width: double.infinity,
+        child: SegmentedButton<ThemeMode>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: ThemeMode.system, label: Text('System'), icon: Icon(Icons.brightness_auto_outlined)),
+            ButtonSegment(value: ThemeMode.dark, label: Text('Dark'), icon: Icon(Icons.dark_mode_outlined)),
+            ButtonSegment(value: ThemeMode.light, label: Text('Light'), icon: Icon(Icons.light_mode_outlined)),
+          ],
+          selected: {mode},
+          onSelectionChanged: (s) => ref.read(themeModeProvider.notifier).set(s.first),
+        ),
+      ),
+    );
+  }
 }
 
 class _AboutCard extends StatelessWidget {
