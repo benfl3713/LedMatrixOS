@@ -156,10 +156,11 @@ class ConnectionTestResult {
 Future<ConnectionTestResult> testDeviceConnection(LedApi api) async {
   final health = await api.getHealth();
   final h = health.valueOrNull;
-  if (h == null)
+  if (h == null) {
     return ConnectionTestResult.failed(
       health.errorOrNull?.toString() ?? 'Could not reach the device',
     );
+  }
   final settings = await api.getSettings();
   return ConnectionTestResult.ok(h, settings.valueOrNull);
 }

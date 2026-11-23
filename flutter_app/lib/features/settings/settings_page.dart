@@ -289,12 +289,14 @@ class _TestOutcome extends StatelessWidget {
 String formatUptime(int seconds) {
   final d = Duration(seconds: seconds < 0 ? 0 : seconds);
   String unit(int n, String name) => '$n $name${n == 1 ? '' : 's'}';
-  if (d.inDays > 0)
+  if (d.inDays > 0) {
     return d.inHours % 24 == 0 ? unit(d.inDays, 'day') : '${unit(d.inDays, 'day')}, ${unit(d.inHours % 24, 'hour')}';
-  if (d.inHours > 0)
+  }
+  if (d.inHours > 0) {
     return d.inMinutes % 60 == 0
         ? unit(d.inHours, 'hour')
         : '${unit(d.inHours, 'hour')}, ${unit(d.inMinutes % 60, 'minute')}';
+  }
   if (d.inMinutes > 0) return unit(d.inMinutes, 'minute');
   return unit(d.inSeconds, 'second');
 }

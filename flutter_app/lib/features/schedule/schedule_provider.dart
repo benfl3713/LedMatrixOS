@@ -105,10 +105,11 @@ class ScheduleEditor extends AsyncNotifier<ScheduleEditState> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final text = prefs.getString(_lastSavedKey);
-      if (text != null)
+      if (text != null) {
         return ScheduleDocument.fromJson(
           jsonDecode(text) as Map<String, dynamic>,
         );
+      }
     } catch (e) {
       if (ref.mounted) ref.read(errorBusProvider.notifier).report('Could not load the cached schedule: $e');
     }

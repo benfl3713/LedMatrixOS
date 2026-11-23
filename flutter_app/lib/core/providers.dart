@@ -433,10 +433,11 @@ Stream<PreviewUpdate> _previewStream(LedApi api) async* {
     } finally {
       // Never await the close: on a half-open socket the handshake can hang and would stall every later retry.
       final dead = channel;
-      if (dead != null)
+      if (dead != null) {
         unawaited(
           dead.sink.close().timeout(const Duration(seconds: 1), onTimeout: () {}).catchError((_) {}),
         );
+      }
     }
     yield const PreviewUpdate(connected: false);
     // A connection that streamed for a while earns a fast retry; one that failed straight away backs off.
