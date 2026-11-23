@@ -2,10 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/schedule_models.dart';
+import '../../core/connection.dart';
 import '../../core/providers.dart';
+import '../../core/tokens.dart';
 import '../../core/widgets.dart';
 import '../apps/color_picker.dart';
+import 'color_swatches.dart';
+import 'notify_preview.dart';
 import 'notify_provider.dart';
+
+/// Defaults that look good on the panel: white text on a deep accent banner.
+const _defaultToastText = Color(0xFFFFFFFF);
+const _defaultToastBackground = Color(0xFF00677A);
+const _defaultBadge = Color(0xFFFF3C3C);
+const _defaultAlert = Color(0xFF9600FF);
 
 class NotifyPage extends ConsumerStatefulWidget {
   const NotifyPage({super.key});
@@ -20,13 +30,19 @@ class _NotifyPageState extends ConsumerState<NotifyPage> {
   final _badgeId = TextEditingController(text: 'badge');
   final _x = TextEditingController();
   final _y = TextEditingController();
-  Color _color = const Color(0xFF000000);
-  Color _background = const Color(0xFFFFFFFF);
+  Color _color = _defaultToastText;
+  Color _background = _defaultToastBackground;
   double _seconds = 4;
   double _size = 4;
   bool _pulsing = true;
   bool _flashOnly = false;
   bool _sending = false;
+
+  /// True after a successful send until the composer changes again.
+  bool _sent = false;
+
+  /// The preset being edited in the composer, if any (Save then updates it in place).
+  String? _editingPreset;
 
   @override
   void dispose() {
@@ -37,18 +53,24 @@ class _NotifyPageState extends ConsumerState<NotifyPage> {
     super.dispose();
   }
 
+  /// Any composer edit clears the "Sent" confirmation.
+  void _edit(VoidCallback fn) => setState(() {
+        _sent = false;
+        fn();
+      });
+
   void _setMode(NotifyMode mode) {
-    setState(() {
+    _edit(() {
       _mode = mode;
       // Sensible default colours per mode.
       switch (mode) {
         case NotifyMode.toast:
-          _color = const Color(0xFF000000);
-          _background = const Color(0xFFFFFFFF);
+          _color = _defaultToastText;
+          _background = _defaultToastBackground;
         case NotifyMode.badge:
-          _color = const Color(0xFFFF3C3C);
+          _color = _defaultBadge;
         case NotifyMode.alert:
-          _color = const Color(0xFF9600FF);
+          _color = _defaultAlert;
       }
     });
   }
@@ -66,9 +88,10 @@ class _NotifyPageState extends ConsumerState<NotifyPage> {
         'flashOnly': _flashOnly,
       };
 
-  void _applyPreset(NotifyPreset p) {
+  /// Loads a preset into the composer for editing.
+  void _loadPreset(NotifyPreset p) {
     final f = p.fields;
-    setState(() {
+    _edit(() {
       _mode = p.mode;
       _text.text = (f['text'] ?? '') as String;
       _color = parseHexColor(f['color']) ?? _color;
@@ -80,44 +103,73 @@ class _NotifyPageState extends ConsumerState<NotifyPage> {
       _size = f['size'] is num ? (f['size'] as num).toDouble().clamp(1, 32) : _size;
       _pulsing = (f['pulsing'] ?? true) as bool;
       _flashOnly = (f['flashOnly'] ?? false) as bool;
+      _editingPreset = p.name;
     });
   }
 
-  Future<void> _send() async {
+  /// Sends [mode] with [f] (the composer's or a preset's fields). Returns whether it went out.
+  Future<bool> _dispatch(NotifyMode mode, Map<String, Object?> f) async {
     final api = ref.read(apiProvider);
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => _sending = true);
-    final result = switch (_mode) {
+    String s(String key) => (f[key] ?? '').toString().trim();
+    final color = colorToHex(parseHexColor(f['color']) ?? _defaultToastText);
+    final background = colorToHex(parseHexColor(f['background']) ?? _defaultToastBackground);
+    final result = switch (mode) {
       NotifyMode.toast => await api.sendToast(
-          message: _text.text.trim(),
-          seconds: _seconds,
-          color: colorToHex(_color),
-          background: colorToHex(_background),
+          message: s('text'),
+          seconds: f['seconds'] is num ? (f['seconds'] as num).toDouble() : 4,
+          color: color,
+          background: background,
         ),
       NotifyMode.badge => await api.sendBadge(
-          id: _badgeId.text.trim(),
-          x: int.tryParse(_x.text.trim()),
-          y: int.tryParse(_y.text.trim()),
-          size: _size.round(),
-          color: colorToHex(_color),
-          pulsing: _pulsing,
+          id: s('id'),
+          x: int.tryParse(s('x')),
+          y: int.tryParse(s('y')),
+          size: f['size'] is num ? (f['size'] as num).round() : 4,
+          color: color,
+          pulsing: (f['pulsing'] ?? true) as bool,
         ),
       NotifyMode.alert => await api.sendAlert(
-          message: _flashOnly ? null : _text.text.trim(),
-          color: colorToHex(_color),
+          message: f['flashOnly'] == true ? null : s('text'),
+          color: color,
         ),
     };
-    if (!mounted) return;
-    setState(() => _sending = false);
+    if (!mounted) return false;
+    var ok = false;
     result.when(
       ok: (_) {
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text('${_mode.name[0].toUpperCase()}${_mode.name.substring(1)} sent')));
+        ok = true;
         ref.read(overlaysProvider.notifier).refresh();
       },
       err: (e) => ref.read(errorBusProvider.notifier).report(e),
     );
+    return ok;
+  }
+
+  String get _modeLabel => '${_mode.name[0].toUpperCase()}${_mode.name.substring(1)}';
+
+  Future<void> _send() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _sending = true);
+    final ok = await _dispatch(_mode, _fields());
+    if (!mounted) return;
+    setState(() {
+      _sending = false;
+      _sent = ok;
+    });
+    if (ok) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('$_modeLabel sent to the display')));
+    }
+  }
+
+  Future<void> _sendPreset(NotifyPreset p) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await _dispatch(p.mode, p.fields);
+    if (!mounted || !ok) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('Sent "${p.name}"')));
   }
 
   bool get _canSend => switch (_mode) {
@@ -126,30 +178,84 @@ class _NotifyPageState extends ConsumerState<NotifyPage> {
         NotifyMode.alert => _flashOnly || _text.text.trim().isNotEmpty,
       };
 
+  String? get _cannotSendHint => _canSend
+      ? null
+      : switch (_mode) {
+          NotifyMode.toast => 'Type a message to send a toast.',
+          NotifyMode.badge => 'Give the badge an id.',
+          NotifyMode.alert => 'Type a message, or turn on Flash only.',
+        };
+
   Future<void> _savePreset() async {
-    final name = await showDialog<String>(context: context, builder: (_) => const _PresetNameDialog());
+    final name = await showDialog<String>(
+      context: context,
+      useRootNavigator: true,
+      builder: (_) => _PresetNameDialog(initial: _editingPreset ?? ''),
+    );
     if (name == null || name.isEmpty || !mounted) return;
-    await ref.read(presetsProvider.notifier).save(NotifyPreset(name: name, mode: _mode, fields: _fields()));
+    // Renaming while editing replaces the old preset.
+    final previous = _editingPreset;
+    final notifier = ref.read(presetsProvider.notifier);
+    if (previous != null && previous != name) await notifier.delete(previous);
+    await notifier.save(NotifyPreset(name: name, mode: _mode, fields: _fields()));
+    if (!mounted) return;
+    setState(() => _editingPreset = null);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('Saved preset "$name"')));
   }
 
-  Future<void> _pickColor(Color current, ValueChanged<Color> onPicked, String title) async {
-    final c = await showColorPicker(context, initial: current, title: title);
-    if (c != null && mounted) onPicked(c);
+  Future<void> _presetMenu(NotifyPreset p) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      useRootNavigator: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(title: Text(p.name, style: Theme.of(context).textTheme.titleMedium), subtitle: Text(_describe(p))),
+          ListTile(
+            key: const Key('preset-menu-edit'),
+            leading: const Icon(Icons.edit_outlined),
+            title: const Text('Edit in composer'),
+            onTap: () => Navigator.pop(sheetContext, 'edit'),
+          ),
+          ListTile(
+            key: const Key('preset-menu-delete'),
+            leading: Icon(Icons.delete_outline_rounded, color: Theme.of(context).colorScheme.error),
+            title: const Text('Delete preset'),
+            onTap: () => Navigator.pop(sheetContext, 'delete'),
+          ),
+        ]),
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'edit') {
+      _loadPreset(p);
+    } else if (action == 'delete') {
+      final ok = await confirmDestructive(
+        context,
+        title: 'Delete "${p.name}"?',
+        message: 'This preset is removed from this phone.',
+        confirmKey: const Key('preset-delete-confirm'),
+      );
+      if (ok && mounted) await ref.read(presetsProvider.notifier).delete(p.name);
+    }
+  }
+
+  static String _describe(NotifyPreset p) {
+    final text = (p.fields['text'] ?? '').toString();
+    final kind = '${p.mode.name[0].toUpperCase()}${p.mode.name.substring(1)}';
+    return text.isEmpty ? kind : '$kind: $text';
   }
 
   Future<void> _confirmClear() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear all overlays?'),
-        content: const Text('Every toast, badge and alert on the display is removed.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(key: const Key('clear-confirm'), onPressed: () => Navigator.pop(context, true), child: const Text('Clear all')),
-        ],
-      ),
+    final ok = await confirmDestructive(
+      context,
+      title: 'Clear all overlays?',
+      message: 'Every toast, badge and alert on the display is removed.',
+      confirmLabel: 'Clear all',
+      confirmKey: const Key('clear-confirm'),
     );
-    if (ok == true && mounted) await ref.read(overlaysProvider.notifier).clearAll();
+    if (ok && mounted) await ref.read(overlaysProvider.notifier).clearAll();
   }
 
   @override
@@ -160,52 +266,14 @@ class _NotifyPageState extends ConsumerState<NotifyPage> {
       body: RefreshIndicator(
         onRefresh: () => ref.read(overlaysProvider.notifier).refresh(),
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
           children: [
-            SectionCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SegmentedButton<NotifyMode>(
-                    key: const Key('mode-selector'),
-                    segments: const [
-                      ButtonSegment(value: NotifyMode.toast, label: Text('Toast'), icon: Icon(Icons.chat_bubble_outline_rounded)),
-                      ButtonSegment(value: NotifyMode.badge, label: Text('Badge'), icon: Icon(Icons.circle_notifications_outlined)),
-                      ButtonSegment(value: NotifyMode.alert, label: Text('Alert'), icon: Icon(Icons.campaign_outlined)),
-                    ],
-                    selected: {_mode},
-                    onSelectionChanged: (s) => _setMode(s.first),
-                  ),
-                  const SizedBox(height: 16),
-                  ..._modeFields(text),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          key: const Key('send-button'),
-                          onPressed: _sending || !_canSend ? null : _send,
-                          icon: _sending
-                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                              : const Icon(Icons.send_rounded),
-                          label: const Text('Send'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      OutlinedButton.icon(
-                        key: const Key('save-preset'),
-                        onPressed: _savePreset,
-                        icon: const Icon(Icons.bookmark_add_outlined),
-                        label: const Text('Save preset'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
+            const SectionHeader('Compose'),
+            _composer(text),
+            const SizedBox(height: Space.xl),
             _presets(),
-            const SizedBox(height: 8),
+            const SizedBox(height: Space.xl),
             _overlays(text),
           ],
         ),
@@ -213,39 +281,102 @@ class _NotifyPageState extends ConsumerState<NotifyPage> {
     );
   }
 
-  List<Widget> _modeFields(TextTheme text) {
-    Widget colorTile(String label, Color c, ValueChanged<Color> set, Key key) => ListTile(
-          key: key,
-          contentPadding: EdgeInsets.zero,
-          title: Text(label),
-          subtitle: Text(colorToHex(c)),
-          trailing: Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: c,
-              shape: BoxShape.circle,
-              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+  Widget _composer(TextTheme text) {
+    final scheme = Theme.of(context).colorScheme;
+    final offline = ref.watch(connectionProvider).isOffline;
+    final hint = offline ? 'The display is offline.' : _cannotSendHint;
+    final canPress = !_sending && _canSend && !offline;
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SegmentedButton<NotifyMode>(
+            key: const Key('mode-selector'),
+            segments: const [
+              ButtonSegment(value: NotifyMode.toast, label: Text('Toast'), icon: Icon(Icons.chat_bubble_outline_rounded)),
+              ButtonSegment(value: NotifyMode.badge, label: Text('Badge'), icon: Icon(Icons.circle_notifications_outlined)),
+              ButtonSegment(value: NotifyMode.alert, label: Text('Alert'), icon: Icon(Icons.campaign_outlined)),
+            ],
+            selected: {_mode},
+            onSelectionChanged: (s) => _setMode(s.first),
+          ),
+          const SizedBox(height: Space.xs),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: Space.sm),
+            child: Text(
+              switch (_mode) {
+                NotifyMode.toast => 'A banner across the top of the display for a few seconds.',
+                NotifyMode.badge => 'A small dot that stays until dismissed. Same id replaces it.',
+                NotifyMode.alert => 'Takes over the whole display with a big message.',
+              },
+              style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ),
-          onTap: () => _pickColor(c, (v) => setState(() => set(v)), label),
-        );
+          NotifyPreview(
+            mode: _mode,
+            text: _text.text.trim(),
+            color: _color,
+            background: _background,
+            badgeSize: _size.round(),
+            badgeX: int.tryParse(_x.text.trim()),
+            badgeY: int.tryParse(_y.text.trim()),
+            flashOnly: _flashOnly,
+          ),
+          const SizedBox(height: Space.lg),
+          ..._modeFields(text),
+          const SizedBox(height: Space.lg),
+          FilledButton.icon(
+            key: const Key('send-button'),
+            style: _sent ? FilledButton.styleFrom(backgroundColor: scheme.tertiary, foregroundColor: scheme.onTertiary) : null,
+            onPressed: canPress ? _send : null,
+            icon: _sending
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : Icon(_sent ? Icons.check_rounded : Icons.send_rounded),
+            label: Text(_sent ? 'Sent! Tap to send again' : 'Send $_modeLabel'),
+          ),
+          if (hint != null)
+            Padding(
+              padding: const EdgeInsets.only(top: Space.sm),
+              child: Text(hint, textAlign: TextAlign.center, style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+            ),
+          const SizedBox(height: Space.xs),
+          TextButton.icon(
+            key: const Key('save-preset'),
+            onPressed: _savePreset,
+            icon: const Icon(Icons.bookmark_add_outlined),
+            label: Text(_editingPreset == null ? 'Save as preset' : 'Update preset "$_editingPreset"'),
+          ),
+        ],
+      ),
+    );
+  }
 
+  List<Widget> _modeFields(TextTheme text) {
     Widget messageField(String label) => TextField(
           key: const Key('notify-text'),
           controller: _text,
           maxLength: 80,
-          decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
-          onChanged: (_) => setState(() {}),
+          textCapitalization: TextCapitalization.sentences,
+          decoration: InputDecoration(labelText: label),
+          onChanged: (_) => _edit(() {}),
         );
+
+    Widget colors(String label, Color c, ValueChanged<Color> set, Key key) =>
+        ColorSwatchRow(key: key, label: label, color: c, onChanged: (v) => _edit(() => set(v)));
 
     switch (_mode) {
       case NotifyMode.toast:
         return [
           messageField('Message'),
-          colorTile('Text colour', _color, (v) => _color = v, const Key('color-text')),
-          colorTile('Background', _background, (v) => _background = v, const Key('color-background')),
-          Text('Duration: ${_seconds.round()}s', style: text.labelLarge),
+          const SizedBox(height: Space.sm),
+          colors('Text colour', _color, (v) => _color = v, const Key('color-text')),
+          const SizedBox(height: Space.md),
+          colors('Background', _background, (v) => _background = v, const Key('color-background')),
+          const SizedBox(height: Space.md),
+          Row(children: [
+            Expanded(child: Text('Duration', style: text.labelLarge)),
+            Text('${_seconds.round()}s', style: numericStyle(text.titleSmall)),
+          ]),
           Slider(
             key: const Key('toast-seconds'),
             value: _seconds,
@@ -253,7 +384,8 @@ class _NotifyPageState extends ConsumerState<NotifyPage> {
             max: 60,
             divisions: 59,
             label: '${_seconds.round()}s',
-            onChanged: (v) => setState(() => _seconds = v),
+            semanticFormatterCallback: (v) => '${v.round()} seconds',
+            onChanged: (v) => _edit(() => _seconds = v),
           ),
         ];
       case NotifyMode.badge:
@@ -264,11 +396,10 @@ class _NotifyPageState extends ConsumerState<NotifyPage> {
             decoration: const InputDecoration(
               labelText: 'Badge id',
               helperText: 'Sending the same id again replaces that badge.',
-              border: OutlineInputBorder(),
             ),
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => _edit(() {}),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Space.md),
           Row(
             children: [
               Expanded(
@@ -276,22 +407,27 @@ class _NotifyPageState extends ConsumerState<NotifyPage> {
                   key: const Key('badge-x'),
                   controller: _x,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'X (blank = top right)', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(labelText: 'X', helperText: 'Blank = top right'),
+                  onChanged: (_) => _edit(() {}),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: Space.md),
               Expanded(
                 child: TextField(
                   key: const Key('badge-y'),
                   controller: _y,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Y (blank = 1)', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(labelText: 'Y', helperText: 'Blank = 1'),
+                  onChanged: (_) => _edit(() {}),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text('Size: ${_size.round()} px', style: text.labelLarge),
+          const SizedBox(height: Space.md),
+          Row(children: [
+            Expanded(child: Text('Size', style: text.labelLarge)),
+            Text('${_size.round()} px', style: numericStyle(text.titleSmall)),
+          ]),
           Slider(
             key: const Key('badge-size'),
             value: _size,
@@ -299,15 +435,16 @@ class _NotifyPageState extends ConsumerState<NotifyPage> {
             max: 32,
             divisions: 31,
             label: '${_size.round()}',
-            onChanged: (v) => setState(() => _size = v),
+            semanticFormatterCallback: (v) => '${v.round()} pixels',
+            onChanged: (v) => _edit(() => _size = v),
           ),
-          colorTile('Colour', _color, (v) => _color = v, const Key('color-badge')),
+          colors('Colour', _color, (v) => _color = v, const Key('color-badge')),
           SwitchListTile(
             key: const Key('badge-pulsing'),
             contentPadding: EdgeInsets.zero,
             title: const Text('Pulsing'),
             value: _pulsing,
-            onChanged: (v) => setState(() => _pulsing = v),
+            onChanged: (v) => _edit(() => _pulsing = v),
           ),
         ];
       case NotifyMode.alert:
@@ -317,95 +454,104 @@ class _NotifyPageState extends ConsumerState<NotifyPage> {
             contentPadding: EdgeInsets.zero,
             title: const Text('Flash only (no message)'),
             value: _flashOnly,
-            onChanged: (v) => setState(() => _flashOnly = v),
+            onChanged: (v) => _edit(() => _flashOnly = v),
           ),
-          if (!_flashOnly) ...[
-            messageField('Message'),
-            colorTile('Colour', _color, (v) => _color = v, const Key('color-alert')),
-          ],
+          if (!_flashOnly) messageField('Message'),
+          const SizedBox(height: Space.sm),
+          colors('Colour', _color, (v) => _color = v, const Key('color-alert')),
         ];
     }
   }
 
   Widget _presets() {
+    final scheme = Theme.of(context).colorScheme;
     final presets = ref.watch(presetsProvider);
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Presets', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          presets.when(
-            loading: () => const LinearProgressIndicator(),
-            error: (e, _) => Text(e.toString()),
+    final offline = ref.watch(connectionProvider).isOffline;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader('Presets'),
+        SectionCard(
+          child: presets.when(
+            loading: () => const Skeleton(height: 40),
+            error: (e, _) => Text("Couldn't read saved presets.", style: TextStyle(color: scheme.onSurfaceVariant)),
             data: (list) => list.isEmpty
-                ? Text('No presets yet. Fill in the composer and tap Save preset.',
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))
-                : Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                ? Row(children: [
+                    Icon(Icons.bookmark_border_rounded, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: Space.md),
+                    Expanded(
+                      child: Text(
+                        'Save a message you send often, like "Dinner is ready", and send it again with one tap.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ])
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (final p in list)
-                        GestureDetector(
-                          key: Key('preset-${p.name}'),
-                          onLongPress: () async {
-                            await ref.read(presetsProvider.notifier).delete(p.name);
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context)
-                              ..hideCurrentSnackBar()
-                              ..showSnackBar(SnackBar(content: Text('Deleted preset "${p.name}"')));
-                          },
-                          child: ActionChip(
-                            avatar: Icon(switch (p.mode) {
-                              NotifyMode.toast => Icons.chat_bubble_outline_rounded,
-                              NotifyMode.badge => Icons.circle_notifications_outlined,
-                              NotifyMode.alert => Icons.campaign_outlined,
-                            }, size: 18),
-                            label: Text(p.name),
-                            onPressed: () => _applyPreset(p),
-                          ),
-                        ),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final p in list)
+                            GestureDetector(
+                              key: Key('preset-${p.name}'),
+                              behavior: HitTestBehavior.opaque,
+                              onLongPress: () => _presetMenu(p),
+                              child: ActionChip(
+                                avatar: Icon(switch (p.mode) {
+                                  NotifyMode.toast => Icons.chat_bubble_outline_rounded,
+                                  NotifyMode.badge => Icons.circle_notifications_outlined,
+                                  NotifyMode.alert => Icons.campaign_outlined,
+                                }, size: 18),
+                                label: Text(p.name),
+                                onPressed: offline ? null : () => _sendPreset(p),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: Space.sm),
+                      Text(
+                        'Tap to send right away. Long-press to edit or delete.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
                     ],
                   ),
           ),
-          if (presets.value?.isNotEmpty ?? false)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text('Tap to fill, long-press to delete.', style: Theme.of(context).textTheme.bodySmall),
-            ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _overlays(TextTheme text) {
     final overlays = ref.watch(overlaysProvider);
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(child: Text('Active overlays', style: text.titleMedium)),
-              IconButton(
-                tooltip: 'Refresh',
-                onPressed: () => ref.read(overlaysProvider.notifier).refresh(),
-                icon: const Icon(Icons.refresh),
-              ),
-              TextButton(
-                key: const Key('clear-all'),
-                onPressed: (overlays.value?.isEmpty ?? true) ? null : _confirmClear,
-                child: const Text('Clear all'),
-              ),
-            ],
-          ),
-          overlays.when(
-            loading: () => const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator()),
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          'On the display now',
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            IconButton(
+              tooltip: 'Refresh',
+              onPressed: () => ref.read(overlaysProvider.notifier).refresh(),
+              icon: const Icon(Icons.refresh_rounded),
+            ),
+            TextButton(
+              key: const Key('clear-all'),
+              onPressed: (overlays.value?.isEmpty ?? true) ? null : _confirmClear,
+              child: const Text('Clear all'),
+            ),
+          ]),
+        ),
+        SectionCard(
+          child: overlays.when(
+            loading: () => const Column(children: [Skeleton(height: 40), SizedBox(height: 8), Skeleton(height: 40)]),
             error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(overlaysProvider)),
             data: (list) => list.isEmpty
                 ? Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text('Nothing is showing.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    child: Text('Nothing is showing.', style: TextStyle(color: scheme.onSurfaceVariant)),
                   )
                 : Column(
                     children: [
@@ -426,8 +572,8 @@ class _NotifyPageState extends ConsumerState<NotifyPage> {
                     ],
                   ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -447,14 +593,16 @@ class _NotifyPageState extends ConsumerState<NotifyPage> {
 }
 
 class _PresetNameDialog extends StatefulWidget {
-  const _PresetNameDialog();
+  const _PresetNameDialog({this.initial = ''});
+
+  final String initial;
 
   @override
   State<_PresetNameDialog> createState() => _PresetNameDialogState();
 }
 
 class _PresetNameDialogState extends State<_PresetNameDialog> {
-  final _controller = TextEditingController();
+  late final _controller = TextEditingController(text: widget.initial);
 
   @override
   void dispose() {
@@ -469,7 +617,9 @@ class _PresetNameDialogState extends State<_PresetNameDialog> {
           key: const Key('preset-name'),
           controller: _controller,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder()),
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(labelText: 'Name', helperText: 'Saving over an existing name replaces it.'),
+          onSubmitted: (v) => Navigator.pop(context, v.trim()),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),

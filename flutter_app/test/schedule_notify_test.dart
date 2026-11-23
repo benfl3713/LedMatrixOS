@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:led_matrix_controller/api/schedule_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fake_api.dart';
@@ -141,6 +142,64 @@ void main() {
     });
   });
 
+  group('Schedule polish', () {
+    testWidgets('the week shows a now marker and a colour legend', (tester) async {
+      final api = FakeApi();
+      await _open(tester, api, 'Schedule');
+      expect(find.byKey(const Key('now-marker')), findsOneWidget);
+      expect(find.text('Now'), findsWidgets);
+    });
+
+    testWidgets('an empty schedule invites the first rule and the editor guards unsaved edits', (tester) async {
+      final api = FakeApi()..scheduleDoc = const ScheduleDocument();
+      await _open(tester, api, 'Schedule');
+      expect(find.byKey(const Key('schedule-empty')), findsOneWidget);
+      expect(find.text('Create your first rule'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('add-rule')));
+      await tester.pumpAndSettle();
+      // A fresh rule with no playlist cannot be applied and says why.
+      expect(find.byKey(const Key('editor-problem')), findsOneWidget);
+      expect(tester.widget<FilledButton>(find.byKey(const Key('rule-apply'))).onPressed, isNull);
+
+      // Untouched: closing leaves straight away.
+      await tester.tap(find.byKey(const Key('editor-close')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('rule-apply')), findsNothing);
+
+      // Touched: closing asks first.
+      await tester.tap(find.byKey(const Key('add-rule')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('day-preset-62')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('editor-close')));
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsOneWidget);
+      await tester.tap(find.text('Keep editing'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('rule-apply')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('editor-close')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('editor-discard-confirm')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('rule-apply')), findsNothing);
+    });
+
+    testWidgets('editors cover the navigation bar and deleting a rule asks first', (tester) async {
+      final api = FakeApi();
+      await _open(tester, api, 'Schedule');
+      await tester.tap(find.byKey(const Key('rule-tile-0')));
+      await tester.pumpAndSettle();
+      expect(find.byType(NavigationBar).hitTestable(), findsNothing);
+      await tester.tap(find.byKey(const Key('rule-delete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('rule-delete-confirm')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('rule-tile-1')), findsNothing);
+      expect(find.byKey(const Key('unsaved-banner')), findsOneWidget);
+    });
+  });
+
   group('Notify screen', () {
     testWidgets('sends a toast with its colours and duration', (tester) async {
       final api = FakeApi();
@@ -152,7 +211,7 @@ void main() {
       await tester.tap(find.byKey(const Key('send-button')));
       await tester.pumpAndSettle();
 
-      expect(api.calls, contains('toast:Hello:4:#000000:#FFFFFF'));
+      expect(api.calls, contains('toast:Hello:4:#FFFFFF:#00677A'));
     });
 
     testWidgets('badge and alert modes send their own fields', (tester) async {
@@ -175,7 +234,7 @@ void main() {
       expect(api.calls, contains('alert:Door open:#9600FF'));
     });
 
-    testWidgets('a preset can be saved, filled back in and deleted with a long press', (tester) async {
+    testWidgets('a preset is saved, sends in one tap, and long-press offers edit and delete', (tester) async {
       final api = FakeApi();
       await _open(tester, api, 'Notify');
 
@@ -188,23 +247,73 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('preset-Bins')), findsOneWidget);
 
-      // Change the composer, then tap the preset to fill it back in.
+      // Change the composer, then tap the preset: it sends immediately and leaves the composer alone.
       await tester.tap(find.text('Alert'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('notify-text')), 'Something else');
       await tester.pump();
       await tester.tap(find.text('Bins'));
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(TextField, 'Bins out'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('send-button')));
-      await tester.pumpAndSettle();
       expect(api.calls.last, startsWith('toast:Bins out:'));
+      expect(find.widgetWithText(TextField, 'Something else'), findsOneWidget);
 
+      // Long-press, edit in the composer.
       await tester.longPress(find.byKey(const Key('preset-Bins')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('preset-menu-edit')));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(TextField, 'Bins out'), findsOneWidget);
+      expect(find.text('Update preset "Bins"'), findsOneWidget);
+
+      // Long-press, delete behind a confirm.
+      await tester.longPress(find.byKey(const Key('preset-Bins')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('preset-menu-delete')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('preset-Bins')), findsOneWidget); // still there until confirmed
+      await tester.tap(find.byKey(const Key('preset-delete-confirm')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('preset-Bins')), findsNothing);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('notify_presets'), '[]');
+    });
+
+    testWidgets('the live preview follows the message and colours, and Sent is confirmed', (tester) async {
+      final api = FakeApi();
+      await _open(tester, api, 'Notify');
+
+      expect(find.byKey(const Key('preview-toast')), findsOneWidget);
+      expect(find.text('Your message'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('notify-text')), 'Hi there');
+      await tester.pump();
+      expect(find.text('Hi there'), findsWidgets);
+
+      // Pick the red swatch for the background: the preview and the request both use it.
+      await tester.tap(find.bySemanticsLabel('Background Red'));
+      await tester.pump();
+      final toast = tester.widget<ColoredBox>(find.byKey(const Key('preview-toast')));
+      expect(toast.color, const Color(0xFFFF3C3C));
+
+      await tester.tap(find.byKey(const Key('send-button')));
+      await tester.pumpAndSettle();
+      expect(api.calls, contains('toast:Hi there:4:#FFFFFF:#FF3C3C'));
+      expect(find.text('Sent! Tap to send again'), findsOneWidget);
+
+      // Editing anything clears the confirmation.
+      await tester.enterText(find.byKey(const Key('notify-text')), 'Hi again');
+      await tester.pump();
+      expect(find.text('Sent! Tap to send again'), findsNothing);
+      expect(find.text('Send Toast'), findsOneWidget);
+    });
+
+    testWidgets('an empty message explains why Send is off; badge mode previews a square', (tester) async {
+      final api = FakeApi();
+      await _open(tester, api, 'Notify');
+      expect(find.text('Type a message to send a toast.'), findsOneWidget);
+      expect(tester.widget<FilledButton>(find.byKey(const Key('send-button'))).onPressed, isNull);
+      await tester.tap(find.text('Badge'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('preview-badge')), findsOneWidget);
     });
 
     testWidgets('active overlays can be dismissed and cleared behind a confirm', (tester) async {
