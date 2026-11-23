@@ -8,10 +8,12 @@ import '../features/media/media_page.dart';
 import '../features/notify/notify_page.dart';
 import '../features/now/display_page.dart';
 import '../features/now/now_page.dart';
+import '../features/onboarding/onboarding_page.dart';
 import '../features/schedule/schedule_page.dart';
 import '../features/screens/screen_editor_page.dart';
 import '../features/screens/screens_page.dart';
 import '../features/settings/settings_page.dart';
+import 'providers.dart';
 import 'shell.dart';
 
 /// One bottom-navigation destination. Adding a tab is a single registration in [appTabs].
@@ -91,10 +93,22 @@ final List<AppTab> appTabs = [
   ),
 ];
 
-GoRouter buildRouter({List<AppTab>? tabs}) {
+/// Where the device-config gate sends [location], or null to stay. Nothing talks to the device before the saved
+/// address has loaded; with none saved the user goes through onboarding; afterwards onboarding is unreachable.
+String? deviceConfigRedirect(DeviceConfig config, String location) {
+  if (!config.loaded) return location == '/loading' ? null : '/loading';
+  if (config.isFirstRun) return location == '/welcome' ? null : '/welcome';
+  if (location == '/loading' || location == '/welcome') return '/now';
+  return null;
+}
+
+/// [config] and [refresh] wire in the device-config gate; without them (plain router tests) there is no gate.
+GoRouter buildRouter({List<AppTab>? tabs, DeviceConfig Function()? config, Listenable? refresh}) {
   final active = (tabs ?? appTabs).where((t) => t.enabled).toList();
   return GoRouter(
     initialLocation: active.first.path,
+    refreshListenable: refresh,
+    redirect: config == null ? null : (context, state) => deviceConfigRedirect(config(), state.matchedLocation),
     routes: [
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AppShell(navigationShell: shell, tabs: active),
@@ -108,6 +122,8 @@ GoRouter buildRouter({List<AppTab>? tabs}) {
         ],
       ),
       // Outside the shell so the navigation bar is hidden.
+      GoRoute(path: '/loading', builder: (context, state) => const LoadingSplash()),
+      GoRoute(path: '/welcome', builder: (context, state) => const OnboardingPage()),
       GoRoute(path: '/display', builder: (context, state) => const DisplayPage()),
       GoRoute(path: '/gamepad', builder: (context, state) => const GamepadPage()),
     ],
@@ -115,7 +131,12 @@ GoRouter buildRouter({List<AppTab>? tabs}) {
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final router = buildRouter();
-  ref.onDispose(router.dispose);
+  final refresh = ValueNotifier<int>(0);
+  ref.listen(deviceConfigProvider, (previous, next) => refresh.value++);
+  final router = buildRouter(config: () => ref.read(deviceConfigProvider), refresh: refresh);
+  ref.onDispose(() {
+    router.dispose();
+    refresh.dispose();
+  });
   return router;
 });

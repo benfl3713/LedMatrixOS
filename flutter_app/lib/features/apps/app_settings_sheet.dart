@@ -48,22 +48,54 @@ class AppSettingsView extends ConsumerWidget {
     final anyModified = settings.value?.any((s) => s.isModified) ?? false;
     final isActive = ref.watch(appListProvider.select((l) => l.value?.activeApp == app.id));
 
-    return ListView(
+    final pinPreview = isActive && showPreview;
+    final scheme = Theme.of(context).colorScheme;
+    return CustomScrollView(
       controller: scrollController,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      children: [
-        Row(
-          children: [
-            Icon(iconForApp(app.id), size: 32, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(width: 12),
-            Expanded(child: Text(app.name, style: Theme.of(context).textTheme.titleLarge)),
-            if (isActive) const OnDisplayBadge(),
-          ],
+      slivers: [
+        // Pinned: the title and (for the active app) a compact live preview stay put while the settings scroll.
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: _PinnedHeader(
+            height: pinPreview ? 40 + 8 + SheetPreview.compactHeight + 12 : 40 + 8,
+            color: Theme.of(context).bottomSheetTheme.backgroundColor ?? scheme.surfaceContainerLow,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    height: 40,
+                    child: Row(
+                      children: [
+                        Icon(iconForApp(app.id), size: 32, color: scheme.primary),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text(app.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleLarge)),
+                        if (isActive) const OnDisplayBadge(),
+                      ],
+                    ),
+                  ),
+                  if (pinPreview) ...[
+                    const SizedBox(height: 8),
+                    const SheetPreview(compact: true),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ),
-        const SizedBox(height: 12),
-        if (isActive && showPreview) const SheetPreview(),
-        if (!isActive) ShowOnDisplayCard(app: app, withPreviewHint: showPreview),
-        const SizedBox(height: 8),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          sliver: SliverList(delegate: SliverChildListDelegate(_body(context, ref, settings, status, anyModified, isActive))),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _body(BuildContext context, WidgetRef ref, AsyncValue<List<AppSetting>> settings, SaveStatus status, bool anyModified, bool isActive) {
+    return [
+      if (!isActive) ShowOnDisplayCard(app: app, withPreviewHint: showPreview),
+      const SizedBox(height: 8),
         Row(
           children: [
             Expanded(child: _SaveIndicator(status: status, onRetry: () => ref.read(appSettingsProvider(app.id).notifier).retry())),
@@ -90,9 +122,27 @@ class AppSettingsView extends ConsumerWidget {
                 )
               : _SettingsBody(app: app, list: list, errors: status.fieldErrors),
         ),
-      ],
-    );
+    ];
   }
+}
+
+class _PinnedHeader extends SliverPersistentHeaderDelegate {
+  _PinnedHeader({required this.height, required this.color, required this.child});
+
+  final double height;
+  final Color color;
+  final Widget child;
+
+  @override
+  double get minExtent => height;
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => ColoredBox(color: color, child: child);
+
+  @override
+  bool shouldRebuild(_PinnedHeader old) => old.height != height || old.color != color || old.child != child;
 }
 
 extension on AppSettingsView {

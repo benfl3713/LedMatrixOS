@@ -38,34 +38,60 @@ final errorBusProvider = NotifierProvider<ErrorBus, ErrorEvent?>(ErrorBus.new);
 const defaultApiUrl = 'http://localhost:5005';
 const _apiUrlPrefsKey = 'api_url';
 
-class ApiUrlNotifier extends Notifier<String> {
+/// What is known about the saved device address. Nothing talks to the device until [loaded] is true; when it is true
+/// and [url] is null this is a first run and the app shows onboarding.
+class DeviceConfig {
+  const DeviceConfig({this.loaded = false, this.url});
+
+  final bool loaded;
+  final String? url;
+
+  bool get isFirstRun => loaded && url == null;
+}
+
+/// Loads (and persists) the saved device address.
+class DeviceConfigNotifier extends Notifier<DeviceConfig> {
   @override
-  String build() {
+  DeviceConfig build() {
     _load();
-    return defaultApiUrl;
+    return const DeviceConfig();
   }
 
   Future<void> _load() async {
+    String? saved;
     try {
       final prefs = await SharedPreferences.getInstance();
-      final saved = prefs.getString(_apiUrlPrefsKey);
-      if (saved != null && ref.mounted) state = saved;
-    } catch (e) {
-      if (ref.mounted) ref.read(errorBusProvider.notifier).report('Could not load the saved device URL: $e');
+      saved = prefs.getString(_apiUrlPrefsKey);
+    } catch (_) {
+      // Unreadable storage behaves like a first run; onboarding lets the user pick the display again.
     }
+    if (ref.mounted) state = DeviceConfig(loaded: true, url: saved);
   }
 
+  /// Saves [url] (already normalised or not) as the device address.
   Future<void> save(String url) async {
     final trimmed = normalizeDeviceUrl(url).url ?? url.trim();
-    if (trimmed == state) return;
+    if (trimmed == state.url) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_apiUrlPrefsKey, trimmed);
-      state = trimmed;
     } catch (e) {
-      ref.read(errorBusProvider.notifier).report('Could not save the device URL: $e');
+      if (ref.mounted) ref.read(errorBusProvider.notifier).report('Could not save the device URL: $e');
+      return;
     }
+    if (ref.mounted) state = DeviceConfig(loaded: true, url: trimmed);
   }
+}
+
+final deviceConfigProvider = NotifierProvider<DeviceConfigNotifier, DeviceConfig>(DeviceConfigNotifier.new);
+
+/// The device address in use (the default until one is saved). Requests are only made once [deviceConfigProvider]
+/// has loaded, because the router shows a splash/onboarding until then.
+class ApiUrlNotifier extends Notifier<String> {
+  @override
+  String build() => ref.watch(deviceConfigProvider).url ?? defaultApiUrl;
+
+  Future<void> save(String url) => ref.read(deviceConfigProvider.notifier).save(url);
 
   Future<void> reset() => save(defaultApiUrl);
 }

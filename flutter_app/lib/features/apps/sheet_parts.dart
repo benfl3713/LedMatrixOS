@@ -38,18 +38,30 @@ class OnDisplayBadge extends StatelessWidget {
 
 /// Live matrix at the top of the sheet, so edits to the active app are visible at once.
 class SheetPreview extends ConsumerWidget {
-  const SheetPreview({super.key});
+  const SheetPreview({super.key, this.compact = false});
+
+  /// Height of the compact (pinned) preview.
+  static const compactHeight = 80.0;
+
+  /// A short preview that keeps the 4:1 shape, centred, for pinning above scrolling settings.
+  final bool compact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(deviceSettingsProvider).value;
     final aspect = settings != null && settings.width > 0 && settings.height > 0 ? settings.width / settings.height : 4.0;
+    final preview = GlowPreview(
+      key: const Key('sheet-preview'),
+      child: AspectRatio(aspectRatio: aspect, child: const LiveMatrix()),
+    );
     return Semantics(
       label: 'Live preview of the display',
-      child: GlowPreview(
-        key: const Key('sheet-preview'),
-        child: AspectRatio(aspectRatio: aspect, child: const LiveMatrix()),
-      ),
+      child: compact
+          ? SizedBox(
+              height: compactHeight,
+              child: Center(child: AspectRatio(aspectRatio: aspect, child: preview)),
+            )
+          : preview,
     );
   }
 }

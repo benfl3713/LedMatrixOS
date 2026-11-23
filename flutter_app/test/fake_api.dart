@@ -385,12 +385,26 @@ class FakeApi implements LedApi {
   String previewUrl({int? cacheBust}) => 'http://fake/preview';
 }
 
+/// A device config that is already loaded (a saved address, or null for a first run) and never touches storage.
+class FakeDeviceConfig extends DeviceConfigNotifier {
+  FakeDeviceConfig(this.initial);
+
+  final String? initial;
+
+  @override
+  DeviceConfig build() => DeviceConfig(loaded: true, url: initial);
+
+  @override
+  Future<void> save(String url) async => state = DeviceConfig(loaded: true, url: url);
+}
+
 Duration? _noRetry(int retryCount, Object error) => null;
 
 /// The whole app with the API and preview feed faked and background polling off.
-Widget testApp(FakeApi api) => ProviderScope(
+Widget testApp(FakeApi api, {bool firstRun = false}) => ProviderScope(
       retry: _noRetry,
       overrides: [
+        deviceConfigProvider.overrideWith(() => FakeDeviceConfig(firstRun ? null : 'http://fake')),
         apiProvider.overrideWithValue(api),
         apiFactoryProvider.overrideWithValue((_) => api),
         pollIntervalProvider.overrideWithValue(null),
