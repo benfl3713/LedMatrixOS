@@ -56,6 +56,7 @@ public sealed class ScheduleService
             if (!File.Exists(jsonPath)) return false;
             var doc = ScheduleDocument.TryParse(File.ReadAllText(jsonPath), out _);
             if (doc == null) return false;
+            doc.MigrateLegacyBrightness();
             doc.ApplyTo(this);
             Changed?.Invoke();
             return true;

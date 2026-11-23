@@ -36,6 +36,14 @@ public sealed class ScheduleDocument
         }
     }
 
+    /// <summary>Converts brightness overrides saved on the old 0-255 scale (values above 100) to percent. Used for files on disk only.</summary>
+    public void MigrateLegacyBrightness()
+    {
+        foreach (var r in Rules)
+            if (r?.BrightnessOverride is > 100 and var v)
+                r.BrightnessOverride = Math.Min(100, (int)Math.Round(v * 100 / 255.0));
+    }
+
     public string ToJson() => JsonSerializer.Serialize(this, Options);
 
     /// <summary>

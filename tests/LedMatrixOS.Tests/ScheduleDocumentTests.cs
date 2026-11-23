@@ -86,6 +86,24 @@ public sealed class ScheduleDocumentTests
     }
 
     [Fact]
+    public void LoadFromJson_MigratesLegacy0To255Brightness()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ledmatrix-" + Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(dir, "schedule.json");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(path, Valid.Replace("\"brightnessOverride\": 60", "\"brightnessOverride\": 200"));
+            var sched = new ScheduleService();
+            Assert.True(sched.TryLoadFromJson(path));
+            var doc = sched.Export();
+            Assert.Equal(78, doc.Rules[0].BrightnessOverride);
+            Assert.Empty(doc.Validate(id => true, t => true));
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public void Status_ReportsRulePlaylistPositionAndNextChange()
     {
         var clock = new TestClock(new DateTimeOffset(2025, 1, 20, 8, 0, 0, TimeSpan.Zero)); // Monday
