@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../api/models.dart';
 import '../../api/schedule_models.dart';
 import '../../core/providers.dart';
 import '../../core/tokens.dart';
 import '../../core/widgets.dart';
+import '../apps/app_picker.dart';
 import 'editor_scaffold.dart';
 
 class PlaylistEditResult {
@@ -60,14 +60,22 @@ class _PlaylistEditorState extends ConsumerState<PlaylistEditor> {
 
   bool _touched = false;
 
+  /// Field errors wait until the user has edited that field.
+  bool _nameEdited = false;
+  bool _entriesEdited = false;
+
   void _change(VoidCallback fn) => setState(() {
         _touched = true;
         fn();
       });
 
-  void _add() {
-    final apps = ref.read(appListProvider).value?.apps ?? const <MatrixApp>[];
-    _change(() => _rows.add(_Row(EntryDoc(appId: apps.isEmpty ? '' : apps.first.id))));
+  Future<void> _add() async {
+    final ids = await showAppPicker(context, multiple: true, title: 'Add apps to the playlist');
+    if (ids == null || ids.isEmpty || !mounted) return;
+    _change(() {
+      _entriesEdited = true;
+      _rows.addAll([for (final id in ids) _Row(EntryDoc(appId: id))]);
+    });
   }
 
   void _apply() {
@@ -102,7 +110,6 @@ class _PlaylistEditorState extends ConsumerState<PlaylistEditor> {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
-    final apps = ref.watch(appListProvider).value?.apps ?? const <MatrixApp>[];
     final transitions = ref.watch(transitionsProvider).value?.transitions ?? const <String>[];
     final nameError = _nameError;
     final problem = nameError ?? (_rows.isEmpty ? 'A playlist needs at least one entry.' : null);
@@ -114,6 +121,7 @@ class _PlaylistEditorState extends ConsumerState<PlaylistEditor> {
       applyKey: const Key('playlist-apply'),
       onApply: problem == null ? _apply : null,
       problem: problem,
+      problemIsError: nameError != null ? _nameEdited : _entriesEdited,
       onDelete: widget.isNew ? null : _delete,
       deleteKey: const Key('playlist-delete'),
       children: [
@@ -125,10 +133,10 @@ class _PlaylistEditorState extends ConsumerState<PlaylistEditor> {
                 key: const Key('playlist-name'),
                 controller: _name,
                 textCapitalization: TextCapitalization.sentences,
-                onChanged: (_) => _change(() {}),
+                onChanged: (_) => _change(() => _nameEdited = true),
                 decoration: InputDecoration(
                   labelText: 'Name',
-                  errorText: _touched ? nameError : null,
+                  errorText: _nameEdited ? nameError : null,
                 ),
               ),
               SwitchListTile(
@@ -178,10 +186,12 @@ class _PlaylistEditorState extends ConsumerState<PlaylistEditor> {
                 key: _rows[i].key,
                 index: i,
                 entry: _rows[i].entry,
-                apps: apps,
                 transitions: transitions,
                 onChanged: (e) => _change(() => _rows[i].entry = e),
-                onRemove: () => _change(() => _rows.removeAt(i)),
+                onRemove: () => _change(() {
+                  _entriesEdited = true;
+                  _rows.removeAt(i);
+                }),
               ),
           ],
         ),
@@ -195,7 +205,6 @@ class _EntryCard extends StatefulWidget {
     super.key,
     required this.index,
     required this.entry,
-    required this.apps,
     required this.transitions,
     required this.onChanged,
     required this.onRemove,
@@ -203,7 +212,6 @@ class _EntryCard extends StatefulWidget {
 
   final int index;
   final EntryDoc entry;
-  final List<MatrixApp> apps;
   final List<String> transitions;
   final ValueChanged<EntryDoc> onChanged;
   final VoidCallback onRemove;
@@ -226,14 +234,6 @@ class _EntryCardState extends State<_EntryCard> {
   @override
   Widget build(BuildContext context) {
     final e = widget.entry;
-    final appIds = {for (final a in widget.apps) a.id, if (e.appId.isNotEmpty) e.appId}.toList();
-    String nameOf(String id) {
-      for (final a in widget.apps) {
-        if (a.id == id) return a.name;
-      }
-      return id;
-    }
-
     final transitionItems = {...widget.transitions, if (e.transition != null) e.transition!}.toList();
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -252,15 +252,10 @@ class _EntryCardState extends State<_EntryCard> {
             Expanded(
               child: Column(
                 children: [
-                  DropdownButtonFormField<String>(
+                  AppPickerField(
                     key: Key('entry-app-${widget.index}'),
-                    isExpanded: true,
-                    initialValue: e.appId.isEmpty ? null : e.appId,
-                    decoration: const InputDecoration(labelText: 'App', isDense: true),
-                    items: [for (final id in appIds) DropdownMenuItem(value: id, child: Text(nameOf(id)))],
-                    onChanged: (v) {
-                      if (v != null) widget.onChanged(e.copyWith(appId: v));
-                    },
+                    appId: e.appId,
+                    onChanged: (id) => widget.onChanged(e.copyWith(appId: id)),
                   ),
                   const SizedBox(height: 8),
                   Row(

@@ -193,6 +193,8 @@ class SchedulePage extends ConsumerWidget {
       if (index != null) notifier.deleteRule(index);
       return;
     }
+    final created = result.createdPlaylist;
+    if (created != null) notifier.upsertPlaylist(created);
     final singleApp = result.singleAppId;
     if (singleApp != null) notifier.ensureSingleAppPlaylist(singleApp);
     notifier.upsertRule(result.rule!, index: index);

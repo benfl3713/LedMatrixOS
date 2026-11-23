@@ -13,8 +13,8 @@ List<(AppCategoryStyle, List<MatrixApp>)> groupByCategory(Iterable<MatrixApp> ap
   ];
 }
 
-/// Case-insensitive search over name, description and category, ranked: name prefix, name contains, description,
-/// category. Ties keep the server order.
+/// Case-insensitive search over name, description, keywords and category, ranked: name prefix, name contains, description,
+/// keywords, category. Ties keep the server order.
 List<MatrixApp> searchApps(Iterable<MatrixApp> apps, String query) {
   final q = query.trim().toLowerCase();
   if (q.isEmpty) return apps.toList();
@@ -29,8 +29,10 @@ List<MatrixApp> searchApps(Iterable<MatrixApp> apps, String query) {
       score = 1;
     } else if (a.description.toLowerCase().contains(q)) {
       score = 2;
-    } else if (a.category.toLowerCase().contains(q) || categoryOf(a).label.toLowerCase().contains(q)) {
+    } else if (a.keywords.any((k) => k.toLowerCase().contains(q))) {
       score = 3;
+    } else if (a.category.toLowerCase().contains(q) || categoryOf(a).label.toLowerCase().contains(q)) {
+      score = 4;
     }
     if (score != null) scored.add((score, i, a));
     i++;

@@ -15,8 +15,8 @@ import 'app_settings_sheet.dart';
 import 'apps_logic.dart';
 import 'sheet_parts.dart';
 
-const _filterAll = 'all';
-const _filterFavourites = 'favourites';
+const filterAll = 'all';
+const filterFavourites = 'favourites';
 
 class AppsPage extends ConsumerStatefulWidget {
   const AppsPage({super.key});
@@ -28,7 +28,7 @@ class AppsPage extends ConsumerStatefulWidget {
 class _AppsPageState extends ConsumerState<AppsPage> {
   final _search = TextEditingController();
   String _query = '';
-  String _filter = _filterAll;
+  String _filter = filterAll;
   bool _developerOpen = false;
 
   @override
@@ -84,14 +84,14 @@ class _AppsPageState extends ConsumerState<AppsPage> {
     ];
     final groups = groupByCategory(list.apps);
     // A chip for a category that has no apps (anymore) falls back to All.
-    final filter = _filter == _filterAll || _filter == _filterFavourites || groups.any((g) => g.$1.key == _filter)
+    final filter = _filter == filterAll || _filter == filterFavourites || groups.any((g) => g.$1.key == _filter)
         ? _filter
-        : _filterAll;
+        : filterAll;
     final searching = _query.trim().isNotEmpty;
 
     final pool = switch (filter) {
-      _filterAll => list.apps,
-      _filterFavourites => favApps,
+      filterAll => list.apps,
+      filterFavourites => favApps,
       _ => list.apps.where((a) => categoryOf(a).key == filter).toList(),
     };
 
@@ -104,8 +104,8 @@ class _AppsPageState extends ConsumerState<AppsPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _SearchField(controller: _search, onChanged: (v) => setState(() => _query = v)),
-              _FilterChips(
+              AppSearchField(controller: _search, onChanged: (v) => setState(() => _query = v)),
+              AppFilterChips(
                 selected: filter,
                 total: list.apps.length,
                 favourites: favApps.length,
@@ -130,7 +130,7 @@ class _AppsPageState extends ConsumerState<AppsPage> {
               ),
             )
           : _rows(results, list, showCategory: true));
-    } else if (filter == _filterFavourites) {
+    } else if (filter == filterFavourites) {
       slivers.add(favApps.isEmpty
           ? const SliverToBoxAdapter(
               child: EmptyState(
@@ -140,7 +140,7 @@ class _AppsPageState extends ConsumerState<AppsPage> {
               ),
             )
           : _rows(favApps, list));
-    } else if (filter == _filterAll) {
+    } else if (filter == filterAll) {
       if (favApps.isNotEmpty) {
         slivers.add(SliverToBoxAdapter(child: _padded(const SectionHeader('Favourites'))));
         slivers.add(SliverToBoxAdapter(child: _FavouritesRow(apps: favApps, activeId: list.activeApp)));
@@ -225,9 +225,11 @@ class _PinnedHeader extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(_PinnedHeader old) => true;
 }
 
-class _SearchField extends StatelessWidget {
-  const _SearchField({required this.controller, required this.onChanged});
+/// The pill search bar above the app lists.
+class AppSearchField extends StatelessWidget {
+  const AppSearchField({super.key, required this.controller, required this.onChanged, this.fieldKey = const Key('apps-search')});
 
+  final Key fieldKey;
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
 
@@ -236,7 +238,7 @@ class _SearchField extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, Space.sm),
       child: SearchBar(
-        key: const Key('apps-search'),
+        key: fieldKey,
         controller: controller,
         hintText: 'Search apps',
         leading: const Icon(Icons.search),
@@ -258,14 +260,21 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-class _FilterChips extends StatelessWidget {
-  const _FilterChips({
+/// Horizontal All / Favourites / per-category filter chips.
+class AppFilterChips extends StatelessWidget {
+  const AppFilterChips({
+    super.key,
     required this.selected,
     required this.total,
     required this.favourites,
     required this.groups,
     required this.onSelected,
+    this.keyPrefix = 'filter',
+    this.showFavourites = true,
   });
+
+  final String keyPrefix;
+  final bool showFavourites;
 
   final String selected;
   final int total;
@@ -278,7 +287,7 @@ class _FilterChips extends StatelessWidget {
     Widget chip(String key, Widget label) => Padding(
           padding: const EdgeInsets.only(right: Space.sm),
           child: FilterChip(
-            key: Key('filter-$key'),
+            key: Key('$keyPrefix-$key'),
             label: label,
             selected: selected == key,
             showCheckmark: false,
@@ -291,9 +300,10 @@ class _FilterChips extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: Space.lg),
         children: [
-          chip(_filterAll, Text('All $total')),
-          chip(
-            _filterFavourites,
+          chip(filterAll, Text('All $total')),
+          if (showFavourites)
+            chip(
+            filterFavourites,
             Row(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.star_rounded, size: 16, color: Brand.amber),
               const SizedBox(width: 4),
@@ -486,9 +496,27 @@ Future<void> showAppMenu(BuildContext context, WidgetRef ref, MatrixApp app, boo
 /// One dense (64px) app row: tinted icon tile, name and description, then either the On display pill or a play button.
 /// Tap opens settings, long press the quick menu.
 class AppRow extends ConsumerWidget {
-  const AppRow({super.key, required this.app, required this.isActive, this.showCategory = false});
+  const AppRow({
+    super.key,
+    required this.app,
+    required this.isActive,
+    this.showCategory = false,
+    this.keyPrefix = 'app-tile',
+    this.onTap,
+    this.trailing,
+    this.selected = false,
+  });
 
   final MatrixApp app;
+
+  /// Key prefix for the row (`<prefix>-<app id>`), so a list in a sheet can coexist with the Apps tab.
+  final String keyPrefix;
+
+  /// Overrides the default tap (open settings). When set the row is a picker row: no quick menu, and [trailing]
+  /// replaces the play button.
+  final VoidCallback? onTap;
+  final Widget? trailing;
+  final bool selected;
   final bool isActive;
   final bool showCategory;
 
@@ -501,19 +529,23 @@ class AppRow extends ConsumerWidget {
     final sub = [if (showCategory) cat.label, if (app.description.isNotEmpty) app.description].join(' · ');
     return Semantics(
       container: true,
-      selected: isActive,
-      label: [app.name, if (app.description.isNotEmpty) app.description, if (isActive) 'on display'].join(', '),
-      hint: 'Opens settings. Long press for more.',
+      selected: onTap != null ? selected : isActive,
+      label: [
+        app.name,
+        if (app.description.isNotEmpty) app.description,
+        if (onTap == null && isActive) 'on display',
+      ].join(', '),
+      hint: onTap != null ? null : 'Opens settings. Long press for more.',
       child: ExcludeSemantics(
         excluding: false,
         child: InkWell(
-          key: Key('app-tile-${app.id}'),
-          onTap: () => showAppSettingsSheet(context, app),
-          onLongPress: () => showAppMenu(context, ref, app, isActive),
+          key: Key('$keyPrefix-${app.id}'),
+          onTap: onTap ?? () => showAppSettingsSheet(context, app),
+          onLongPress: onTap != null ? null : () => showAppMenu(context, ref, app, isActive),
           child: Container(
             height: 64,
             padding: const EdgeInsets.only(left: Space.lg, right: Space.sm),
-            color: isActive ? scheme.primary.withValues(alpha: 0.06) : null,
+            color: (onTap != null ? selected : isActive) ? scheme.primary.withValues(alpha: 0.06) : null,
             child: Row(
               children: [
                 AppIconTile(app: app),
@@ -532,7 +564,9 @@ class AppRow extends ConsumerWidget {
                     ],
                   ),
                 ),
-                if (isActive)
+                if (onTap != null)
+                  trailing ?? const SizedBox(width: Space.sm)
+                else if (isActive)
                   const Padding(padding: EdgeInsets.only(right: Space.sm), child: OnDisplayBadge())
                 else
                   IconButton(
