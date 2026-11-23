@@ -83,6 +83,8 @@ builder.Services.AddSingleton(sp => new LedMatrixOS.Core.Screens.ScreenCatalog(
     sp.GetRequiredService<LedMatrixOS.Core.Screens.ScreenStore>(),
     sp.GetRequiredService<AppManager>(),
     DataFile("screens.json")));
+builder.Services.AddSingleton(sp => new LedMatrixOS.Apps.Screens.ScreenPreviewRenderer(
+    builder.Configuration, sp.GetRequiredService<IHttpClientFactory>().CreateClient(), width, height));
 builder.Services.AddSingleton<AudioDataService>();
 var schedulePath = DataFile("schedule.json");
 // Services that can answer rule conditions register an IAttentionSource. They are lazy: AttentionCoordinator only lets them

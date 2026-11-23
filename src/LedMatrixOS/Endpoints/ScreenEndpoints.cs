@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LedMatrixOS.Apps.Screens;
 using LedMatrixOS.Core.Screens;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,6 +18,22 @@ public static class ScreenEndpoints
 
         endpoints.MapGet("/api/screens/{id}", ([FromServices] ScreenCatalog screens, string id) =>
             screens.TryGet(id) is { } s ? Results.Ok(s) : Results.NotFound());
+
+        // Draft preview: validates an unsaved screen and renders one frame to PNG without saving or activating anything.
+        endpoints.MapPost("/api/screens/preview", async (HttpRequest request, [FromServices] ScreenPreviewRenderer renderer, CancellationToken ct) =>
+        {
+            using var reader = new StreamReader(request.Body);
+            ScreenDefinition? def;
+            try { def = JsonSerializer.Deserialize<ScreenDefinition>(await reader.ReadToEndAsync(ct), Json); }
+            catch (JsonException ex) { return Results.BadRequest(new { errors = new[] { new { path = "", message = $"Invalid JSON: {ex.Message}" } } }); }
+            if (def == null) return Results.BadRequest(new { errors = new[] { new { path = "", message = "Body must be a JSON object" } } });
+            if (string.IsNullOrEmpty(def.Id)) def.Id = "preview";
+
+            var errors = new ScreenDocument { Screens = { def } }.Validate();
+            if (errors.Count > 0)
+                return Results.BadRequest(new { errors = errors.Select(e => new { path = StripPrefix(e.Path), message = e.Message }) });
+            return Results.File(await renderer.RenderPngAsync(def, ct), "image/png");
+        });
 
         endpoints.MapPut("/api/screens/{id}", async (HttpRequest request, [FromServices] ScreenCatalog screens, [FromServices] ILoggerFactory loggers, string id) =>
         {
