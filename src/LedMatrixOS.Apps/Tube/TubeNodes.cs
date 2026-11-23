@@ -216,6 +216,9 @@ internal sealed class LinePill : Node
         Height = 10;
     }
 
+    /// <summary>When set, minor delays get a steady amber outline instead of the flashing alert (kept for anything worse).</summary>
+    public bool QuietMinor { get; init; }
+
     public void Apply(LineStatus status)
     {
         _color = TubeColors.Display(status.LineId);
@@ -232,13 +235,14 @@ internal sealed class LinePill : Node
 
     protected override void OnRender(FrameBuffer frame, Rectangle bounds)
     {
-        bool alert = _health.NeedsAttention();
+        bool alert = QuietMinor ? _health >= Health.Severe : _health.NeedsAttention();
         float wave = TubeGfx.Wave(_time, 1.1);
         var fill = _color;
         if (alert) fill = _color.WithBrightness(0.35f + 0.65f * wave);
         else if (_health == Health.Planned) fill = _color.WithBrightness(0.5f);
 
         frame.FillRoundedRect(bounds, 2, fill);
+        if (QuietMinor && _health == Health.Minor) TubeGfx.OutlineRound(frame, bounds, LineHealth.MinorColor);
 
         if (alert)
         {

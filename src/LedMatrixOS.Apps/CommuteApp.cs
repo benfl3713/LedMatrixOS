@@ -14,8 +14,10 @@ namespace LedMatrixOS.Apps;
 
 /// <summary>
 /// The "do I need to leave yet?" board. The hero is the time until you must leave to catch the first train you can still walk to
-/// (green, amber, then a flashing GO), next to the current weather; the strip along the bottom carries the status of every line serving the
-/// station, and the clock. Reuses the Tube departures data and the Open-Meteo weather source; the maths lives in <see cref="CommutePlanner"/>.
+/// (green, amber, then a flashing GO), with how long after the previous train it comes (a long gap means a packed train) and how long the
+/// wait is if you miss it, next to the current weather. The strip along the bottom carries the status of the commute's lines (those of the
+/// chosen routes plus any watched further along the journey), spelling out anything worse than minor delays, and the clock.
+/// Reuses the Tube departures data and the Open-Meteo weather source; the maths lives in <see cref="CommutePlanner"/>.
 /// </summary>
 [LegacySettingKey("stationSearch")]
 [LegacySettingKey("stationSelect", "stationId")]
@@ -25,6 +27,9 @@ public class CommuteApp : WidgetApp
     public override string Name => "Commute";
     public override int FrameRate => 30;
 
+    /// <summary>Trains kept on the (unseen) board: enough to judge the usual interval even at a busy interchange.</summary>
+    private const int MaxTrains = 24;
+
     private static readonly IReadOnlyList<LineStatus> NoStatuses = [];
 
 
@@ -33,6 +38,9 @@ public class CommuteApp : WidgetApp
 
     [Setting("Routes", Description = "Only trains on these lines and directions (e.g. Metropolitan towards Aldgate). Leave empty for all.", MultiSearch = true, Browse = true)]
     public string Routes { get; set; } = "";
+
+    [Setting("Watch Lines", Description = "Other lines your journey uses (e.g. Central if you change onto it). Their status shows alongside your station's.", MultiSearch = true, Browse = true)]
+    public string WatchLines { get; set; } = "";
 
     [Setting("Platform Filter", Description = "Advanced: only trains whose platform contains this text (e.g. 'Eastbound'). Prefer Routes; leave empty for all.", Advanced = true)]
     public string PlatformFilter { get; set; } = "";
@@ -49,11 +57,12 @@ public class CommuteApp : WidgetApp
     private readonly TflApi _api;
     private IWeatherSource _weatherSource;
     private readonly DepartureBoardModel _model = new();
+    private readonly DepartureHistory _history = new();
 
     private volatile ILiveData<TflArrival[]>? _arrivals;
     private volatile ILiveData<LineStatus[]>? _lineStatuses;
     private volatile ILiveData<WeatherSnapshot>? _weather;
-    private CancellationTokenSource? _stationCts, _weatherCts;
+    private CancellationTokenSource? _stationCts, _statusCts, _weatherCts;
     private bool _active, _locationFromUser;
 
     private LeaveCard? _card;
@@ -74,7 +83,7 @@ public class CommuteApp : WidgetApp
     protected override Node Build()
     {
         _card = new LeaveCard();
-        _chip = new WeatherChip { Width = 90 };
+        _chip = new WeatherChip { Width = 56 };
         _state = new StateScreen(Fonts.Big, Fonts.Small);
 
         _body = new Stack(Orientation.Horizontal, gap: 2)
@@ -100,9 +109,9 @@ public class CommuteApp : WidgetApp
                     Padding = new Thickness(2, 1, 3, 1),
                     Children =
                     {
-                        new ListView<LineStatus>(() => _lineStatuses?.Value ?? NoStatuses, s => new LinePill(s, Fonts.QuiteSmall), s => s.LineId)
+                        new ListView<LineStatus>(() => _lineStatuses?.Value ?? NoStatuses, s => new LinePill(s, Fonts.QuiteSmall) { QuietMinor = true }, s => s.LineId)
                             { Orientation = Orientation.Horizontal, Gap = 1, CrossAlign = Align.Center, EnterOffset = 6, ItemChanged = (n, s) => ((LinePill)n).Apply(s) },
-                        new Panel { Grow = 1 },
+                        new CommuteStatusLine(() => _lineStatuses?.Value),
                         new Clock("HH:mm", Time) { Style = clock },
                     },
                 },
@@ -117,11 +126,13 @@ public class CommuteApp : WidgetApp
     public override void Update(FrameContext context, CancellationToken cancellationToken)
     {
         _ = Host;   // builds the tree on the first frame
-        _model.Refresh(context.Time, _arrivals?.Value, PlatformFilter, 12, routes: Routes);
+        _model.Refresh(context.Time, _arrivals?.Value, PlatformFilter, MaxTrains, routes: Routes);
+        _history.Observe(_model.Visible, context.Time);
 
         bool hasTrains = _model.Visible.Count > 0;
-        _card!.Plan = CommutePlanner.Plan(_model.Visible, context.Time, WalkMinutes);
-        _card.WalkMinutes = WalkMinutes;
+        // With routes picked, any of them will do; otherwise only the target's own line and direction says anything about the gaps.
+        bool sameRoute = string.IsNullOrWhiteSpace(Routes);
+        _card!.Plan = CommutePlanner.Plan(_model.Visible, context.Time, WalkMinutes, sameRoute, _history);
         _chip!.Snapshot = _weather?.Value;
         _chip.Fahrenheit = Units == "Fahrenheit";
 
@@ -174,6 +185,7 @@ public class CommuteApp : WidgetApp
     {
         _active = false;
         CancelPoll(ref _stationCts);
+        CancelPoll(ref _statusCts);
         CancelPoll(ref _weatherCts);
         await base.OnDeactivatedAsync(cancellationToken);
     }
@@ -184,6 +196,8 @@ public class CommuteApp : WidgetApp
         switch (key)
         {
             case "stationId": RestartStationPolling(); break;
+            case "routes": _history.Clear(); RestartStatusPolling(); break;
+            case "watchLines": RestartStatusPolling(); break;
             case "location": _locationFromUser = true; RestartWeatherPolling(); break;
             case "units": RestartWeatherPolling(); break;
         }
@@ -195,17 +209,63 @@ public class CommuteApp : WidgetApp
     {
         CancelPoll(ref _stationCts);
         _arrivals = null;
-        _lineStatuses = null;
         _model.Reset();
+        _history.Clear();
 
         var stationId = StationId;
-        if (string.IsNullOrWhiteSpace(stationId)) return;
-
-        var scope = RestartPollScope(ref _stationCts);
-        var arrivals = Poll(TimeSpan.FromSeconds(30), ct => _api.GetArrivalsAsync(stationId, ct), scope);
-        _arrivals = arrivals;
-        _lineStatuses = Poll(TimeSpan.FromMinutes(5), ct => TflLookups.FetchLineStatusesAsync(_api, arrivals, ct), scope);
+        if (!string.IsNullOrWhiteSpace(stationId))
+        {
+            var scope = RestartPollScope(ref _stationCts);
+            _arrivals = Poll(TimeSpan.FromSeconds(30), ct => _api.GetArrivalsAsync(stationId, ct), scope);
+        }
+        RestartStatusPolling();
     }
+
+    /// <summary>
+    /// The commute's lines: those of the chosen routes, or every line at the station when none are chosen, plus the watched lines.
+    /// Statuses are polled every 5 minutes; with no routes chosen the station's lines are only known once arrivals have loaded.
+    /// </summary>
+    private void RestartStatusPolling()
+    {
+        CancelPoll(ref _statusCts);
+        _lineStatuses = null;
+
+        var watched = ParseLines(WatchLines);
+        var routeLines = RouteLines(Routes);
+        var arrivals = _arrivals;
+        bool fromStation = routeLines.Length == 0 && arrivals is not null;
+        if (!fromStation && routeLines.Length == 0 && watched.Length == 0) return;
+
+        var scope = RestartPollScope(ref _statusCts);
+        _lineStatuses = Poll(TimeSpan.FromMinutes(5), async ct =>
+        {
+            var lines = routeLines;
+            if (fromStation)
+            {
+                while ((lines = TflLookups.LineIdsOf(arrivals!.Value)).Length == 0) await Task.Delay(250, ct);
+            }
+
+            var all = lines.Concat(watched).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            var statuses = await _api.GetLineStatusesAsync(all, ct);
+            // Keep the rider's order: their station's lines first, then the lines further along
+            return statuses.OrderBy(s => Array.FindIndex(all, id => id.Equals(s.LineId, StringComparison.OrdinalIgnoreCase))).ToArray();
+        }, scope);
+    }
+
+    /// <summary>The distinct line ids of a comma separated list of route keys ("jubilee|Eastbound,central|Westbound").</summary>
+    internal static string[] RouteLines(string? routes) => (routes ?? "")
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(key => key.Split('|')[0].Trim().ToLowerInvariant())
+        .Where(id => id.Length > 0)
+        .Distinct()
+        .ToArray();
+
+    /// <summary>The distinct line ids of a comma separated list.</summary>
+    internal static string[] ParseLines(string? lines) => (lines ?? "")
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(id => id.ToLowerInvariant())
+        .Distinct()
+        .ToArray();
 
     private void RestartWeatherPolling()
     {
@@ -223,5 +283,6 @@ public class CommuteApp : WidgetApp
         _lineStatuses = statuses;
         _weather = weather;
         _model.Reset();
+        _history.Clear();
     }
 }

@@ -55,3 +55,31 @@ internal sealed class TflDockOptions(TflApi api) : ISettingOptionsProvider
     public async Task<string?> GetLabelAsync(string appId, string key, string value, CancellationToken ct) =>
         (await api.GetBikePointAsync(value, ct)).Name is { Length: > 0 } name ? name : null;
 }
+
+/// <summary>
+/// Picks TfL rail lines (Tube, DLR, Elizabeth line, Overground lines, tram) from a fixed list, so a rider can watch the lines of their whole
+/// journey, not just those at their station. Stored as line ids ("jubilee", "central").
+/// </summary>
+internal sealed class TflLineOptions : ISettingOptionsProvider
+{
+    public static readonly string[] LineIds =
+    [
+        "bakerloo", "central", "circle", "district", "hammersmith-city", "jubilee", "metropolitan", "northern", "piccadilly", "victoria",
+        "waterloo-city", "dlr", "elizabeth", "liberty", "lioness", "mildmay", "suffragette", "weaver", "windrush", "tram",
+    ];
+
+    public bool Browse => true;
+
+    public Task<IReadOnlyList<SettingOption>> GetOptionsAsync(string appId, string key, string query, CancellationToken ct)
+    {
+        query = query.Trim();
+        IReadOnlyList<SettingOption> options = LineIds
+            .Select(id => new SettingOption(id, TubeRoutes.LineTitle(id)))
+            .Where(o => query.Length == 0 || o.Label.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        return Task.FromResult(options);
+    }
+
+    public Task<string?> GetLabelAsync(string appId, string key, string value, CancellationToken ct) =>
+        Task.FromResult<string?>(string.IsNullOrWhiteSpace(value) ? null : TubeRoutes.LineTitle(value.Trim()));
+}
