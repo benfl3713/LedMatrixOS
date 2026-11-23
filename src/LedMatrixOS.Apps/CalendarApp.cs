@@ -17,6 +17,7 @@ namespace LedMatrixOS.Apps;
 /// The event in progress shows how far through it you are. With <see cref="TimelineSeconds"/> set, a "Today" page (event bars on an hour axis)
 /// alternates with the board.
 /// </summary>
+[AppMeta(AppCategory.Clocks, "Upcoming events from your calendar")]
 public class CalendarApp : WidgetApp
 {
     public override string Id => "calendar";

@@ -12,6 +12,7 @@ namespace LedMatrixOS.Apps;
 /// (time and height) across the top. Tide heights come from an <see cref="ITideSource"/> (Open-Meteo's marine API, no key); while that is loading or
 /// unavailable a sinusoidal model keeps the water moving, and the place is marked "est." so it is not mistaken for real data.
 /// </summary>
+[AppMeta(AppCategory.Info, "High and low tide times")]
 public class TidesApp : WidgetApp
 {
     public override string Id => "tides";

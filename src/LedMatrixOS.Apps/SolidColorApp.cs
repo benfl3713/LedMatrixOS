@@ -13,6 +13,7 @@ namespace LedMatrixOS.Apps;
 [LegacySettingKey("red")]
 [LegacySettingKey("green")]
 [LegacySettingKey("blue")]
+[AppMeta(AppCategory.Ambient, "A single colour fill")]
 public class SolidColorApp : WidgetApp
 {
     public static readonly string[] Modes = ["Solid", "Breathing", "Gradient Drift", "Color Cycle", "Sparkle", "Candle", "Aurora"];

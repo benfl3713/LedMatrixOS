@@ -16,6 +16,7 @@ namespace LedMatrixOS.Apps;
 /// Air quality for a place (Open-Meteo, no key): a big European AQI with its band, PM2.5 and PM10 chips, and a "good to run outside?"
 /// verdict along the bottom. A side pager alternates a 24 hour AQI trend with UV and pollen.
 /// </summary>
+[AppMeta(AppCategory.Info, "Local air quality index")]
 public sealed class AirQualityApp : WidgetApp
 {
     private enum State { Loading, Ready, Offline }

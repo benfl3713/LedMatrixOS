@@ -13,6 +13,7 @@ namespace LedMatrixOS.Apps;
 /// it is kept in the normal settings storage and the pet picks up where it left off. The inputs sit behind small interfaces
 /// (<see cref="ICalendarProgress"/>, <see cref="IDaylight"/>, <see cref="IRainSensor"/>) with plain defaults.
 /// </summary>
+[AppMeta(AppCategory.Ambient, "A little pet that lives on your display")]
 public sealed class PetApp : WidgetApp
 {
     private static readonly TimeSpan ReadEvery = TimeSpan.FromSeconds(5);

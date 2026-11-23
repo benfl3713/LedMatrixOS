@@ -14,6 +14,7 @@ namespace LedMatrixOS.Apps;
 /// text scrolling when it is too long; the page of four changes every few seconds. Feed URLs come from the Feeds setting and, for
 /// private ones, from config (<c>Rss:Feeds</c>, comma separated), which is never readable back through the API.
 /// </summary>
+[AppMeta(AppCategory.Info, "Scrolling headlines from RSS feeds")]
 public sealed class RssTickerApp : WidgetApp
 {
     private enum State { Loading, Ready, NoFeeds, Offline }

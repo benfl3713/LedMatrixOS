@@ -1,3 +1,4 @@
+using LedMatrixOS.Core;
 using LedMatrixOS.Apps.Visuals;
 using LedMatrixOS.Core.Settings;
 using LedMatrixOS.Graphics.UI;
@@ -8,6 +9,7 @@ namespace LedMatrixOS.Apps;
 /// Digital rain in three depth layers (tiny dim glyphs far away, katakana up close), bright white-hot heads, long fading trails,
 /// shimmering glyphs, an occasional scan-line word reveal and short glitch bursts, all under a bloom pass.
 /// </summary>
+[AppMeta(AppCategory.Ambient, "Falling green code rain")]
 public sealed class MatrixRainApp : WidgetApp
 {
     public override string Id => "matrix-rain";

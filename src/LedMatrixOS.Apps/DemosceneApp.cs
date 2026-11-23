@@ -1,3 +1,4 @@
+using LedMatrixOS.Core;
 using LedMatrixOS.Apps.Demoscene;
 using LedMatrixOS.Core.Settings;
 using LedMatrixOS.Graphics.UI;
@@ -8,6 +9,7 @@ namespace LedMatrixOS.Apps;
 /// Demoscene effects on the whole display: plasma, tunnel, metaballs, starfield warp, lava lamp, a rotating 3D cube and an endless
 /// Mandelbrot zoom. Pick one, or auto-cycle through them with a crossfade. Everything is table driven and allocation free.
 /// </summary>
+[AppMeta(AppCategory.Ambient, "Classic demoscene effects")]
 public sealed class DemosceneApp : WidgetApp
 {
     public const string AutoCycle = "Auto-cycle";

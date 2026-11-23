@@ -17,6 +17,7 @@ public enum BreakoutMode { Title, Serving, Playing, Dead, Attract }
 /// without input a bot plays so the display is never dead. The high score is an Advanced setting, so it is persisted.
 /// Time comes only from <see cref="FrameContext"/>; the ball is moved in sub-steps of at most one pixel so it cannot tunnel through bricks.
 /// </summary>
+[AppMeta(AppCategory.Games, "Smash the bricks with a paddle")]
 public sealed class BreakoutApp : SettingsAppBase, IInputConsumer
 {
     public const int FieldX = 48, FieldW = 208, FieldH = 64;

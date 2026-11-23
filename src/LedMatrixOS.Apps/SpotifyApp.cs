@@ -17,6 +17,7 @@ namespace LedMatrixOS.Apps;
 /// album's palette over a slow animated backdrop, plus a small equaliser. Data comes from <see cref="SpotifyDataService"/> through
 /// <see cref="SpotifyFeed"/>; art is decoded once per track there, and progress is interpolated from the app clock between polls.
 /// </summary>
+[AppMeta(AppCategory.Info, "Now playing on Spotify")]
 public sealed class SpotifyApp : WidgetApp
 {
     public override string Id => "spotify";

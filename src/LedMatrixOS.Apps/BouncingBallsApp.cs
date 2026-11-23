@@ -1,3 +1,4 @@
+using LedMatrixOS.Core;
 using LedMatrixOS.Apps.Toys;
 using LedMatrixOS.Core.Settings;
 using LedMatrixOS.Graphics.UI;
@@ -8,6 +9,7 @@ namespace LedMatrixOS.Apps;
 /// Glossy balls that squash and stretch, leave glowing trails and burst into sparks when they collide, in a field whose gravity
 /// occasionally swings to a new direction. The "lava" style swaps the balls for a lava-lamp of merging metaballs.
 /// </summary>
+[AppMeta(AppCategory.Ambient, "Colourful balls bouncing around")]
 public sealed class BouncingBallsApp : WidgetApp
 {
     private BouncingBallsField? _field;

@@ -9,6 +9,7 @@ namespace LedMatrixOS.Apps;
 /// Showcase and smoke test for the widget layer: a departures board whose rows reshuffle every few seconds (ListView keyed diffing),
 /// a pager of rows, a rolling counter, a marquee and a clock. All data is fake and driven by frame time, so renders are deterministic.
 /// </summary>
+[AppMeta(AppCategory.Developer, "Showcase of the widget building blocks")]
 public sealed class WidgetDemoApp : WidgetApp
 {
     private static readonly TimeSpan ShuffleEvery = TimeSpan.FromSeconds(4);

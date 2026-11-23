@@ -12,6 +12,7 @@ namespace LedMatrixOS.Apps;
 /// Connection details come from configuration only (<c>HomeAssistant:BaseUrl</c>, <c>HomeAssistant:Token</c> - a long-lived access token),
 /// never from a setting, so the token cannot be read back over the API.
 /// </summary>
+[AppMeta(AppCategory.Info, "Home Assistant entities as live tiles")]
 public class HomeAssistantTilesApp : WidgetApp
 {
     public override string Id => "ha-tiles";

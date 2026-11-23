@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using LedMatrixOS.Apps.Tube;
 using LedMatrixOS.Core;
 using LedMatrixOS.Core.Animation;
@@ -15,6 +15,7 @@ namespace LedMatrixOS.Apps;
 /// The all-lines status board. Every line is a tall tile in its own colour across the top: calm and tick-marked when running well, bright,
 /// breathing and framed when not. Underneath, a pager slides through each disruption (line, status, reason) or settles on a green all-clear.
 /// </summary>
+[AppMeta(AppCategory.Travel, "Service status for every Tube line")]
 public class TubeStatusApp : WidgetApp
 {
     public override string Id => "tube-status";

@@ -15,6 +15,7 @@ namespace LedMatrixOS.Apps;
 /// A small clock sits in the corner. An optional alarm time makes the sky brighten like a sunrise in the minutes before it, as a gentle wake-up light.
 /// </summary>
 /// <remarks>Sun and moon positions come from the location's coordinates and <see cref="WidgetApp.Time"/>; the weather comes from the Open-Meteo source the Weather app uses, and the sky is clear when it is unavailable.</remarks>
+[AppMeta(AppCategory.Clocks, "Time with a sky that follows the sun")]
 public class SkyClockApp : WidgetApp
 {
     public override string Id => "sky-clock";

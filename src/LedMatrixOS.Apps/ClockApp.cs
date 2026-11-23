@@ -1,3 +1,4 @@
+using LedMatrixOS.Core;
 using LedMatrixOS.Apps.Clocks;
 using LedMatrixOS.Core.Settings;
 using LedMatrixOS.Graphics.UI;
@@ -10,6 +11,7 @@ namespace LedMatrixOS.Apps;
 /// Settings that belong to another style are kept but ignored. The former "animated-clock" and "flip-clock" ids are aliases
 /// of this app with the matching Style (see <see cref="BuiltInApps.Aliases"/>).
 /// </summary>
+[AppMeta(AppCategory.Clocks, "Digital, animated and flip clock styles")]
 public sealed partial class ClockApp : WidgetApp
 {
     public override string Id => "clock";

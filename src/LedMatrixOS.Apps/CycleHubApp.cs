@@ -19,6 +19,7 @@ namespace LedMatrixOS.Apps;
 /// </summary>
 [LegacySettingKey("dockSearch")]
 [LegacySettingKey("dockSelect", "dockIds")]
+[AppMeta(AppCategory.Travel, "Free bikes and docks at a cycle hub")]
 public class CycleHubApp : WidgetApp
 {
     public override string Id => "cycle-hub";

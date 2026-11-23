@@ -15,6 +15,7 @@ namespace LedMatrixOS.Apps;
 /// through the pages, or the board settles on a green all-clear. Watch the whole network or pick corridors, and hide the minor ones with
 /// the minimum severity. TfL polling lives here, HTTP in <see cref="TflApi"/>.
 /// </summary>
+[AppMeta(AppCategory.Travel, "Roadworks and incidents on your roads")]
 public class RoadDisruptionsApp : WidgetApp
 {
     public override string Id => "road-disruptions";

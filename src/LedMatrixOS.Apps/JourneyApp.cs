@@ -19,6 +19,7 @@ namespace LedMatrixOS.Apps;
 /// arrival time, and a Commute-style "LEAVE IN n MIN" hero counting down to the first vehicle (less your walk buffer). The countdown follows
 /// the app clock between polls, so it keeps running while the data refreshes once a minute.
 /// </summary>
+[AppMeta(AppCategory.Travel, "Door-to-door journey time and route")]
 public class JourneyApp : WidgetApp
 {
     public override string Id => "journey";

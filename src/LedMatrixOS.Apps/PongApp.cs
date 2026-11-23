@@ -11,6 +11,7 @@ namespace LedMatrixOS.Apps;
 /// for 10 seconds is played by an AI (difficulty is a setting), so one player gets an AI opponent and an idle screen is a demo.
 /// First to <see cref="PointsToWin"/> wins, then a new match starts.
 /// </summary>
+[AppMeta(AppCategory.Games, "Two-player paddle game")]
 public sealed class PongApp : WidgetApp, IInputConsumer
 {
     private PongGame? _game;

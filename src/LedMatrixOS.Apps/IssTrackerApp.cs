@@ -21,6 +21,7 @@ namespace LedMatrixOS.Apps;
 /// The home location is the Location setting (searched by place name) when set; otherwise <c>IssTracker:Latitude</c>/<c>IssTracker:Longitude</c>
 /// from configuration, falling back to <c>Weather:Location</c> (a place name, geocoded, or "lat,lon"). Without any, the map still works.
 /// </remarks>
+[AppMeta(AppCategory.Info, "Where the space station is now")]
 public sealed class IssTrackerApp : WidgetApp
 {
     public override string Id => "iss-tracker";

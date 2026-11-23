@@ -1,3 +1,4 @@
+using LedMatrixOS.Core;
 using LedMatrixOS.Apps.Visuals;
 using LedMatrixOS.Core.Settings;
 using LedMatrixOS.Graphics.UI;
@@ -8,6 +9,7 @@ namespace LedMatrixOS.Apps;
 /// A wall of fire: a heat-diffusion simulation driven by scrolling turbulence (so tongues lick and sway instead of flickering
 /// per pixel), a palette ramp from ember red to white-hot, rising embers from the particle system and a bloom over the lot.
 /// </summary>
+[AppMeta(AppCategory.Ambient, "Flickering flames")]
 public sealed class FireApp : WidgetApp
 {
     public override string Id => "fire";

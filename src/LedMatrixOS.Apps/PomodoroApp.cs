@@ -18,6 +18,7 @@ public enum PomodoroPhase
 /// phase down, pips show progress through the cycle and a breathing bar drains along the bottom. Each phase change raises a toast
 /// (or a full-screen alert). Timing comes from <see cref="WidgetApp.Time"/>, and the cycle starts when the app is activated.
 /// </summary>
+[AppMeta(AppCategory.Clocks, "Focus and break timer")]
 public sealed class PomodoroApp : WidgetApp
 {
     public override string Id => "pomodoro";

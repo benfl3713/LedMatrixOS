@@ -1,3 +1,4 @@
+using LedMatrixOS.Core;
 using LedMatrixOS.Apps.Ambient;
 using LedMatrixOS.Core.Settings;
 using LedMatrixOS.Graphics.Text;
@@ -11,6 +12,7 @@ namespace LedMatrixOS.Apps;
 /// (six palettes from quiet blue to neon). The clock digits roll when they change, the seconds sweep along the bottom edge,
 /// and everything eases in on start and cross-fades when you change a setting.
 /// </summary>
+[AppMeta(AppCategory.Clocks, "Clock, weather and quick glances in one")]
 public sealed partial class HomePageApp : WidgetApp
 {
     public override string Id => "home";

@@ -9,6 +9,7 @@ namespace LedMatrixOS.Apps;
 /// Controller tester: one row per player (P1-P4) with a pill per button that lights up while that button is held.
 /// Reads held state through <see cref="MatrixAppBase.Input"/>, so it is also the reference for polling input.
 /// </summary>
+[AppMeta(AppCategory.Developer, "Check gamepad buttons are registering")]
 public sealed class InputTestApp : WidgetApp
 {
     private static readonly string[] Labels = ["U", "D", "L", "R", "A", "B", "ST", "SE"];

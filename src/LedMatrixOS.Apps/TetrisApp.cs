@@ -11,6 +11,7 @@ namespace LedMatrixOS.Apps;
 /// Idle for 20 seconds and a simple AI plays a demo game until a button is pressed. The board is drawn upright and centred
 /// (3 px cells, see <see cref="TetrisField"/>). The best human score is an Advanced setting so it is kept in normal settings storage.
 /// </summary>
+[AppMeta(AppCategory.Games, "Falling blocks puzzle")]
 public sealed class TetrisApp : WidgetApp, IInputConsumer
 {
     private readonly TetrisGame _game = new(seed: 20240607);

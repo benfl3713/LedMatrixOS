@@ -20,6 +20,7 @@ namespace LedMatrixOS.Apps;
 /// A <c>Reminders</c> entry takes over the whole display with a pulse while its window is open. Local time comes from the app clock
 /// (<see cref="WidgetApp.Time"/>), never the system clock directly.
 /// </summary>
+[AppMeta(AppCategory.Clocks, "Which bins go out and when")]
 public class BinDayApp : WidgetApp
 {
     public override string Id => "bin-day";

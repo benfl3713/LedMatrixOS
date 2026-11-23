@@ -7,10 +7,10 @@ using Microsoft.Extensions.DependencyInjection;
 namespace LedMatrixOS.Core;
 
 /// <summary>Static description of a registered app, available without activating it.</summary>
-public sealed record AppInfo(string Id, string Name, bool HasSettings);
+public sealed record AppInfo(string Id, string Name, bool HasSettings, AppCategory Category = AppCategory.Other, string Description = "");
 
 /// <summary>A user-created screen: an alias of a registered app with a preset, listed alongside the built-in apps.</summary>
-public sealed record ScreenInfo(string Id, string Name, string TargetId, bool HasSettings);
+public sealed record ScreenInfo(string Id, string Name, string TargetId, bool HasSettings, string Description = "");
 
 public enum SettingsStatus { Ok, NotFound, NotConfigurable }
 
@@ -46,7 +46,7 @@ public sealed class AppManager
     /// <summary>User-created screens (aliases registered with isScreen: true). Built-in aliases are never listed.</summary>
     public IEnumerable<ScreenInfo> Screens => _aliases
         .Where(a => a.Value.IsScreen && _infoById.ContainsKey(a.Value.TargetId))
-        .Select(a => new ScreenInfo(a.Key, a.Value.DisplayName ?? a.Key, a.Value.TargetId, _infoById[a.Value.TargetId].HasSettings));
+        .Select(a => new ScreenInfo(a.Key, a.Value.DisplayName ?? a.Key, a.Value.TargetId, _infoById[a.Value.TargetId].HasSettings, $"Custom screen · based on {_infoById[a.Value.TargetId].Name}"));
 
     /// <summary>Handed to apps on activation so they can raise overlays (the engine's overlay manager).</summary>
     public IOverlayService? Overlays { get; set; }
@@ -74,7 +74,8 @@ public sealed class AppManager
         var id = instance.Id;
 
         _appsById[id] = app;
-        _infoById[id] = new AppInfo(id, instance.Name, instance is IConfigurableApp);
+        var meta = app.GetCustomAttributes(typeof(AppMetaAttribute), false).OfType<AppMetaAttribute>().FirstOrDefault();
+        _infoById[id] = new AppInfo(id, instance.Name, instance is IConfigurableApp, meta?.Category ?? AppCategory.Other, meta?.Description ?? "");
     }
 
     /// <summary>

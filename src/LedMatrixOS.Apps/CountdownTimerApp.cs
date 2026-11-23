@@ -1,3 +1,4 @@
+using LedMatrixOS.Core;
 using LedMatrixOS.Apps.Ambient;
 using LedMatrixOS.Core.Settings;
 using LedMatrixOS.Graphics.Text;
@@ -11,6 +12,7 @@ namespace LedMatrixOS.Apps;
 /// at zero the display flashes, the digits turn rainbow, "TIME'S UP!" waves and confetti bursts from the corners.
 /// Set <c>target</c> (a date and time like "2026-12-25 00:00", or a daily time like "18:30") to count to a moment instead of a duration.
 /// </summary>
+[AppMeta(AppCategory.Clocks, "Count down to a time or event")]
 public sealed class CountdownTimerApp : WidgetApp
 {
     public override string Id => "countdown-timer";

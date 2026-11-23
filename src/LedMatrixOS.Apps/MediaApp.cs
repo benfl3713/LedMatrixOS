@@ -17,6 +17,7 @@ namespace LedMatrixOS.Apps;
 /// <c>Center</c> and <c>Scroll</c> all show that same frame, and the background colour only fills any space around it.
 /// </para>
 /// </summary>
+[AppMeta(AppCategory.Media, "Show images and GIFs from your library")]
 public sealed class MediaApp : SettingsAppBase
 {
     public static readonly string[] Modes = ["Fit", "Fill", "Stretch", "Center", "Scroll"];

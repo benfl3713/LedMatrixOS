@@ -12,6 +12,7 @@ namespace LedMatrixOS.Apps;
 /// The classic bouncing DVD logo with all the love: it squashes into walls, sparks, trails and changes colour, and a corner hit
 /// triggers a full celebration with a running counter. Gentle aim assist makes corners turn up now and then.
 /// </summary>
+[AppMeta(AppCategory.Ambient, "The bouncing DVD logo, corner hit and all")]
 public sealed class DvdLogoApp : WidgetApp
 {
     private DvdLogoField? _field;

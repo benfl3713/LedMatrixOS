@@ -15,6 +15,7 @@ namespace LedMatrixOS.Apps.Screens;
 /// once per activation by <see cref="ScreenNodeFactory"/>; data comes from <see cref="BindingResolver"/> sources, so steady-state rendering allocates nothing.
 /// A missing screen shows "Screen not found"; unusable nodes inside a screen are skipped.
 /// </summary>
+[AppMeta(AppCategory.Developer, "Host for user-defined custom screens")]
 public sealed class ScreenApp : WidgetApp, IPollHost
 {
     private readonly IScreenStore _store;

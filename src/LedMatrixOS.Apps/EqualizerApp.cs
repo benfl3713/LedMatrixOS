@@ -12,6 +12,7 @@ namespace LedMatrixOS.Apps;
 /// demo groove (Auto Generate) or, when that is off, a slow idle "breathing" ripple. Fast-attack/slow-release smoothing, peak-hold caps that
 /// fall with gravity, per-style gradients, beat detection driving particles and bloom, and five styles (Radial is a full-width sunburst).
 /// </summary>
+[AppMeta(AppCategory.Ambient, "Audio-reactive spectrum bars")]
 public sealed class EqualizerApp : WidgetApp
 {
     private AudioDataService? _audioService;
