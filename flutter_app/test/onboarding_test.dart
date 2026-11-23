@@ -267,4 +267,19 @@ void main() {
     expect(find.byKey(const Key('sheet-preview')), findsOneWidget);
     expect(tester.getTopLeft(find.byKey(const Key('sheet-preview'))).dy, before.dy);
   });
+
+  testWidgets('Find display in Settings forgets the saved display and reopens setup', (tester) async {
+    _phone(tester);
+    await tester.pumpWidget(testApp(FakeApi()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('find-display')));
+    await tester.tap(find.byKey(const Key('find-display')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(OnboardingPage), findsOneWidget);
+    expect(find.byType(NavigationBar), findsNothing);
+  });
 }

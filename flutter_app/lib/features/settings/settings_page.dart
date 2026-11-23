@@ -110,13 +110,8 @@ class _ConnectionCardState extends ConsumerState<_ConnectionCard> {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Device address saved')));
   }
 
-  Future<void> _reset() async {
-    await ref.read(apiUrlProvider.notifier).reset();
-    if (!mounted) return;
-    _controller.text = ref.read(apiUrlProvider);
-    ref.invalidate(healthProvider);
-    setState(() => _result = null);
-  }
+  /// Forgets this display and reopens setup, where the user can scan for displays or enter another address.
+  Future<void> _findDisplay() => ref.read(apiUrlProvider.notifier).forget();
 
   @override
   Widget build(BuildContext context) {
@@ -150,7 +145,10 @@ class _ConnectionCardState extends ConsumerState<_ConnectionCard> {
             onSubmitted: (_) => _test(),
           ),
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               OutlinedButton.icon(
                 key: const Key('test-connection'),
@@ -160,14 +158,12 @@ class _ConnectionCardState extends ConsumerState<_ConnectionCard> {
                     : const Icon(Icons.wifi_find_rounded),
                 label: const Text('Test connection'),
               ),
-              const SizedBox(width: 8),
               FilledButton(
                 key: const Key('save-url'),
                 onPressed: parsed.url != null && _dirty ? _save : null,
                 child: const Text('Save'),
               ),
-              const Spacer(),
-              TextButton(onPressed: _reset, child: const Text('Reset')),
+              TextButton(key: const Key('find-display'), onPressed: _findDisplay, child: const Text('Find display')),
             ],
           ),
           if (_result != null && !stale) ...[

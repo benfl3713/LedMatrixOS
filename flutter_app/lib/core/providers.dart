@@ -81,6 +81,17 @@ class DeviceConfigNotifier extends Notifier<DeviceConfig> {
     }
     if (ref.mounted) state = DeviceConfig(loaded: true, url: trimmed);
   }
+
+  /// Forgets the saved address, which sends the user back through onboarding to find a display.
+  Future<void> forget() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_apiUrlPrefsKey);
+    } catch (_) {
+      // Nothing saved to remove; onboarding still runs.
+    }
+    if (ref.mounted) state = const DeviceConfig(loaded: true);
+  }
 }
 
 final deviceConfigProvider = NotifierProvider<DeviceConfigNotifier, DeviceConfig>(DeviceConfigNotifier.new);
@@ -93,7 +104,8 @@ class ApiUrlNotifier extends Notifier<String> {
 
   Future<void> save(String url) => ref.read(deviceConfigProvider.notifier).save(url);
 
-  Future<void> reset() => save(defaultApiUrl);
+  /// Forgets the saved address so onboarding can find a display again.
+  Future<void> forget() => ref.read(deviceConfigProvider.notifier).forget();
 }
 
 final apiUrlProvider = NotifierProvider<ApiUrlNotifier, String>(ApiUrlNotifier.new);
