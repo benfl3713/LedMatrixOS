@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/tokens.dart';
 import 'gamepad_provider.dart';
 import 'input_service.dart';
 
@@ -61,16 +62,27 @@ class _GamepadPageState extends ConsumerState<GamepadPage> {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => context.canPop() ? context.pop() : context.go('/apps')),
+        titleSpacing: 0,
         title: const Text('Gamepad'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Tooltip(
               message: _connected ? 'Connected' : 'Reconnecting (using HTTP fallback)',
-              child: Icon(
-                _connected ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-                key: Key(_connected ? 'pad-connected' : 'pad-disconnected'),
-                color: _connected ? scheme.primary : scheme.error,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _connected ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+                    key: Key(_connected ? 'pad-connected' : 'pad-disconnected'),
+                    color: _connected ? scheme.primary : scheme.error,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _connected ? 'Live' : 'Reconnecting',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(color: _connected ? scheme.primary : scheme.error),
+                  ),
+                ],
               ),
             ),
           ),
@@ -110,6 +122,17 @@ class _GamepadPageState extends ConsumerState<GamepadPage> {
     ref.read(inputServiceProvider).send(ref.read(playerProvider), button, state);
   }
 }
+
+String _spoken(PadButton b) => switch (b) {
+      PadButton.up => 'Up',
+      PadButton.down => 'Down',
+      PadButton.left => 'Left',
+      PadButton.right => 'Right',
+      PadButton.a => 'A button',
+      PadButton.b => 'B button',
+      PadButton.start => 'Start',
+      PadButton.select => 'Select',
+    };
 
 typedef PadEvent = void Function(PadButton button, PadState state);
 
@@ -173,7 +196,7 @@ class _PadKeyState extends State<PadKey> {
       onPointerCancel: _release,
       child: Semantics(
         button: true,
-        label: widget.button.name,
+        label: _spoken(widget.button),
         child: Container(
           key: Key('pad-${widget.button.name}'),
           width: widget.width,
@@ -182,7 +205,9 @@ class _PadKeyState extends State<PadKey> {
           decoration: BoxDecoration(
             color: pressed ? scheme.primary : scheme.secondaryContainer,
             shape: widget.round ? BoxShape.circle : BoxShape.rectangle,
-            borderRadius: widget.round ? null : BorderRadius.circular(14),
+            borderRadius: widget.round ? null : BorderRadius.circular(Radii.md),
+            border: Border.all(color: pressed ? scheme.primary : scheme.outlineVariant),
+            boxShadow: [if (pressed) BoxShadow(color: scheme.primary.withValues(alpha: 0.45), blurRadius: 18)],
           ),
           child: widget.icon != null
               ? Icon(widget.icon, size: 36, color: fg)

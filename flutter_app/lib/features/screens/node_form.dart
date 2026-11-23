@@ -168,7 +168,7 @@ class _TextPropState extends State<_TextProp> {
         key: Key('prop-${widget.label}'),
         controller: _c,
         keyboardType: widget.keyboardType,
-        decoration: InputDecoration(labelText: widget.label, errorText: widget.error, border: const OutlineInputBorder(), isDense: true),
+        decoration: InputDecoration(labelText: widget.label, errorText: widget.error, isDense: true),
         onChanged: widget.onChanged,
       );
 }
@@ -198,7 +198,7 @@ class _ChoiceProp extends StatelessWidget {
       initialValue: value,
       isExpanded: true,
       isDense: true,
-      decoration: InputDecoration(labelText: label, errorText: error, border: const OutlineInputBorder(), isDense: true),
+      decoration: InputDecoration(labelText: label, errorText: error, isDense: true),
       items: [
         const DropdownMenuItem<String?>(value: null, child: Text('(default)')),
         for (final o in all) DropdownMenuItem<String?>(value: o, child: Text(o)),
@@ -221,7 +221,7 @@ class _ColorProp extends StatelessWidget {
     final color = parseHexColor(value);
     final scheme = Theme.of(context).colorScheme;
     return InputDecorator(
-      decoration: InputDecoration(labelText: label, errorText: error, border: const OutlineInputBorder(), isDense: true),
+      decoration: InputDecoration(labelText: label, errorText: error, isDense: true),
       child: Row(
         children: [
           InkWell(
@@ -301,7 +301,7 @@ class _BindingProp extends StatelessWidget {
     );
     if (bound != null) {
       return InputDecorator(
-        decoration: InputDecoration(labelText: label, errorText: error, border: const OutlineInputBorder(), isDense: true, suffixIcon: picker),
+        decoration: InputDecoration(labelText: label, errorText: error, isDense: true, suffixIcon: picker),
         child: Row(
           children: [
             Expanded(child: Text('bound to $bound', key: Key('prop-$label'))),
@@ -374,7 +374,7 @@ class _BindingPickerDialogState extends State<_BindingPickerDialog> {
               key: const Key('binding-key-field'),
               controller: _key,
               autofocus: false,
-              decoration: const InputDecoration(labelText: 'Key (pick one below or type it)', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Key (pick one below or type it)'),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 8),

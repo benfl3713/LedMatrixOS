@@ -75,7 +75,7 @@ class ErrorView extends ConsumerWidget {
                         onRetry?.call();
                       },
                 icon: const Icon(Icons.refresh_rounded),
-                label: Text(retrying ? 'Reconnecting...' : 'Try again'),
+                label: Text(retrying ? 'Reconnecting...' : 'Retry'),
               ),
             ],
           ],
