@@ -48,6 +48,16 @@ Color playlistColor(String name, List<PlaylistDoc> playlists) {
 
 Color _onColor(Color c) => c.computeLuminance() > 0.45 ? const Color(0xFF06141A) : Colors.white;
 
+/// What to call a playlist in the UI. A one-app rule creates a playlist named after the app's id, so that id is shown as
+/// the app's name ("Rail Departures", not "rail-departures").
+String playlistLabel(WidgetRef ref, String id) {
+  if (id.isEmpty) return id;
+  for (final MatrixApp a in ref.watch(appListProvider).value?.apps ?? const []) {
+    if (a.id == id) return a.name;
+  }
+  return id;
+}
+
 class SchedulePage extends ConsumerWidget {
   const SchedulePage({super.key});
 
@@ -358,7 +368,7 @@ class _StatusCard extends ConsumerWidget {
                 Text('No rule is active.', style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant))
               else ...[
                 Text(
-                  s.playlist ?? rule.playlistId,
+                  playlistLabel(ref, s.playlist ?? rule.playlistId),
                   style: text.headlineSmall,
                 ),
                 const SizedBox(height: 4),
@@ -410,7 +420,7 @@ class _Segment {
   final Key key;
 }
 
-class _WeekView extends StatelessWidget {
+class _WeekView extends ConsumerWidget {
   const _WeekView({required this.rules, required this.playlists, required this.onTapRule});
 
   final List<RuleDoc> rules;
@@ -442,7 +452,7 @@ class _WeekView extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final now = DateTime.now();
@@ -545,7 +555,7 @@ class _WeekView extends StatelessWidget {
                     decoration: BoxDecoration(color: playlistColor(name, playlists), borderRadius: BorderRadius.circular(3)),
                   ),
                   const SizedBox(width: 6),
-                  Text(name, style: text.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                  Text(playlistLabel(ref, name), style: text.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
                 ]),
               Row(mainAxisSize: MainAxisSize.min, children: [
                 Container(width: 2, height: 12, color: Brand.live),
@@ -560,7 +570,7 @@ class _WeekView extends StatelessWidget {
   }
 }
 
-class _Bar extends StatelessWidget {
+class _Bar extends ConsumerWidget {
   const _Bar({super.key, required this.rule, required this.color, required this.onTap});
 
   final RuleDoc rule;
@@ -568,8 +578,8 @@ class _Bar extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final label = rule.playlistId.isEmpty ? '?' : rule.playlistId;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final label = rule.playlistId.isEmpty ? '?' : playlistLabel(ref, rule.playlistId);
     return Semantics(
       button: true,
       label: '$label, ${describeDays(rule.daysMask)}, ${describeTimes(rule)}. Edit rule',
@@ -602,7 +612,7 @@ class _Bar extends StatelessWidget {
   }
 }
 
-class _RuleTile extends StatelessWidget {
+class _RuleTile extends ConsumerWidget {
   const _RuleTile({
     super.key,
     required this.index,
@@ -619,10 +629,10 @@ class _RuleTile extends StatelessWidget {
   final VoidCallback onDelete;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final extras = [
-      'Priority ${rule.priority}',
+      describePriority(rule.priority),
       if (rule.brightnessOverride != null) 'Brightness ${brightnessToPercent(rule.brightnessOverride!)}%',
       if (rule.condition != null && rule.condition!.isNotEmpty) 'When ${rule.condition}',
     ];
@@ -643,7 +653,7 @@ class _RuleTile extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(rule.playlistId.isEmpty ? '(no playlist)' : rule.playlistId, style: Theme.of(context).textTheme.titleSmall),
+                        Text(rule.playlistId.isEmpty ? '(no playlist)' : playlistLabel(ref, rule.playlistId), style: Theme.of(context).textTheme.titleSmall),
                         const SizedBox(height: 2),
                         Text('${describeDays(rule.daysMask)}, ${describeTimes(rule)}'),
                         Text(extras.join(', '),
@@ -668,7 +678,7 @@ class _RuleTile extends StatelessWidget {
   }
 }
 
-class _PlaylistTile extends StatelessWidget {
+class _PlaylistTile extends ConsumerWidget {
   const _PlaylistTile({
     super.key,
     required this.playlist,
@@ -685,7 +695,7 @@ class _PlaylistTile extends StatelessWidget {
   final VoidCallback onDelete;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final total = playlist.entries.fold<int>(0, (a, e) => a + e.durationMs) ~/ 1000;
     return Padding(
       padding: const EdgeInsets.only(bottom: Space.sm),
@@ -698,7 +708,7 @@ class _PlaylistTile extends StatelessWidget {
             decoration: BoxDecoration(color: color.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(10)),
             child: Icon(Icons.queue_music_rounded, color: color, size: 20),
           ),
-          title: Text(playlist.name.isEmpty ? '(unnamed)' : playlist.name),
+          title: Text(playlist.name.isEmpty ? '(unnamed)' : playlistLabel(ref, playlist.name)),
           subtitle: Text('${playlist.entries.length} entries, ${total}s loop, used by $usedBy rule${usedBy == 1 ? '' : 's'}'),
           trailing: IconButton(tooltip: 'Delete playlist', onPressed: onDelete, icon: const Icon(Icons.delete_outline_rounded)),
         ),

@@ -32,6 +32,14 @@ enum _Mode { app, playlist }
 /// Priority levels offered; a rule saved with another value keeps it as a "Custom" choice.
 const _priorityLevels = <(String, int)>[('Low', 25), ('Normal', 50), ('High', 75), ('Top', 100)];
 
+/// "Normal priority" for the standard levels, "Priority 60" otherwise.
+String describePriority(int priority) {
+  for (final (label, value) in _priorityLevels) {
+    if (value == priority) return '$label priority';
+  }
+  return 'Priority $priority';
+}
+
 Future<RuleEditResult?> showRuleEditor(
   BuildContext context, {
   required RuleDoc rule,

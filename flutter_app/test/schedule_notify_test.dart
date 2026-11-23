@@ -147,6 +147,20 @@ void main() {
   });
 
   group('Schedule polish', () {
+    testWidgets('a one-app rule is labelled with the app name and priorities read as levels', (tester) async {
+      final api = FakeApi()
+        ..scheduleDoc = const ScheduleDocument(
+          playlists: [PlaylistDoc(name: 'weather', entries: [EntryDoc(appId: 'weather', durationMs: 30000)])],
+          rules: [RuleDoc(playlistId: 'weather', priority: 50)],
+        );
+      await _open(tester, api, 'Schedule');
+
+      expect(find.descendant(of: find.byKey(const Key('rule-tile-0')), matching: find.text('Weather')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('rule-tile-0')), matching: find.textContaining('Normal priority')),
+          findsOneWidget);
+      expect(find.text('weather'), findsNothing);
+    });
+
     testWidgets('the week shows a now marker and a colour legend', (tester) async {
       final api = FakeApi();
       await _open(tester, api, 'Schedule');
