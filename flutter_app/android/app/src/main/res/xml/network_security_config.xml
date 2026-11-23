@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The LED Matrix controller talks plain HTTP to a Raspberry Pi on the user's LAN.
+     The device address is entered by the user (any private IP or hostname), so cleartext
+     cannot be scoped to specific domains. Without this, release builds (targetSdk >= 28)
+     refuse http:// requests. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

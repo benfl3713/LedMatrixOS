@@ -8,8 +8,21 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose pictures, GIFs and videos to show on your LED matrix.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Take a photo to show on your LED matrix.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>The microphone is used to stream audio to the LED matrix for music visualisers.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>LED Matrix connects to your display over your local network and can scan it to find the device.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>CFBundleDisplayName</key>
-	<string>Led Matrix</string>
+	<string>LED Matrix</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
